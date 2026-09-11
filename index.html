@@ -54,7 +54,7 @@ header .boardname:active{background:var(--panel2)}
 #stage{flex:none;display:flex;align-items:center;justify-content:center;padding:8px 0}
 #board{touch-action:none;display:block}
 .toolbar{flex:none;margin-top:auto}
-#status,#statusProbe{min-height:64px;padding:4px 8px;text-align:center;color:var(--muted);font-size:14px;line-height:1.35;display:flex;align-items:center;justify-content:center;gap:10px;flex-wrap:wrap}
+#status,#statusProbe{min-height:64px;flex-shrink:0;padding:4px 8px;text-align:center;color:var(--muted);font-size:14px;line-height:1.35;display:flex;align-items:center;justify-content:center;gap:10px;flex-wrap:wrap}
 #status.hint{color:var(--brass2)}
 #status.bad{color:var(--bad)}
 #status.ok{color:var(--ok)}
@@ -779,6 +779,20 @@ function statusReserve(){
   const h=Math.max(74,Math.ceil(probe.getBoundingClientRect().height));
   probe.remove(); statusReserveCache={w:w,h:h}; return h;
 }
+/* Sicherheitsnetz gegen alles, was sich nicht vorausberechnen laesst
+   (Schutzraender, Schriftgroessen des Geraets): Nach jeder Meldung wird im
+   Geraet nachgemessen, ob sie ganz ueber der Fussleiste steht. Fehlt Platz,
+   gibt das Brett ihn her - nur einmal und nur nach unten, damit es waehrend
+   des Spiels nicht hin und her springt. */
+let stageShrink=0;
+function ensureStatusFits(){
+  const tb=document.querySelector('.toolbar'); if(!tb||!game.board) return;
+  const app=$('app');
+  const unten=app.getBoundingClientRect().bottom-parseFloat(getComputedStyle(app).paddingBottom||0);
+  const fehlt=Math.max(0,Math.ceil(statusEl.scrollHeight-statusEl.clientHeight))
+             +Math.max(0,Math.ceil(tb.getBoundingClientRect().bottom-unten));
+  if(fehlt>0&&stageShrink<2000){ stageShrink+=fehlt; fitStage(); }
+}
 function fitStage(){
   const app=$('app'); const W=app.clientWidth-24;
   /* Nutzbare Hoehe, nicht die des ganzen Bildschirms: unten liegt auf dem
@@ -787,12 +801,12 @@ function fitStage(){
   const H=app.clientHeight-parseFloat(getComputedStyle(app).paddingBottom||0);
   const top=$('stage').offsetTop; const toolbarH=document.querySelector('.toolbar').offsetHeight+16;
   const reserve=game.lesson?230:statusReserve();
-  const avail=H-top-toolbarH-reserve-16;
+  const avail=H-top-toolbarH-reserve-16-stageShrink;
   const lay=game.lay; const ratio=lay?lay.H/lay.W:1;
-  let w=Math.min(W,Math.max(180,avail)/ratio); if(w*ratio>Math.max(180,avail)) w=Math.max(180,avail)/ratio; w=Math.min(w,W);
+  const MIN=100; let w=Math.min(W,Math.max(MIN,avail)/ratio); if(w*ratio>Math.max(MIN,avail)) w=Math.max(MIN,avail)/ratio; w=Math.min(w,W);
   boardSvg.style.width=Math.round(w)+'px'; boardSvg.style.height=Math.round(w*ratio)+'px';
 }
-window.addEventListener('resize',()=>{ statusReserveCache={w:-1,h:statusReserveCache.h}; fitStage(); });
+window.addEventListener('resize',()=>{ statusReserveCache={w:-1,h:statusReserveCache.h}; stageShrink=0; fitStage(); ensureStatusFits(); });
 function renderStrategyBtn(){ const b=$('btnStrategy'); b.classList.toggle('on',!!settings.strategy); b.setAttribute('aria-pressed',String(!!settings.strategy)); b.textContent='Strategie-Hinweise: '+(settings.strategy?'an':'aus'); }
 $('btnStrategy').addEventListener('click',()=>{ settings.strategy=!settings.strategy; saveSettings(); renderStrategyBtn(); if(settings.strategy){ toast('Nach jedem Zug: War das ein strategischer Fehler – und was wäre besser gewesen?'); evaluatePosition(); } else if(!settings.trainer) setStatus(pegCount()+' Steine übrig.'); });
 renderStrategyBtn();
@@ -805,6 +819,7 @@ function setStatus(text,cls,linkText,linkFn,note){
   const noteText=Array.isArray(linkText)?linkFn:note;
   if(noteText){ const n=document.createElement('div'); n.className='note'; n.textContent=noteText; statusEl.appendChild(n); }
   links.forEach(l=>{ const b=document.createElement('button'); b.className='link'; b.textContent=l[0]; b.addEventListener('click',l[1]); statusEl.appendChild(b); });
+  ensureStatusFits();
 }
 let toastTimer=0;
 function toast(t){ const e=$('toast'); e.textContent=t; e.classList.add('on'); clearTimeout(toastTimer); toastTimer=setTimeout(()=>e.classList.remove('on'),1800); }

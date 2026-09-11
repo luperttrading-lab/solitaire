@@ -4,13 +4,14 @@
   "private": true,
   "description": "Steckbrett-Solitaer als Spiel- und Lernapp (eine Datei: index.html)",
   "scripts": {
-    "test": "node tests/test_browser.js && node tests/test_lessons.js && node tests/test_worker.js && node tests/test_full.js && node tests/test_table.js && node tests/test_motion.js",
+    "test": "node tests/test_browser.js && node tests/test_lessons.js && node tests/test_worker.js && node tests/test_full.js && node tests/test_table.js && node tests/test_motion.js && node tests/test_layout.js",
     "test:browser": "node tests/test_browser.js",
     "test:lessons": "node tests/test_lessons.js",
     "test:worker": "node tests/test_worker.js",
     "test:full": "node tests/test_full.js",
     "test:table": "node tests/test_table.js",
-    "test:motion": "node tests/test_motion.js"
+    "test:motion": "node tests/test_motion.js",
+    "test:layout": "node tests/test_layout.js"
   },
   "devDependencies": {
     "puppeteer": "^24.43.1"
