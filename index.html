@@ -54,7 +54,7 @@ header .boardname:active{background:var(--panel2)}
 #stage{flex:none;display:flex;align-items:center;justify-content:center;padding:8px 0}
 #board{touch-action:none;display:block}
 .toolbar{flex:none;margin-top:auto}
-#status{min-height:64px;padding:4px 8px;text-align:center;color:var(--muted);font-size:14px;line-height:1.35;display:flex;align-items:center;justify-content:center;gap:10px;flex-wrap:wrap}
+#status,#statusProbe{min-height:64px;padding:4px 8px;text-align:center;color:var(--muted);font-size:14px;line-height:1.35;display:flex;align-items:center;justify-content:center;gap:10px;flex-wrap:wrap}
 #status.hint{color:var(--brass2)}
 #status.bad{color:var(--bad)}
 #status.ok{color:var(--ok)}
@@ -66,8 +66,8 @@ header .boardname:active{background:var(--panel2)}
 .pkg-ring{fill:none;stroke:#e2a95c;stroke-width:4;stroke-dasharray:5 6}
 .cat-ring{fill:none;stroke:#8fc48a;stroke-width:5}
 .end-ring{fill:none;stroke:#fff;stroke-width:4;opacity:.7;stroke-dasharray:3 5}
-#status .link{color:var(--brass2);text-decoration:underline;text-underline-offset:3px;padding:4px 6px}
-#status .note{flex-basis:100%;color:var(--muted);font-size:12px;margin-top:1px}
+#status .link,#statusProbe .link{color:var(--brass2);text-decoration:underline;text-underline-offset:3px;padding:4px 6px}
+#status .note,#statusProbe .note{flex-basis:100%;color:var(--muted);font-size:12px;margin-top:1px}
 .toolbar{display:flex;justify-content:space-between;gap:6px;padding:6px 2px 0}
 .toolbar button{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;padding:8px 2px 6px;border-radius:12px;background:var(--panel);color:var(--ink);font-size:11px;min-height:56px;transition:background .15s}
 .toolbar button:active{background:var(--panel2)}
@@ -756,16 +756,43 @@ function renderHud(){
   $('btnHint').disabled=game.phase==='choose'||game.finished||game.searching||game.animating||!!game.lesson;
 }
 // Feste Brettgröße: hängt nur von Fenster und Lektionsmodus ab, nicht von der Textlänge darunter
+/* Laengste Meldung, die die Strategie-Hinweise erzeugen koennen: Fehlerklasse,
+   Begruendung mit zwei Steinnamen, besserer Zug, Zusatzzeile und Link. Der Platz
+   unter dem Brett wird daran bemessen, sonst verschwindet der Schluss der
+   Meldung hinter der Fussleiste (gemessen: bis 148 px noetig, fest reserviert
+   waren 74). Gemessen wird einmal je Breite, damit das Brett nicht bei jedem
+   Zug seine Groesse aendert. */
+const STATUS_MAX_TEXT='Strategischer Fehler \u2013 Stein gestrandet. Aquamarin oben links und Bernstein unten rechts und weitere bleiben in jeder guten Fortsetzung stehen \u2013 kein Nachbar kann sie noch \u00fcberspringen. Besser: Bernstein \u00fcber Aquamarin nach unten.';
+const STATUS_MAX_NOTE='Jetzt bestenfalls 3 Steine, vorher war 1 erreichbar.';
+const STATUS_MAX_LINK='Zur\u00fcck & Zug zeigen';
+let statusReserveCache={w:-1,h:74};
+function statusReserve(){
+  const w=Math.round(statusEl.getBoundingClientRect().width);
+  if(w<=0) return statusReserveCache.h;
+  if(statusReserveCache.w===w) return statusReserveCache.h;
+  const probe=document.createElement('div'); probe.id='statusProbe'; probe.className='bad';
+  probe.style.cssText='position:absolute;left:-10000px;top:0;width:'+w+'px';
+  probe.appendChild(document.createTextNode(STATUS_MAX_TEXT));
+  const n=document.createElement('div'); n.className='note'; n.textContent=STATUS_MAX_NOTE; probe.appendChild(n);
+  const b=document.createElement('button'); b.className='link'; b.textContent=STATUS_MAX_LINK; probe.appendChild(b);
+  document.body.appendChild(probe);
+  const h=Math.max(74,Math.ceil(probe.getBoundingClientRect().height));
+  probe.remove(); statusReserveCache={w:w,h:h}; return h;
+}
 function fitStage(){
-  const app=$('app'); const W=app.clientWidth-24; const H=window.innerHeight;
+  const app=$('app'); const W=app.clientWidth-24;
+  /* Nutzbare Hoehe, nicht die des ganzen Bildschirms: unten liegt auf dem
+     iPhone der Schutzrand fuer den Home-Anzeiger im Polster von #app. Wird er
+     mitgerechnet, rutscht das Ende der Meldung hinter die Fussleiste. */
+  const H=app.clientHeight-parseFloat(getComputedStyle(app).paddingBottom||0);
   const top=$('stage').offsetTop; const toolbarH=document.querySelector('.toolbar').offsetHeight+16;
-  const reserve=game.lesson?230:74;
+  const reserve=game.lesson?230:statusReserve();
   const avail=H-top-toolbarH-reserve-16;
   const lay=game.lay; const ratio=lay?lay.H/lay.W:1;
   let w=Math.min(W,Math.max(180,avail)/ratio); if(w*ratio>Math.max(180,avail)) w=Math.max(180,avail)/ratio; w=Math.min(w,W);
   boardSvg.style.width=Math.round(w)+'px'; boardSvg.style.height=Math.round(w*ratio)+'px';
 }
-window.addEventListener('resize',()=>fitStage());
+window.addEventListener('resize',()=>{ statusReserveCache={w:-1,h:statusReserveCache.h}; fitStage(); });
 function renderStrategyBtn(){ const b=$('btnStrategy'); b.classList.toggle('on',!!settings.strategy); b.setAttribute('aria-pressed',String(!!settings.strategy)); b.textContent='Strategie-Hinweise: '+(settings.strategy?'an':'aus'); }
 $('btnStrategy').addEventListener('click',()=>{ settings.strategy=!settings.strategy; saveSettings(); renderStrategyBtn(); if(settings.strategy){ toast('Nach jedem Zug: War das ein strategischer Fehler – und was wäre besser gewesen?'); evaluatePosition(); } else if(!settings.trainer) setStatus(pegCount()+' Steine übrig.'); });
 renderStrategyBtn();
