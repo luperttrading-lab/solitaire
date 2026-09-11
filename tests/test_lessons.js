@@ -48,5 +48,5 @@ let fails=0; const ok=(n,c,x)=>{ console.log((c?'OK  ':'FAIL')+' '+n+(x!==undefi
   await page.click('#btnMenu'); await sleep(400); ok('Lektionen im Menü', (await page.$$('#lessonList .chip')).length===5); await page.screenshot({path:'shot_menu_lessons.png'});
   ok('keine Seitenfehler', errors.length===0, errors.join(' | '));
   await page.evaluate(()=>{ closeSheet(); startLesson('partie'); }); await sleep(300); await page.screenshot({path:'shot_lesson5.png'});
-  await browser.close(); console.log(fails?`\n${fails} FEHLER`:'\nLEKTIONS-TESTS OK');
+  await browser.close(); console.log(fails?`\n${fails} FEHLER`:'\nLEKTIONS-TESTS OK'); process.exitCode=fails?1:0;
 })().catch(e=>{ console.error('CRASH',e); process.exit(1); });

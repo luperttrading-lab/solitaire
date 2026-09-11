@@ -38,5 +38,5 @@ let fails=0; const ok=(n,c,x)=>{ console.log((c?'OK  ':'FAIL')+' '+n+(x!==undefi
   const st=await frame.evaluate(()=>({searching:game.searching,status:statusEl.textContent,broken:workerBroken,ready:workerReady,line:!!currentLine()}));
   console.log(`INFO sandbox-iframe: ${Date.now()-t0} ms | ${JSON.stringify(st)}`);
   ok('Sandbox-Iframe: Tipp liefert Ergebnis', !st.searching&&st.line);
-  await browser.close(); console.log(fails?`\n${fails} FEHLER`:'\nWORKER-TESTS OK');
+  await browser.close(); console.log(fails?`\n${fails} FEHLER`:'\nWORKER-TESTS OK'); process.exitCode=fails?1:0;
 })().catch(e=>{ console.error('CRASH',e); process.exit(1); });

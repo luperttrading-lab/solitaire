@@ -8,7 +8,8 @@ for(const [name,keys,expected] of [['17:03',['1,4','3,2','3,5','4,3','4,4','5,3'
   const p=pos(keys); let t0=Date.now();
   // Ziel 0 = unerreichbar => vollständige Absuche; Zahl muss exakt der unabhängigen BFS-Zählung entsprechen
   const s=CORE.createSearch(b,p.lo,p.hi,p.n,{maxNodes:0,target:0,seed:1}); let r; do{ r=s.run(1e6); }while(!r.done);
-  const exact=(r.nodes-600004)===expected; // 600.000 Stellungen Neustartphase + 4 Wurzelbesuche if(!exact) fails++;
+  const exact=(r.nodes-600004)===expected; // 600.000 Stellungen Neustartphase + 4 Wurzelbesuche
+  if(!exact) fails++;
   console.log(`${name} vollständig: Stellungen=${r.nodes.toLocaleString('de-DE')} erwartet=${expected.toLocaleString('de-DE')} min=${r.best} complete=${r.complete} ${((Date.now()-t0)/1000).toFixed(1)} s ${exact?'OK exakt':'FEHLER'}`);
   t0=Date.now(); const s2=CORE.createSearch(b,p.lo,p.hi,p.n,{maxNodes:0,target:1,seed:1}); let r2; do{ r2=s2.run(1e6); }while(!r2.done);
   console.log(`  ohne Limit (Ziel 1): best=${r2.best} complete=${r2.complete} Stellungen=${r2.nodes.toLocaleString('de-DE')} ${((Date.now()-t0)/1000).toFixed(1)} s`);
@@ -22,4 +23,4 @@ for(const [name,keys,expected] of [['17:03',['1,4','3,2','3,5','4,3','4,4','5,3'
     const [lo,hi]=CORE.fromArray(st); const lb=CORE.parityLowerBound(b,st); if(lb>1) continue;
     const t0=Date.now(); const s=CORE.createSearch(b,lo,hi,26,{maxNodes:0,target:1,seed:1}); let r; do{ r=s.run(1e6); }while(!r.done);
     if(r.best>1){ found++; console.log(`Zufallsstellung ${trial} (26 Steine): 1 unmöglich – bewiesen min=${r.best} complete=${r.complete} Stellungen=${r.nodes.toLocaleString('de-DE')} ${((Date.now()-t0)/1000).toFixed(1)} s`); if(!r.complete) fails++; } } }
-console.log(fails?`\n${fails} FEHLER`:'\nTABELLEN-TESTS OK');
+console.log(fails?`\n${fails} FEHLER`:'\nTABELLEN-TESTS OK'); process.exitCode=fails?1:0;

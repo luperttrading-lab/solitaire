@@ -244,5 +244,5 @@ let fails=0; const ok=(name,cond,extra)=>{ console.log((cond?'OK  ':'FAIL')+' '+
   ok('Endstellung erkannt: keine Züge, 3 Steine', s.finished&&s.left===3, JSON.stringify(s));
   ok('keine Seitenfehler insgesamt', errors.length===0, errors.join(' | '));
   await browser.close();
-  console.log(fails?`\n${fails} FEHLER`:'\nALLE BROWSER-TESTS OK');
+  console.log(fails?`\n${fails} FEHLER`:'\nALLE BROWSER-TESTS OK'); process.exitCode=fails?1:0;
 })().catch(e=>{ console.error('CRASH',e); process.exit(1); });

@@ -23,4 +23,4 @@ for(let trial=0;trial<5;trial++){
 { const st=new Array(b.n).fill(0); ['0,2','3,2','3,3','3,4'].forEach(k=>st[b.index[k]]=1); const [lo,hi]=CORE.fromArray(st);
   const s=CORE.createSearch(b,lo,hi,4,{maxNodes:0,target:1,full:true}); let r; do{ r=s.run(1e6); }while(!r.done);
   const i02=b.index['0,2']; const never=!((r.everEmpty[0]>>>i02)&1); console.log('Konstruiert: (0,2) gestrandet =',never,'min=',r.best); if(!never||r.best!==3) fails++; }
-console.log(fails?`\n${fails} FEHLER`:'\nVOLL-SUCHE OK');
+console.log(fails?`\n${fails} FEHLER`:'\nVOLL-SUCHE OK'); process.exitCode=fails?1:0;
