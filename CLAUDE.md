@@ -15,7 +15,7 @@ Autor/Product Owner: Lutz („Neo"). Sprache im Chat und in der App: Deutsch, pe
 ## Architektur in einer Datei
 - `coreFactory()` – Bretter, Züge, Symmetrien, 3-Färbungs-Parität (`parityLowerBound`, `allowedEndCells`), `createTable`, `createDFS`, `createSearch` (Neustart-Portfolio + erschöpfende Phase, `full:true` = ohne Symmetrie mit `everEmpty`/`optFinal`), `solveSmart`. Derselbe Code läuft im Web Worker (Blob-URL); scheitert der Worker (Claude-Vorschau, `data:`-URL), fällt alles auf den Hauptthread in Häppchen zurück (`runSearch`).
 - Zustand `game` (pegAt mit Stein-IDs, history/future mit `jumped`), `settings` in localStorage (fehlt in `data:`-Kontexten – abgefangen).
-- Rendering: SVG, Overlay-Layer für Auswahl/Tipp/Spul-Markierung/Lektionsringe; Brettgröße wird einmal berechnet (`fitStage`) und nicht vom Text darunter gequetscht.
+- Rendering: SVG, Overlay-Layer für Auswahl/Tipp/Spul-Markierung/Lektionsringe; Brettgröße aus `fitStage` (nutzbare Höhe ohne Schutzränder). `ensureStatusFits()` misst nach jeder Meldung im Gerät nach und gibt Brettfläche nur ab, wenn die Zeile sonst hinter der Fußleiste läge – nur nach unten, damit das Brett im Spiel nicht springt.
 
 ## Gesicherte Fakten (nicht neu diskutieren)
 - Europäisch mit leerer Mitte ist nie auf 1 lösbar (Parität); Raute (41) hat keine gefundene Lösung → weggelassen.
@@ -26,14 +26,14 @@ Autor/Product Owner: Lutz („Neo"). Sprache im Chat und in der App: Deutsch, pe
 ## Konventionen von Lutz
 - Eine ausgelieferte Datei: `index.html`. Version in `APP_VERSION` und im Menü; jeder Stand bekommt zusätzlich ein Git-Tag (`v1.1`). Keine versionierte Zweitkopie im Repo – Git hält die Stände.
 - Weitere Dateien durchnummeriert (`1-sw.js`, `2-icon.png`).
-- Nie „Budget" in Nutzertexten. Statuszeile: Hauptsatz, Messwerte/Zähler in eigener Zeile darunter, einzeilig auch mit längsten Farbnamen (Bernstein/Aquamarin) – Test misst das.
+- Nie „Budget" in Nutzertexten. Statuszeile: Ampelpunkt (grün = 1 Stein erreichbar, gelb = nicht bewertbar, rot = nicht mehr erreichbar) plus Kurzfassung, höchstens zwei Zeilen. Begründung, Zusatzzeile und Aktionen stehen im Blatt `#detail`, das ein Tippen auf die Zeile öffnet; `statusFullText()` liefert den vollen Wortlaut. So bleibt das Brett so groß, wie die Bildschirmbreite erlaubt (iPhone 14 Pro: 369 px).
 - Nichts raten, was Lutz in wenigen Handgriffen prüfen kann; Diagnosen in die Ausgabe schreiben; Tests dürfen nicht dieselbe Annahme treffen wie der Code (Literaturwerte, unabhängige BFS).
 - Keine Zustimmungsfloskeln; Widerspruch mit Grund.
 
 ## Tests (headless Chromium via Puppeteer, einmal `npm install`)
-- `npm test` – alle sechs Suiten nacheinander; jede meldet Fehler über den Exit-Code. Einzeln z. B. `npm run test:browser`.
+- `npm test` – alle sieben Suiten nacheinander; jede meldet Fehler über den Exit-Code. Einzeln z. B. `npm run test:browser`.
 - `node tests/test_browser.js` – 76 Prüfungen (Spiel, Tipp, Trainer, Markierung, Strategie, Fehlersuche, Spulen, Textbreiten).
-- `node tests/test_lessons.js`, `node tests/test_worker.js` (Worker-Ausfallszenarien), `node tests/test_full.js` (everEmpty gegen BFS), `node tests/test_table.js` (Exaktheit gegen Stellungszählung), `node tests/test_motion.js` (Animationsdauern: Zug 230 ms, Spulen 400 ms Vorlauf + 650 ms).
+- `node tests/test_lessons.js`, `node tests/test_worker.js` (Worker-Ausfallszenarien), `node tests/test_full.js` (everEmpty gegen BFS), `node tests/test_table.js` (Exaktheit gegen Stellungszählung), `node tests/test_motion.js` (Animationsdauern: Zug 230 ms, Spulen 400 ms Vorlauf + 650 ms), `node tests/test_layout.js` (nichts verschwindet hinter der Fußleiste, über sechs Geräte- und Schriftgrößen; Brett springt nicht).
 - Werkzeuge: `tools/gen_book2.js` (Eröffnungsbuch neu rechnen), `tools/purge_find.js`/`purge_find2.js`/`purge_plan2.js` (Purge-Muster und Partie-Plan), `tools/count_pos2.js` (Stellungen zählen), `tools/exp_parity.js` (Paritätsschranke prüfen). Ergebnisse liegen als `tools/patterns.json` (Purge-Muster) und `tools/plan.json` (Partie als Purge-Folge) daneben.
 
 ## Offene Ideen

@@ -18,7 +18,7 @@ let fails=0; const ok=(n,c,x)=>{ console.log((c?'OK  ':'FAIL')+' '+n+(x!==undefi
       if(free){ await page.evaluate(()=>{ const [lo,hi]=CORE.fromArray(occ()); const r=CORE.solveSmart(game.board,lo,hi,pegCount(),{maxNodes:1e6,timeMs:5000,target:1}); game.line={key:stateKey(),path:r.path,best:1,complete:true,nodes:0,lb:1}; game.autoplay=true; playMove(game.board.moves[r.path[0]]); }); }
       else await page.click('#lsDemo');
       await sleep(400); await page.waitForFunction(()=>!game.autoplay&&!game.animating,{timeout:60000}); await sleep(200); }
-    const fin=await page.evaluate(()=>({solved:game.lesson.solved,left:pegCount(),status:statusEl.textContent,text:document.getElementById('lessonText').textContent}));
+    const fin=await page.evaluate(()=>({solved:game.lesson.solved,left:pegCount(),status:statusFullText(),text:document.getElementById('lessonText').textContent}));
     console.log('INFO '+id+' Ende: '+JSON.stringify(fin));
     ok(id+': Lektion per Vormachen geschafft', fin.solved);
   }
@@ -31,7 +31,7 @@ let fails=0; const ok=(n,c,x)=>{ console.log((c?'OK  ':'FAIL')+' '+n+(x!==undefi
   await page.evaluate(()=>{ playMove(resolveMoves([['2,2','4,2']])[0]); }); await sleep(400);
   await page.evaluate(()=>{ playMove(resolveMoves([['3,3','3,1']])[0]); }); await sleep(400);
   await page.evaluate(()=>{ const m=game.board.moves.find(m=>game.pegAt[m.from]>=0&&game.pegAt[m.over]>=0&&game.pegAt[m.to]<0); if(m) playMove(m); }); await sleep(400);
-  const wrong=await page.evaluate(()=>({status:statusEl.textContent,solved:game.lesson.solved}));
+  const wrong=await page.evaluate(()=>({status:statusFullText(),solved:game.lesson.solved}));
   console.log('INFO falscher Weg: '+JSON.stringify(wrong));
   ok('Dreier falscher Weg: nicht geschafft', !wrong.solved);
   // Zurück nach „geschafft": Lektion wieder offen

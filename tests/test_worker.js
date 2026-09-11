@@ -14,7 +14,7 @@ let fails=0; const ok=(n,c,x)=>{ console.log((c?'OK  ':'FAIL')+' '+n+(x!==undefi
     await page.evaluate(()=>{ for(let k=0;k<5;k++){ const mv=game.board.moves.filter(m=>game.pegAt[m.from]>=0&&game.pegAt[m.over]>=0&&game.pegAt[m.to]<0); applyMove(mv[mv.length-1],true); } render(); });
     const t0=Date.now(); await page.click('#btnHint');
     try{ await page.waitForFunction(()=>!game.searching,{timeout:timeoutMs}); }catch(e){}
-    const ms=Date.now()-t0; const st=await page.evaluate(()=>({searching:game.searching,status:statusEl.textContent,broken:workerBroken,ready:workerReady,line:!!currentLine(),btn:document.getElementById('btnHint').disabled,where:lastSearchWhere}));
+    const ms=Date.now()-t0; const st=await page.evaluate(()=>({searching:game.searching,status:statusFullText(),broken:workerBroken,ready:workerReady,line:!!currentLine(),btn:document.getElementById('btnHint').disabled,where:lastSearchWhere}));
     console.log(`INFO ${name}: ${ms} ms | ${JSON.stringify(st)} | errors=${errors.join(';')}`);
     await page.close(); return {ms,st,errors};
   }
@@ -35,7 +35,7 @@ let fails=0; const ok=(n,c,x)=>{ console.log((c?'OK  ':'FAIL')+' '+n+(x!==undefi
   await frame.evaluate(()=>{ for(let k=0;k<5;k++){ const mv=game.board.moves.filter(m=>game.pegAt[m.from]>=0&&game.pegAt[m.over]>=0&&game.pegAt[m.to]<0); applyMove(mv[mv.length-1],true); } render(); });
   const t0=Date.now(); await frame.evaluate(()=>document.getElementById('btnHint').click());
   try{ await frame.waitForFunction(()=>!game.searching,{timeout:20000}); }catch(e){}
-  const st=await frame.evaluate(()=>({searching:game.searching,status:statusEl.textContent,broken:workerBroken,ready:workerReady,line:!!currentLine()}));
+  const st=await frame.evaluate(()=>({searching:game.searching,status:statusFullText(),broken:workerBroken,ready:workerReady,line:!!currentLine()}));
   console.log(`INFO sandbox-iframe: ${Date.now()-t0} ms | ${JSON.stringify(st)}`);
   ok('Sandbox-Iframe: Tipp liefert Ergebnis', !st.searching&&st.line);
   await browser.close(); console.log(fails?`\n${fails} FEHLER`:'\nWORKER-TESTS OK'); process.exitCode=fails?1:0;

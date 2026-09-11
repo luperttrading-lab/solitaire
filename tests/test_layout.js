@@ -32,20 +32,26 @@ const FAELLE=[
     const tb=document.querySelector('.toolbar'), app=document.getElementById('app');
     const unten=app.getBoundingClientRect().bottom-parseFloat(getComputedStyle(app).paddingBottom||0);
     const tr=tb.getBoundingClientRect();
-    const link=st.querySelector('.link'), nt=st.querySelector('.note');
+    const kurz=st.querySelector('.kurz'), dot=st.querySelector('.dot');
+    const zeilen=Math.round(kurz.getBoundingClientRect().height/(parseFloat(getComputedStyle(st).fontSize)*1.35));
     return {brett:Math.round(document.getElementById('board').getBoundingClientRect().width),
       shrink:stageShrink,
-      linkVerdeckt:Math.round(Math.max(0,link.getBoundingClientRect().bottom-tr.top)),
-      noteVerdeckt:Math.round(Math.max(0,nt.getBoundingClientRect().bottom-tr.top)),
+      zeileVerdeckt:Math.round(Math.max(0,st.getBoundingClientRect().bottom-tr.top)),
+      ampelDa:!!dot&&dot.getBoundingClientRect().width>0,
+      zeilenZahl:zeilen,
       textUeberlauf:Math.max(0,Math.ceil(st.scrollHeight-st.clientHeight)),
-      leisteUeberRand:Math.round(Math.max(0,tr.bottom-unten))};
+      leisteUeberRand:Math.round(Math.max(0,tr.bottom-unten)),
+      vollstaendig:statusFullText()===txt+note+'Zur\u00fcck & Zug zeigen'};
   },TXT,NOTE,sat,sab,fs);
   console.log('INFO '+name+': '+JSON.stringify(r));
-  ok('Zusatzzeile steht ueber der Fussleiste ('+name+')',r.noteVerdeckt===0,r.noteVerdeckt+' px');
-  ok('Link steht ueber der Fussleiste ('+name+')',r.linkVerdeckt===0,r.linkVerdeckt+' px');
+  ok('Meldungszeile steht ueber der Fussleiste ('+name+')',r.zeileVerdeckt===0,r.zeileVerdeckt+' px');
+  ok('Ampelpunkt ist sichtbar ('+name+')',r.ampelDa,r.ampelDa);
+  ok('Zeile bleibt bei hoechstens zwei Zeilen ('+name+')',r.zeilenZahl<=2,r.zeilenZahl+' Zeilen');
+  ok('Voller Wortlaut bleibt abrufbar ('+name+')',r.vollstaendig,r.vollstaendig);
   ok('Meldung laeuft nicht aus ihrem Kasten ('+name+')',r.textUeberlauf===0,r.textUeberlauf+' px');
   ok('Fussleiste bleibt im sichtbaren Bereich ('+name+')',r.leisteUeberRand===0,r.leisteUeberRand+' px');
   ok('Brett bleibt benutzbar gross ('+name+')',r.brett>=100,r.brett+' px');
+  if(w===393) ok('Brett nutzt die volle Breite (iPhone 14 Pro)',r.brett>=360,r.brett+' px');
   await p.close();
  }
  // Das Brett darf waehrend einer Partie nicht hin und her springen.

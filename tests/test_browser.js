@@ -15,7 +15,20 @@ let fails=0; const ok=(name,cond,extra)=>{ console.log((cond?'OK  ':'FAIL')+' '+
 
   // helper: client coords of cell i
   const cellXY=async i=>page.evaluate(i=>{ const p=game.lay.pos[i]; const m=boardSvg.getScreenCTM(); return {x:m.a*p.x+m.c*p.y+m.e, y:m.b*p.x+m.d*p.y+m.f}; },i);
-  const state=async()=>page.evaluate(()=>({moves:game.history.length,left:pegCount(),status:statusEl.textContent,finished:game.finished,sel:game.selected,anim:game.animating}));
+  const state=async()=>page.evaluate(()=>({moves:game.history.length,left:pegCount(),status:statusFullText(),finished:game.finished,sel:game.selected,anim:game.animating}));
+  // Die Aktionen stehen seit der Ampel-Zeile im Blatt: Zeile antippen, dann
+  // dort den Knopf druecken - derselbe Weg, den ein Spieler nimmt.
+  const aktion=async(teil)=>{
+    await page.click('#status'); await sleep(350);
+    const getroffen=await page.evaluate(t=>{
+      const b=[...document.querySelectorAll('#detailAktionen .btn')].find(x=>x.textContent.includes(t));
+      if(!b) return false; b.click(); return true; },teil||'');
+    // Das Blatt darf nie offen zurueckbleiben, sonst faengt sein Hintergrund
+    // alle folgenden Klicks ab und der naechste Pruefpunkt scheitert grundlos.
+    await page.evaluate(()=>closeDetail()); await sleep(250);
+    if(!getroffen) console.log('FAIL Aktion "'+teil+'" nicht im Blatt gefunden');
+    return getroffen;
+  };
   const tap=async i=>{ const c=await cellXY(i); await page.mouse.click(c.x,c.y); await sleep(380); };
   const swipe=async(i,dx,dy)=>{ const c=await cellXY(i); await page.mouse.move(c.x,c.y); await page.mouse.down(); await page.mouse.move(c.x+dx*0.5,c.y+dy*0.5); await page.mouse.move(c.x+dx,c.y+dy); await page.mouse.up(); await sleep(380); };
 
@@ -66,7 +79,7 @@ let fails=0; const ok=(name,cond,extra)=>{ console.log((cond?'OK  ':'FAIL')+' '+
     ok('Nächster Tipp auf der Linie sofort (ohne Suche)', instant);
     ok('Empfohlener Zug gespielt: Pfeil weg, Linie bleibt bekannt', s.moves===3&&cached, JSON.stringify(s));
     // autoplay the rest
-    await page.click('#status .link'); 
+    await aktion('Rest automatisch');
     await page.waitForFunction(()=>game.finished,{timeout:60000}); await sleep(700);
     s=await state(); ok('Automatik spielt bis zum Ende: 1 Stein', s.finished&&s.left===1, JSON.stringify(s));
     ok('Ergebnisdialog sichtbar', await page.$eval('#resultModal',e=>e.classList.contains('on')));
@@ -86,7 +99,7 @@ let fails=0; const ok=(name,cond,extra)=>{ console.log((cond?'OK  ':'FAIL')+' '+
     console.log(`INFO ${b.name}: Tipp -> ${JSON.stringify(h)} | ${(await state()).status}`);
     ok(`${b.name}: Lösung zu 1 Stein gefunden`, h&&h.best===1&&h.complete, JSON.stringify(h));
     await page.screenshot({path:`shot_board_${b.id}.png`});
-    if(h&&h.best===1){ await page.click('#status .link'); await page.waitForFunction(()=>game.finished,{timeout:90000}); await sleep(700); s=await state(); ok(`${b.name}: Automatik endet mit 1 Stein`, s.left===1, JSON.stringify(s)); await page.click('#resClose'); }
+    if(h&&h.best===1){ await aktion('Rest automatisch'); await page.waitForFunction(()=>game.finished,{timeout:90000}); await sleep(700); s=await state(); ok(`${b.name}: Automatik endet mit 1 Stein`, s.left===1, JSON.stringify(s)); await page.click('#resClose'); }
   }
   // Late-game exactness check: European centre-vacant position is provably not solvable to 1 (parity) -> hint must say "Bewiesen" with best 2
   await page.evaluate(()=>{ newGame('european'); const b=game.board; for(let i=0;i<b.n;i++) game.pegAt[i]=i; game.pegAt[b.centerIdx]=-1; game.initial=game.pegAt.slice(); game.startCount=pegCount(); render(); });
@@ -105,9 +118,9 @@ let fails=0; const ok=(name,cond,extra)=>{ console.log((cond?'OK  ':'FAIL')+' '+
   // Fortschritt + Abbruch bei großem Budget (Screenshot-Stellung von Lutz)
   await page.evaluate(()=>{ newGame('wiegleb'); const b=game.board; for(let k=0;k<4;k++){ const mv=b.moves.filter(m=>game.pegAt[m.from]>=0&&game.pegAt[m.over]>=0&&game.pegAt[m.to]<0); applyMove(mv[Math.floor(mv.length/2)],true); } game.bookLine=null; render(); settings.budget=50; });
   await page.click('#btnHint'); await sleep(700);
-  ok('Erst kurzer Text ohne Abbrechen', await page.evaluate(()=>statusEl.textContent==='Rechne…'));
+  ok('Erst kurzer Text ohne Abbrechen', await page.evaluate(()=>statusFullText()==='Rechne…'));
   await sleep(1200);
-  const prog=await page.evaluate(()=>statusEl.textContent); console.log('INFO Fortschritt: '+prog);
+  const prog=await page.evaluate(()=>statusFullText()); console.log('INFO Fortschritt: '+prog);
   ok('Nach 1,5 s Fortschritt mit Abbrechen-Link', /Rechne…/.test(prog)&&/Stellungen/.test(prog)&&/Abbrechen/.test(prog)&&(await page.evaluate(()=>lastSearchWhere==='Hintergrund')));
   const cancelled=await page.evaluate(()=>{ const l=statusEl.querySelector('.link'); if(!l) return false; l.click(); return true; });
   await page.waitForFunction(()=>!game.searching,{timeout:15000}); await sleep(100);
@@ -130,7 +143,7 @@ let fails=0; const ok=(name,cond,extra)=>{ console.log((cond?'OK  ':'FAIL')+' '+
   // kleine Zahlen ausgeschrieben
   await page.evaluate(()=>{ const b=game.board; for(let i=0;i<b.n;i++) game.pegAt[i]=-1; ['2,0','2,1','2,2','4,4','4,6','6,4'].forEach((k,j)=>game.pegAt[b.index[k]]=j); game.bookLine=null; game.line=null; game.history=[{mi:0,jumped:0}]; render(); });
   await page.click('#btnHint'); await page.waitForFunction(()=>!game.searching,{timeout:20000}); await sleep(100);
-  const st2=await page.evaluate(()=>statusEl.textContent); console.log('INFO kleine Suche: '+st2);
+  const st2=await page.evaluate(()=>statusFullText()); console.log('INFO kleine Suche: '+st2);
   ok('Kleine Stellungszahl ausgeschrieben, keine 0,00 Mio.', !/0,00 Mio/.test(st2)&&/Stellungen/.test(st2));
   ok('Messwerte in eigener Zeile', await page.evaluate(()=>{ const n=statusEl.querySelector('.note'); return !!n&&/Stellungen/.test(n.textContent)&&!/Stellungen/.test(statusEl.firstChild.textContent); }));
   ok('HUD einzeilig: Übrig von N', await page.evaluate(()=>document.getElementById('hudLeftLabel').textContent==='Übrig von 32'&&!document.querySelector('.hud .sub')));
@@ -169,7 +182,7 @@ let fails=0; const ok=(name,cond,extra)=>{ console.log((cond?'OK  ':'FAIL')+' '+
   const spool2=await page.evaluate(()=>({white:!!document.querySelector('#board path[marker-end="url(#arrowHeadWhite)"]'), red:!!document.querySelector('#board path[marker-end="url(#arrowHeadRed)"]')}));
   ok('Zurückspulen: neutrale Markierung', spool2.white&&!spool2.red);
   const und=await page.evaluate(()=>{ const m=game.board.moves[game.lastMove.mi]; const p=game.lay.pos; const arrow=document.querySelector('#board path[marker-end="url(#arrowHeadWhite)"]').getAttribute('d'); const seg=arrow.match(/M([\d.]+) ([\d.]+) L([\d.]+) ([\d.]+)/).slice(1).map(Number);
-    const towardsTo=Math.hypot(seg[2]-p[m.to].x,seg[3]-p[m.to].y)<Math.hypot(seg[2]-p[m.from].x,seg[3]-p[m.from].y); return {towardsTo, back:!!document.querySelector('#board .back-ring'), status:statusEl.textContent}; });
+    const towardsTo=Math.hypot(seg[2]-p[m.to].x,seg[3]-p[m.to].y)<Math.hypot(seg[2]-p[m.from].x,seg[3]-p[m.from].y); return {towardsTo, back:!!document.querySelector('#board .back-ring'), status:statusFullText()}; });
   console.log('INFO Zurück-Anzeige: '+JSON.stringify(und));
   ok("Zurück: Markierung zeigt den Zug, Ring am wieder aufgetauchten Stein, Zählung ab 1", und.towardsTo&&und.back&&/Zug \d+ von/.test(und.status)&&!/Zug 0 von/.test(und.status));
   await page.screenshot({path:'shot_spool.png'});
@@ -196,7 +209,7 @@ let fails=0; const ok=(name,cond,extra)=>{ console.log((cond?'OK  ':'FAIL')+' '+
   console.log('INFO Strategie: '+adv);
   ok('Strategie-Hinweis mit Klasse, Begründung und besserem Zug', !!adv&&/(Reihenfolge|Falsche Richtung|Stein gestrandet|Struktur)/.test(adv)&&/Besser: /.test(adv)&&/Zurück & Zug zeigen/.test(adv));
   await page.evaluate(()=>{ [...statusEl.querySelectorAll('.link')].find(l=>/Zurück & Zug/.test(l.textContent)).click(); }); await sleep(1400); await page.waitForFunction(()=>!game.animating,{timeout:20000}); await sleep(200);
-  const shown=await page.evaluate(()=>({hint:game.hintOn&&!!document.querySelector('#board .hint-arrow'),status:statusEl.textContent,moves:game.history.length}));
+  const shown=await page.evaluate(()=>({hint:game.hintOn&&!!document.querySelector('#board .hint-arrow'),status:statusFullText(),moves:game.history.length}));
   console.log('INFO nach Zurück & Zug zeigen: '+JSON.stringify(shown));
   ok('Zurück & Zug zeigen: Zug zurück, besserer Zug als Pfeil', shown.hint&&shown.moves===12&&/bessere Zug ist markiert/.test(shown.status));
   ok('Strategie-Knopf sichtbar und an', await page.evaluate(()=>document.getElementById('btnStrategy').classList.contains('on')));
@@ -215,7 +228,7 @@ let fails=0; const ok=(name,cond,extra)=>{ console.log((cond?'OK  ':'FAIL')+' '+
   s=await state(); console.log('INFO nach 3 Zügen: '+s.status);
   ok('Verloren, aber Zug nicht schuld: Link „Fehler suchen"', /Fehler lag früher/.test(s.status)&&/Fehler suchen/.test(s.status));
   await page.evaluate(()=>{ [...statusEl.querySelectorAll('.link')].find(l=>/Fehler suchen/.test(l.textContent)).click(); });
-  await page.waitForFunction(()=>/entscheidende Fehler|nicht mehr erreichbar|abgebrochen/.test(statusEl.textContent),{timeout:60000}); await sleep(100);
+  await page.waitForFunction(()=>/entscheidende Fehler|nicht mehr erreichbar|abgebrochen/.test(statusFullText()),{timeout:60000}); await sleep(100);
   s=await state(); console.log('INFO Fehlersuche: '+s.status);
   ok('Fehlersuche nennt Zug 13 mit besserem Zug', /Fehler war Zug 13 von 15/.test(s.status)&&/Besser war/.test(s.status));
   await page.evaluate(()=>{ [...statusEl.querySelectorAll('.link')].find(l=>/Dorthin zurück/.test(l.textContent)).click(); }); await sleep(300);
