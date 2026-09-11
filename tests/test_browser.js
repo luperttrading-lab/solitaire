@@ -1,0 +1,248 @@
+const puppeteer=require(process.env.PUPPETEER_PATH||'puppeteer');
+const path=require('path');
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+let fails=0; const ok=(name,cond,extra)=>{ console.log((cond?'OK  ':'FAIL')+' '+name+(extra!==undefined?' -> '+extra:'')); if(!cond) fails++; };
+(async()=>{
+  const browser=await puppeteer.launch({headless:true,args:['--no-sandbox','--disable-setuid-sandbox','--allow-file-access-from-files']});
+  const page=await browser.newPage();
+  await page.setViewport({width:390,height:844,deviceScaleFactor:2,isMobile:true,hasTouch:true});
+  const errors=[]; page.on('pageerror',e=>errors.push('pageerror: '+e.message)); page.on('console',m=>{ if(m.type()==='error') errors.push('console: '+m.text()); });
+  await page.goto('file://'+path.resolve(__dirname,'..','index.html'),{waitUntil:'load'});
+  await sleep(300); await page.screenshot({path:'shot_splash.png'});
+  await sleep(2600); await page.screenshot({path:'shot_game.png'});
+  ok('Splash ausgeblendet nach 2 s', await page.$eval('#splash',e=>e.hidden||getComputedStyle(e).opacity==='0'));
+  ok('keine Seitenfehler beim Laden', errors.length===0, errors.join(' | '));
+
+  // helper: client coords of cell i
+  const cellXY=async i=>page.evaluate(i=>{ const p=game.lay.pos[i]; const m=boardSvg.getScreenCTM(); return {x:m.a*p.x+m.c*p.y+m.e, y:m.b*p.x+m.d*p.y+m.f}; },i);
+  const state=async()=>page.evaluate(()=>({moves:game.history.length,left:pegCount(),status:statusEl.textContent,finished:game.finished,sel:game.selected,anim:game.animating}));
+  const tap=async i=>{ const c=await cellXY(i); await page.mouse.click(c.x,c.y); await sleep(380); };
+  const swipe=async(i,dx,dy)=>{ const c=await cellXY(i); await page.mouse.move(c.x,c.y); await page.mouse.down(); await page.mouse.move(c.x+dx*0.5,c.y+dy*0.5); await page.mouse.move(c.x+dx,c.y+dy); await page.mouse.up(); await sleep(380); };
+
+  // English board: centre (3,3) empty. Cell index of (1,3) is 4 -> exactly one legal move (down into centre).
+  const idx=async(r,c)=>page.evaluate((r,c)=>game.board.index[r+','+c],r,c);
+  const i13=await idx(1,3), i33=await idx(3,3), i31=await idx(3,1), i35=await idx(3,5), i53=await idx(5,3);
+  let s=await state(); ok('Start: 32 Steine, 0 Sprünge', s.left===32&&s.moves===0, JSON.stringify(s));
+  await tap(i13); s=await state();
+  ok('Auto-Sprung bei eindeutigem Zug (1,3)->(3,3)', s.moves===1&&s.left===31, JSON.stringify(s));
+  ok('Stein steht jetzt im Zentrum', await page.evaluate(i=>game.pegAt[i]>=0,i33));
+  // now (2,3) and (1,3) empty. Peg at (3,1)?? legal: (3,1) cannot jump. Peg (4,3): jump up over (3,3) into (2,3). Peg at (2,1): jump right over (2,2) into (2,3)! Peg at (2,5): jump left into (2,3). Peg (0,3): jump down into (2,3)... wait (1,3) is empty so no.
+  // Tap a peg with no legal move -> shake, no move
+  await tap(i31); s=await state(); ok('Stein ohne Zug: kein Sprung, Fehlermeldung', s.moves===1&&/nicht springen/.test(s.status), s.status);
+  // Peg (2,1): moves: right over (2,2) to (2,3). Only one? (2,1) up: (1,1) not a cell. down: (3,1)->(4,1) occupied. So exactly one -> autojump
+  const i21=await idx(2,1); await tap(i21); s=await state(); ok('Zweiter Auto-Sprung (2,1)->(2,3)', s.moves===2&&s.left===30, JSON.stringify(s));
+  // undo/redo
+  await page.click('#btnUndo'); await sleep(1300); s=await state(); ok('Rückgängig', s.moves===1&&s.left===31, JSON.stringify(s));
+  await page.click('#btnRedo'); await sleep(1400); s=await state(); ok('Wiederholen', s.moves===2&&s.left===30, JSON.stringify(s));
+  // Swipe test: find a peg with >=2 legal moves
+  await page.evaluate(()=>{ const b=game.board; for(let i=0;i<b.n;i++) game.pegAt[i]=-1; ['3,3','3,4','3,2','2,3','4,3'].forEach((k,j)=>game.pegAt[b.index[k]]=j); game.history=[]; game.future=[]; game.selected=-1; render(); });
+  const multi=await page.evaluate(()=>{ for(let i=0;i<game.board.n;i++){ if(game.pegAt[i]>=0&&legalMovesFrom(i).length>=2) return {i,moves:legalMovesFrom(i).map(m=>({to:m.to}))}; } return null; });
+  ok('Stein mit mehreren Zügen vorhanden', !!multi);
+  if(multi){
+    await tap(multi.i); s=await state(); ok('Mehrdeutig (4 Züge): nur Auswahl, kein Sprung', s.moves===0&&s.sel===multi.i&&multi.moves.length===4, JSON.stringify(s));
+    const a=await cellXY(multi.i), b=await cellXY(multi.moves[1].to);
+    await swipe(multi.i,(b.x-a.x)*0.6,(b.y-a.y)*0.6); s=await state();
+    ok('Wischen in Richtung des 2. Ziels führt den Sprung aus', s.moves===1&&(await page.evaluate(t=>game.pegAt[t]>=0,multi.moves[1].to)), JSON.stringify(s));
+  }
+  // Wrong-direction swipe
+  const any=await page.evaluate(()=>{ for(let i=0;i<game.board.n;i++){ if(game.pegAt[i]>=0&&legalMovesFrom(i).length===1) return i; } return -1; });
+  if(any>=0){ const m=await page.evaluate(i=>{ const m=legalMovesFrom(i)[0]; const a=game.lay.pos[m.from], b=game.lay.pos[m.to]; return {dx:b.x-a.x,dy:b.y-a.y}; },any);
+    const before=(await state()).moves; await swipe(any,-m.dx*0.4,-m.dy*0.4); s=await state(); ok('Falsche Wischrichtung: kein Sprung', s.moves===before&&/Richtung/.test(s.status), s.status); }
+  // Hint (frisches Spiel, zwei Züge gespielt)
+  await page.evaluate(()=>newGame('english')); await tap(i13); await tap(i21);
+  await page.click('#btnHint'); await sleep(100);
+  await page.waitForFunction(()=>!game.searching,{timeout:20000}); await sleep(100);
+  s=await state(); const hint=await page.evaluate(()=>{ const l=currentLine(); return l&&{best:l.best,complete:l.complete,len:l.path.length,nodes:l.nodes,book:!!l.book,worker:!!worker,broken:workerBroken,on:game.hintOn}; });
+  ok('Tipp vorhanden (nach Abweichung vom Buch: echte Suche im Worker)', hint&&hint.on&&!hint.broken&&(hint.book||hint.worker), JSON.stringify(hint));
+  ok('Tipp-Overlay sichtbar', await page.$eval('#board',e=>!!e.querySelector('.hint-arrow')));
+  console.log('INFO Tipp-Status: '+s.status);
+  await page.screenshot({path:'shot_hint.png'});
+  if(hint&&hint.complete&&hint.best===1){
+    // play the recommended move manually (tap the hinted peg + tap target) and verify hint cache follows
+    const mv=await page.evaluate(()=>{ const m=game.board.moves[currentLine().path[0]]; return {from:m.from,to:m.to,n:legalMovesFrom(m.from).length}; });
+    await page.evaluate(()=>{ game.selected=-1; renderOverlay(); }); await tap(mv.from); if(mv.n>1) await tap(mv.to); s=await state();
+    const cached=await page.evaluate(()=>!!currentLine()&&!game.hintOn&&!document.querySelector('#board .hint-arrow'));
+    await page.click('#btnHint'); await sleep(150); const instant=await page.evaluate(()=>game.hintOn&&!game.searching&&!!document.querySelector('#board .hint-arrow'));
+    ok('Nächster Tipp auf der Linie sofort (ohne Suche)', instant);
+    ok('Empfohlener Zug gespielt: Pfeil weg, Linie bleibt bekannt', s.moves===3&&cached, JSON.stringify(s));
+    // autoplay the rest
+    await page.click('#status .link'); 
+    await page.waitForFunction(()=>game.finished,{timeout:60000}); await sleep(700);
+    s=await state(); ok('Automatik spielt bis zum Ende: 1 Stein', s.finished&&s.left===1, JSON.stringify(s));
+    ok('Ergebnisdialog sichtbar', await page.$eval('#resultModal',e=>e.classList.contains('on')));
+    console.log('INFO Ergebnis: '+await page.$eval('#resTitle',e=>e.textContent)+' / '+await page.$eval('#resText',e=>e.textContent));
+    await page.screenshot({path:'shot_result.png'});
+    await page.click('#resNew'); await sleep(300); s=await state(); ok('Nochmal startet neu', s.moves===0&&s.left===32, JSON.stringify(s));
+  }
+  ok('keine Seitenfehler während des Spiels', errors.length===0, errors.join(' | '));
+
+  // Every board: select via sheet, verify counts and solver reaches 1 from start via hint+autoplay
+  const boardsInfo=await page.evaluate(()=>CORE.BOARD_DEFS.map(d=>({id:d.id,name:d.name,n:boards[d.id].n})));
+  for(const b of boardsInfo){
+    await page.evaluate(id=>newGame(id),b.id); await sleep(200);
+    s=await state(); ok(`${b.name}: Start ${b.n-1} Steine`, s.left===b.n-1, JSON.stringify(s));
+    await page.click('#btnHint'); await page.waitForFunction(()=>!game.searching,{timeout:30000}); await sleep(100);
+    const h=await page.evaluate(()=>{ const l=currentLine(); return l&&{best:l.best,complete:l.complete,nodes:l.nodes,lb:l.lb,book:!!l.book}; });
+    console.log(`INFO ${b.name}: Tipp -> ${JSON.stringify(h)} | ${(await state()).status}`);
+    ok(`${b.name}: Lösung zu 1 Stein gefunden`, h&&h.best===1&&h.complete, JSON.stringify(h));
+    await page.screenshot({path:`shot_board_${b.id}.png`});
+    if(h&&h.best===1){ await page.click('#status .link'); await page.waitForFunction(()=>game.finished,{timeout:90000}); await sleep(700); s=await state(); ok(`${b.name}: Automatik endet mit 1 Stein`, s.left===1, JSON.stringify(s)); await page.click('#resClose'); }
+  }
+  // Late-game exactness check: European centre-vacant position is provably not solvable to 1 (parity) -> hint must say "Bewiesen" with best 2
+  await page.evaluate(()=>{ newGame('european'); const b=game.board; for(let i=0;i<b.n;i++) game.pegAt[i]=i; game.pegAt[b.centerIdx]=-1; game.initial=game.pegAt.slice(); game.startCount=pegCount(); render(); });
+  const lb=await page.evaluate(()=>CORE.parityLowerBound(game.board,occ()));
+  ok('Europäisch Mitte leer: Paritätsschranke 2', lb===2, lb);
+  await page.click('#btnHint'); await page.waitForFunction(()=>!game.searching,{timeout:30000}); await sleep(100);
+  s=await state(); const h2=await page.evaluate(()=>{ const l=currentLine(); return l&&{best:l.best,complete:l.complete}; });
+  console.log('INFO Europäisch Mitte: '+s.status);
+  ok('Europäisch Mitte: Tipp meldet bewiesen bestenfalls 2', h2&&h2.best===2&&h2.complete, JSON.stringify(h2));
+
+  // Suche ohne Buch (Europäisch Start): entweder 1 gefunden oder ehrliche Meldung
+  await page.evaluate(()=>{ newGame('european'); game.bookLine=null; }); await page.click('#btnHint'); await page.waitForFunction(()=>!game.searching,{timeout:40000}); await sleep(100);
+  s=await state(); const h3=await page.evaluate(()=>{ const l=currentLine(); return l&&{best:l.best,complete:l.complete,nodes:l.nodes}; });
+  console.log('INFO Europäisch ohne Buch: '+JSON.stringify(h3)+' | '+s.status);
+  ok('Europäisch ohne Buch: Ergebnis vorhanden und ehrlich beschriftet', h3&&((h3.complete&&/sicher|Bewiesen/.test(s.status))||(!h3.complete&&/Bisher bester Zug|Abgebrochen/.test(s.status))));
+  // Fortschritt + Abbruch bei großem Budget (Screenshot-Stellung von Lutz)
+  await page.evaluate(()=>{ newGame('wiegleb'); const b=game.board; for(let k=0;k<4;k++){ const mv=b.moves.filter(m=>game.pegAt[m.from]>=0&&game.pegAt[m.over]>=0&&game.pegAt[m.to]<0); applyMove(mv[Math.floor(mv.length/2)],true); } game.bookLine=null; render(); settings.budget=50; });
+  await page.click('#btnHint'); await sleep(700);
+  ok('Erst kurzer Text ohne Abbrechen', await page.evaluate(()=>statusEl.textContent==='Rechne…'));
+  await sleep(1200);
+  const prog=await page.evaluate(()=>statusEl.textContent); console.log('INFO Fortschritt: '+prog);
+  ok('Nach 1,5 s Fortschritt mit Abbrechen-Link', /Rechne…/.test(prog)&&/Stellungen/.test(prog)&&/Abbrechen/.test(prog)&&(await page.evaluate(()=>lastSearchWhere==='Hintergrund')));
+  const cancelled=await page.evaluate(()=>{ const l=statusEl.querySelector('.link'); if(!l) return false; l.click(); return true; });
+  await page.waitForFunction(()=>!game.searching,{timeout:15000}); await sleep(100);
+  s=await state(); const h4=await page.evaluate(()=>{ const l=currentLine(); return l&&{best:l.best,complete:l.complete,cancelled:l.cancelled,nodes:l.nodes}; });
+  console.log('INFO nach Abbruch: '+JSON.stringify(h4)+' | '+s.status);
+  ok('Abbruch liefert besten bisherigen Zug, als unvollständig markiert', cancelled&&h4&&!h4.complete&&h4.nodes>0&&/Abgebrochen|sicher/.test(s.status));
+  ok('Nach Abbruch: Autoplay- und Weiter-suchen-Link', await page.evaluate(()=>statusEl.querySelectorAll('.link').length===2));
+  await page.evaluate(()=>{ newGame('english'); const b=game.board; for(let i=0;i<b.n;i++) game.pegAt[i]=i; ['2,3','2,5','3,4','4,3','4,4','5,3'].forEach(k=>game.pegAt[b.index[k]]=-1); game.bookLine=null; game.history=[{mi:0,jumped:0}]; game.startCount=32; render(); });
+  ok('Screenshot-Stellung: 27 Steine', (await state()).left===27);
+  await page.click('#btnHint'); await page.waitForFunction(()=>!game.searching,{timeout:120000}); await sleep(100);
+  s=await state(); const h5=await page.evaluate(()=>{ const l=currentLine(); return l&&{best:l.best,complete:l.complete,nodes:l.nodes,ms:l.ms}; });
+  console.log('INFO Screenshot-Stellung ohne Limit: '+JSON.stringify(h5)+' | '+s.status);
+  ok('Suche ohne Limit: bewiesen 1 Stein', h5&&h5.best===1&&h5.complete);
+  ok('Kein Wort Budget in der Statuszeile', !/Budget/.test(s.status));
+  ok('Keine Suchtiefe-Auswahl mehr', (await page.$$('#budgetBarList .chip')).length===0&&(await page.$$('#budgetList .chip')).length===0);
+  // HUD: Zahlen auf gleicher Höhe
+  await page.evaluate(()=>{ newGame('english'); });
+  const tops=await page.evaluate(()=>[...document.querySelectorAll('.hud b')].map(e=>Math.round(e.getBoundingClientRect().top)));
+  ok('HUD-Zahlen auf gleicher Höhe', new Set(tops).size===1, JSON.stringify(tops));
+  // kleine Zahlen ausgeschrieben
+  await page.evaluate(()=>{ const b=game.board; for(let i=0;i<b.n;i++) game.pegAt[i]=-1; ['2,0','2,1','2,2','4,4','4,6','6,4'].forEach((k,j)=>game.pegAt[b.index[k]]=j); game.bookLine=null; game.line=null; game.history=[{mi:0,jumped:0}]; render(); });
+  await page.click('#btnHint'); await page.waitForFunction(()=>!game.searching,{timeout:20000}); await sleep(100);
+  const st2=await page.evaluate(()=>statusEl.textContent); console.log('INFO kleine Suche: '+st2);
+  ok('Kleine Stellungszahl ausgeschrieben, keine 0,00 Mio.', !/0,00 Mio/.test(st2)&&/Stellungen/.test(st2));
+  ok('Messwerte in eigener Zeile', await page.evaluate(()=>{ const n=statusEl.querySelector('.note'); return !!n&&/Stellungen/.test(n.textContent)&&!/Stellungen/.test(statusEl.firstChild.textContent); }));
+  ok('HUD einzeilig: Übrig von N', await page.evaluate(()=>document.getElementById('hudLeftLabel').textContent==='Übrig von 32'&&!document.querySelector('.hud .sub')));
+  // Trainer + Markierung
+  await page.evaluate(()=>{ settings.trainer=true; settings.marks=true; newGame('english'); });
+  // dem Buch 12 Züge folgen (bleibt lösbar), dann bewerten lassen
+  await page.evaluate(()=>{ for(let k=0;k<12;k++){ const l=currentLine(); applyMove(game.board.moves[l.path[0]],true); } render(); evaluatePosition(); });
+  await page.waitForFunction(()=>!game.evaluating,{timeout:20000}); await sleep(100);
+  s=await state(); console.log('INFO Trainer nach Buchzügen: '+s.status);
+  ok('Trainer: noch lösbar erkannt', /1 Stein ist noch erreichbar/.test(s.status));
+  // jetzt einen Zug spielen, der 1 verhindert: alle Züge durchprobieren, bis der Trainer "gekostet" meldet
+  const legal=await page.evaluate(()=>game.board.moves.map((m,i)=>({i,ok:game.pegAt[m.from]>=0&&game.pegAt[m.over]>=0&&game.pegAt[m.to]<0})).filter(x=>x.ok).map(x=>x.i));
+  let lostMsg=null;
+  for(const mi of legal){ await page.evaluate(i=>{ applyMove(game.board.moves[i],true); render(); afterMove(true); },mi);
+    await page.waitForFunction(()=>!game.evaluating,{timeout:20000}); await sleep(100); s=await state();
+    if(/gekostet/.test(s.status)){ lostMsg=s.status; break; } await page.evaluate(()=>undo()); await sleep(1200); await page.waitForFunction(()=>!game.animating&&!game.evaluating,{timeout:20000}); }
+  console.log('INFO Trainer Fehlzug: '+lostMsg);
+  // Zurück, Zurück, Vor, Vor: beim zweiten Vor muss wieder „gekostet" stehen
+  await page.evaluate(()=>undo()); await sleep(1200); await page.waitForFunction(()=>!game.animating&&!game.evaluating,{timeout:20000});
+  await page.evaluate(()=>undo()); await sleep(1200); await page.waitForFunction(()=>!game.animating&&!game.evaluating,{timeout:20000});
+  await page.evaluate(()=>redo()); await sleep(1200); await page.waitForFunction(()=>!game.animating&&!game.evaluating,{timeout:20000}); await sleep(100); const s1=(await state()).status;
+  await page.evaluate(()=>redo()); await sleep(1200); await page.waitForFunction(()=>!game.animating&&!game.evaluating,{timeout:20000}); await sleep(100); const s2=(await state()).status;
+  console.log('INFO Vorspulen: 1) '+s1+' | 2) '+s2);
+  ok('Vorspulen: erst grün, dann „gekostet"', /noch erreichbar/.test(s1)&&/gekostet/.test(s2));
+  // Reihenfolge: erst Markierung, dann Sprung
+  await page.evaluate(()=>undo()); await sleep(1500); await page.waitForFunction(()=>!game.animating&&!game.evaluating,{timeout:20000});
+  const before=await page.evaluate(()=>game.history.length);
+  await page.evaluate(()=>redo()); await sleep(150);
+  const early=await page.evaluate(()=>({arrow:!!document.querySelector('#board path[marker-end="url(#arrowHeadWhite)"]'),moved:game.history.length,anim:game.animating}));
+  await sleep(1500); await page.waitForFunction(()=>!game.animating&&!game.evaluating,{timeout:20000});
+  ok('Vor: Markierung steht vor dem Sprung', early.arrow&&early.moved===before&&early.anim, JSON.stringify(early));
+  const spool=await page.evaluate(()=>({last:!!game.lastMove, red:!!document.querySelector('#board path[marker-end="url(#arrowHeadRed)"]'), white:!!document.querySelector('#board path[marker-end="url(#arrowHeadWhite)"]')}));
+  console.log('INFO Spul-Markierung: '+JSON.stringify(spool));
+  ok('Fehlzug beim Vorspulen rot markiert', spool.last&&spool.red&&!spool.white);
+  await page.evaluate(()=>undo()); await sleep(1200); await page.waitForFunction(()=>!game.animating&&!game.evaluating,{timeout:20000});
+  const spool2=await page.evaluate(()=>({white:!!document.querySelector('#board path[marker-end="url(#arrowHeadWhite)"]'), red:!!document.querySelector('#board path[marker-end="url(#arrowHeadRed)"]')}));
+  ok('Zurückspulen: neutrale Markierung', spool2.white&&!spool2.red);
+  const und=await page.evaluate(()=>{ const m=game.board.moves[game.lastMove.mi]; const p=game.lay.pos; const arrow=document.querySelector('#board path[marker-end="url(#arrowHeadWhite)"]').getAttribute('d'); const seg=arrow.match(/M([\d.]+) ([\d.]+) L([\d.]+) ([\d.]+)/).slice(1).map(Number);
+    const towardsTo=Math.hypot(seg[2]-p[m.to].x,seg[3]-p[m.to].y)<Math.hypot(seg[2]-p[m.from].x,seg[3]-p[m.from].y); return {towardsTo, back:!!document.querySelector('#board .back-ring'), status:statusEl.textContent}; });
+  console.log('INFO Zurück-Anzeige: '+JSON.stringify(und));
+  ok("Zurück: Markierung zeigt den Zug, Ring am wieder aufgetauchten Stein, Zählung ab 1", und.towardsTo&&und.back&&/Zug \d+ von/.test(und.status)&&!/Zug 0 von/.test(und.status));
+  await page.screenshot({path:'shot_spool.png'});
+  ok('Trainer meldet den verlorenen Zug mit Zurück-Link', !!lostMsg&&/Zurück/.test(lostMsg));
+  // Markierung: konstruierte Stellung mit gestrandetem Stein (0,2)
+  await page.evaluate(()=>{ const b=game.board; for(let i=0;i<b.n;i++) game.pegAt[i]=-1; ['0,2','3,2','3,3','3,4','3,5','3,6'].forEach((k,j)=>game.pegAt[b.index[k]]=j); game.history=[{mi:0,jumped:0}]; game.evalRes=null; render(); evaluatePosition(); });
+  await page.waitForFunction(()=>!game.evaluating,{timeout:20000}); await sleep(150);
+  const marks=await page.evaluate(()=>{ const ev=game.evalRes; const i=game.board.index['0,2']; let never=0; for(let c=0;c<game.board.n;c++){ if(game.pegAt[c]>=0&&ev&&ev.optFinal&&((c<32?(ev.optFinal.mask[0]>>>c):(ev.optFinal.mask[1]>>>(c-32)))&1)) never++; } return {n:document.querySelectorAll('#board path[stroke="#e2a95c"]').length, never, stranded02: ev&&ev.optFinal&&!!((ev.optFinal.mask[0]>>>i)&1), complete:ev&&ev.complete, full:ev&&ev.full}; });
+  console.log('INFO Markierung: '+JSON.stringify(marks));
+  ok('Gestrandete Steine markiert, (0,2) darunter', marks.n===marks.never&&marks.n>=1&&marks.stranded02===true&&marks.complete);
+  await page.evaluate(()=>{ const b=game.board; for(let i=0;i<b.n;i++) game.pegAt[i]=-1; ['0,4','1,2','2,0','2,3','2,4','3,6','4,0','4,1','4,2','4,3','4,4','4,5','4,6','5,2','5,3','5,4','6,2','6,3','6,4'].forEach((k,j)=>game.pegAt[b.index[k]]=j); game.history=[{mi:0,jumped:0}]; game.evalRes=null; game.hintOn=false; render(); evaluatePosition(); });
+  await page.waitForFunction(()=>!game.evaluating,{timeout:20000}); await sleep(150); s=await state();
+  const m20=await page.evaluate(()=>{ const ev=game.evalRes; const i=game.board.index['2,0']; return {n:document.querySelectorAll('#board path[stroke="#e2a95c"]').length, stays20:!!((ev.optFinal.mask[0]>>>i)&1), count:ev.optFinal.count}; });
+  console.log('INFO Lutz-Stellung 20:57: '+JSON.stringify(m20)+' | '+s.status);
+  ok('Lutz-Stellung: (2,0) markiert, 3 Endbilder', m20.n===1&&m20.stays20&&m20.count===3&&/3 verschiedene Endbilder/.test(s.status));
+  await page.evaluate(()=>{ settings.trainer=false; settings.marks=false; newGame('english'); });
+  // Strategie-Hinweise
+  await page.evaluate(()=>{ settings.trainer=false; settings.marks=false; settings.strategy=true; renderStrategyBtn(); newGame('english'); for(let k=0;k<12;k++){ const l=currentLine(); applyMove(game.board.moves[l.path[0]],true); } render(); evaluatePosition(); });
+  await page.waitForFunction(()=>!game.evaluating,{timeout:20000});
+  const legal2=await page.evaluate(()=>game.board.moves.map((m,i)=>({i,ok:game.pegAt[m.from]>=0&&game.pegAt[m.over]>=0&&game.pegAt[m.to]<0})).filter(x=>x.ok).map(x=>x.i));
+  let adv=null;
+  for(const mi of legal2){ await page.evaluate(i=>{ applyMove(game.board.moves[i],true); render(); afterMove(true); },mi); await page.waitForFunction(()=>!game.evaluating,{timeout:20000}); await sleep(100); s=await state();
+    if(/Strategischer Fehler/.test(s.status)){ adv=s.status; break; } await page.evaluate(()=>undo()); await sleep(1300); await page.waitForFunction(()=>!game.animating&&!game.evaluating,{timeout:20000}); }
+  console.log('INFO Strategie: '+adv);
+  ok('Strategie-Hinweis mit Klasse, Begründung und besserem Zug', !!adv&&/(Reihenfolge|Falsche Richtung|Stein gestrandet|Struktur)/.test(adv)&&/Besser: /.test(adv)&&/Zurück & Zug zeigen/.test(adv));
+  await page.evaluate(()=>{ [...statusEl.querySelectorAll('.link')].find(l=>/Zurück & Zug/.test(l.textContent)).click(); }); await sleep(1400); await page.waitForFunction(()=>!game.animating,{timeout:20000}); await sleep(200);
+  const shown=await page.evaluate(()=>({hint:game.hintOn&&!!document.querySelector('#board .hint-arrow'),status:statusEl.textContent,moves:game.history.length}));
+  console.log('INFO nach Zurück & Zug zeigen: '+JSON.stringify(shown));
+  ok('Zurück & Zug zeigen: Zug zurück, besserer Zug als Pfeil', shown.hint&&shown.moves===12&&/bessere Zug ist markiert/.test(shown.status));
+  ok('Strategie-Knopf sichtbar und an', await page.evaluate(()=>document.getElementById('btnStrategy').classList.contains('on')));
+  // Guter Zug -> grüne Rückmeldung
+  await page.evaluate(()=>{ const l=currentLine(); playMove(game.board.moves[l.path[0]]); }); await sleep(400); await page.waitForFunction(()=>!game.animating&&!game.evaluating,{timeout:20000}); await sleep(100);
+  s=await state(); ok('Guter Zug: „In Ordnung"', /In Ordnung/.test(s.status), s.status);
+  // Fehler suchen: Fehlzug, dann zwei weitere Züge, dann Link
+  await page.evaluate(()=>{ newGame('english'); for(let k=0;k<12;k++){ const l=currentLine(); applyMove(game.board.moves[l.path[0]],true); } render(); });
+  const legal3=await page.evaluate(()=>game.board.moves.map((m,i)=>({i,ok:game.pegAt[m.from]>=0&&game.pegAt[m.over]>=0&&game.pegAt[m.to]<0})).filter(x=>x.ok).map(x=>x.i));
+  let culprit=-1;
+  for(const mi of legal3){ const r=await page.evaluate(i=>{ const arr=occ(); const m=game.board.moves[i]; const c=arr.slice(); c[m.from]=0; c[m.over]=0; c[m.to]=1; const [lo,hi]=CORE.fromArray(c); const rr=CORE.solveSmart(game.board,lo,hi,19,{maxNodes:0,timeMs:8000,target:1}); return rr.best; },mi); if(r>1){ culprit=mi; break; } }
+  ok('Fehlzug gefunden (Testaufbau)', culprit>=0);
+  await page.evaluate(i=>{ applyMove(game.board.moves[i],true); render(); },culprit);
+  for(let k=0;k<2;k++){ await page.evaluate(()=>{ const m=game.board.moves.find(m=>game.pegAt[m.from]>=0&&game.pegAt[m.over]>=0&&game.pegAt[m.to]<0); applyMove(m,true); render(); }); }
+  await page.evaluate(()=>{ game.evalRes=null; game.prevEval=null; evaluatePosition(); }); await page.waitForFunction(()=>!game.evaluating,{timeout:20000}); await sleep(100);
+  s=await state(); console.log('INFO nach 3 Zügen: '+s.status);
+  ok('Verloren, aber Zug nicht schuld: Link „Fehler suchen"', /Fehler lag früher/.test(s.status)&&/Fehler suchen/.test(s.status));
+  await page.evaluate(()=>{ [...statusEl.querySelectorAll('.link')].find(l=>/Fehler suchen/.test(l.textContent)).click(); });
+  await page.waitForFunction(()=>/entscheidende Fehler|nicht mehr erreichbar|abgebrochen/.test(statusEl.textContent),{timeout:60000}); await sleep(100);
+  s=await state(); console.log('INFO Fehlersuche: '+s.status);
+  ok('Fehlersuche nennt Zug 13 mit besserem Zug', /Fehler war Zug 13 von 15/.test(s.status)&&/Besser war/.test(s.status));
+  await page.evaluate(()=>{ [...statusEl.querySelectorAll('.link')].find(l=>/Dorthin zurück/.test(l.textContent)).click(); }); await sleep(300);
+  const rw=await page.evaluate(()=>({moves:game.history.length,hint:game.hintOn&&!!document.querySelector('#board .hint-arrow'),future:game.future.length}));
+  ok('Zurückgespult auf Zug 12, besserer Zug markiert, Vor-Verlauf erhalten', rw.moves===12&&rw.hint&&rw.future===3, JSON.stringify(rw));
+  await page.evaluate(()=>{ settings.strategy=false; renderStrategyBtn(); newGame('english'); });
+  // Längste Farbnamen passen in eine Zeile
+  const fit=await page.evaluate(()=>{ const names=Object.values(HEX_NAMES).sort((a,b)=>b.length-a.length); const L=names[0]; const st=document.getElementById('status'); const w=st.clientWidth-16; const c=document.createElement('canvas').getContext('2d'); c.font=getComputedStyle(st).font;
+    const cases=['Vor: '+L+' springt über '+L+'.','Zurück: '+L+' zurück, '+L+' wieder da.','Zurück: Stein zurück, Geschlagener wieder da.']; return {w,widths:cases.map(x=>Math.round(c.measureText(x).width))}; });
+  console.log('INFO Zeilenbreite: '+JSON.stringify(fit));
+  ok('Spultexte passen mit längsten Farbnamen in eine Zeile', fit.widths.every(x=>x<fit.w));
+  // Themes screenshots
+  for(const th of ['holz','edel','messing','filz','neon','marmor']){ await page.evaluate(t=>{ settings.theme=t; newGame('english'); },th); await sleep(150); await page.screenshot({path:`shot_theme_${th}.png`}); }
+  // Settings sheet
+  await page.evaluate(()=>{ settings.theme='eigene'; }); await page.click('#btnMenu'); await sleep(500); await page.screenshot({path:'shot_sheet.png'});
+  ok('Einstellungen geöffnet', await page.$eval('#sheet',e=>e.classList.contains('on')));
+  // free start
+  await page.evaluate(()=>{ settings.freeStart=true; closeSheet(); newGame('english'); }); await sleep(300);
+  s=await state(); ok('Freies Startloch: Brett voll (33)', s.left===33, JSON.stringify(s));
+  await tap(await idx(3,3)); s=await state(); ok('Startloch gesetzt: 32 Steine', s.left===32&&s.moves===0, s.status);
+  await page.evaluate(()=>{ settings.freeStart=false; newGame('english'); });
+  // dead-end detection: construct position with no moves
+  await page.evaluate(()=>{ newGame('english'); const b=game.board; for(let i=0;i<b.n;i++) game.pegAt[i]=-1; game.pegAt[b.index['0,2']]=0; game.pegAt[b.index['1,3']]=1; game.pegAt[b.index['3,3']]=2; game.pegAt[b.index['3,4']]=3; render(); });
+  // (3,3)->(3,5) over (3,4) is legal; play it and then no more moves -> 3 pegs left, game over
+  await page.evaluate(()=>{ game.history=[]; game.future=[]; game.finished=false; hideModal('resultModal'); }); await tap(await idx(3,3)); await sleep(700); s=await state();
+  ok('Endstellung erkannt: keine Züge, 3 Steine', s.finished&&s.left===3, JSON.stringify(s));
+  ok('keine Seitenfehler insgesamt', errors.length===0, errors.join(' | '));
+  await browser.close();
+  console.log(fails?`\n${fails} FEHLER`:'\nALLE BROWSER-TESTS OK');
+})().catch(e=>{ console.error('CRASH',e); process.exit(1); });
