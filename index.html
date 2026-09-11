@@ -1,0 +1,1228 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Solitaire">
+<meta name="theme-color" content="#17120e">
+<link rel="apple-touch-icon" sizes="180x180" href="2-icon.png">
+<link rel="icon" type="image/png" href="2-icon.png">
+<title>Solitaire – Steckbrett</title>
+<style>
+:root{
+  --bg:#17120e; --panel:#241c15; --panel2:#2f261d; --line:#3d3226;
+  --ink:#f1e7d4; --muted:#a8977f; --brass:#c9a24d; --brass2:#e9cd7c;
+  --ok:#8fc48a; --warn:#e2a95c; --bad:#d3675a;
+  --sat:env(safe-area-inset-top,0px); --sab:env(safe-area-inset-bottom,0px);
+  --serif:"Iowan Old Style","Palatino Linotype",Palatino,"Book Antiqua",Georgia,serif;
+  --sans:-apple-system,"SF Pro Text","Helvetica Neue",system-ui,Segoe UI,Roboto,sans-serif;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-family:var(--sans);overflow:hidden;
+  -webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+button{font:inherit;color:inherit;background:none;border:0;padding:0;margin:0;cursor:pointer}
+button:focus-visible,[tabindex]:focus-visible{outline:2px solid var(--brass2);outline-offset:2px}
+[hidden]{display:none!important}
+
+/* ---------- Splash ---------- */
+#splash{position:fixed;inset:0;z-index:50;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  background:radial-gradient(120% 90% at 50% 20%,#3a2a1c 0%,#1d1611 55%,#120d0a 100%);transition:opacity .6s ease}
+#splash.out{opacity:0;pointer-events:none}
+#splash h1{font-family:var(--serif);font-weight:400;font-size:clamp(52px,15vw,84px);letter-spacing:.02em;margin:0 0 6px;color:var(--brass2);
+  text-shadow:0 2px 18px rgba(233,205,124,.18)}
+#splash p{margin:0 0 26px;color:var(--muted);font-size:16px;letter-spacing:.06em}
+#splash svg{width:min(78vw,340px);height:auto;filter:drop-shadow(0 22px 30px rgba(0,0,0,.55))}
+@keyframes glint{0%,100%{opacity:.55}50%{opacity:1}}
+#splash .glint{animation:glint 1.6s ease-in-out infinite}
+
+/* ---------- App ---------- */
+#app{position:fixed;inset:0;display:flex;flex-direction:column;padding:calc(var(--sat) + 8px) 12px calc(var(--sab) + 8px);overflow-y:auto;-webkit-overflow-scrolling:touch}
+header{display:flex;align-items:baseline;justify-content:space-between;gap:10px;padding:2px 4px 6px}
+header .wordmark{font-family:var(--serif);font-size:26px;color:var(--brass2);letter-spacing:.01em}
+header .boardname{color:var(--muted);font-size:15px;display:flex;align-items:center;gap:6px;padding:6px 8px;border-radius:10px}
+header .boardname:active{background:var(--panel2)}
+.hud{display:grid;grid-template-columns:repeat(3,1fr);align-items:start;padding:4px 6px 8px;border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
+.hud>div{text-align:center}
+.hud b{display:block;font-family:var(--serif);font-size:30px;line-height:1;font-weight:400;color:var(--ink)}
+.hud span{font-size:12px;color:var(--muted)}
+.quick{display:flex;justify-content:center;padding:6px 0 0}
+.pill{border-radius:999px;padding:6px 14px;font-size:13px;background:var(--panel);color:var(--muted);border:1px solid var(--line)}
+.pill.on{background:linear-gradient(180deg,#d9b25f,#b88f36);color:#1f1608;border-color:transparent}
+#stage{flex:none;display:flex;align-items:center;justify-content:center;padding:8px 0}
+#board{touch-action:none;display:block}
+.toolbar{flex:none;margin-top:auto}
+#status{min-height:64px;padding:4px 8px;text-align:center;color:var(--muted);font-size:14px;line-height:1.35;display:flex;align-items:center;justify-content:center;gap:10px;flex-wrap:wrap}
+#status.hint{color:var(--brass2)}
+#status.bad{color:var(--bad)}
+#status.ok{color:var(--ok)}
+#lessonBar{padding:4px 8px 6px;border-top:1px solid var(--line)}
+#lessonBar .lt{font-family:var(--serif);font-size:18px;color:var(--brass2);text-align:center}
+#lessonBar .lx{font-size:13px;color:var(--ink);line-height:1.4;margin:4px 0 8px;text-align:center}
+#lessonBar .lb{display:flex;gap:8px}
+#lessonBar .btn{padding:9px;font-size:13px}
+.pkg-ring{fill:none;stroke:#e2a95c;stroke-width:4;stroke-dasharray:5 6}
+.cat-ring{fill:none;stroke:#8fc48a;stroke-width:5}
+.end-ring{fill:none;stroke:#fff;stroke-width:4;opacity:.7;stroke-dasharray:3 5}
+#status .link{color:var(--brass2);text-decoration:underline;text-underline-offset:3px;padding:4px 6px}
+#status .note{flex-basis:100%;color:var(--muted);font-size:12px;margin-top:1px}
+.toolbar{display:flex;justify-content:space-between;gap:6px;padding:6px 2px 0}
+.toolbar button{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;padding:8px 2px 6px;border-radius:12px;background:var(--panel);color:var(--ink);font-size:11px;min-height:56px;transition:background .15s}
+.toolbar button:active{background:var(--panel2)}
+.toolbar button:disabled{opacity:.35}
+.toolbar button svg{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.toolbar button.primary{background:linear-gradient(180deg,#d9b25f,#b88f36);color:#1f1608}
+.toolbar button.primary.busy{background:var(--panel2);color:var(--muted)}
+.toolbar button.primary svg{stroke:#1f1608}
+.toolbar button.primary.busy svg{stroke:var(--muted)}
+
+/* ---------- SVG game pieces ---------- */
+.peg{cursor:pointer}
+.hole{cursor:pointer}
+@keyframes pulse{0%,100%{opacity:.35}50%{opacity:1}}
+.sel-ring{fill:none;stroke:var(--brass2);stroke-width:6;animation:pulse 1.1s ease-in-out infinite}
+.tgt-dot{fill:var(--brass2);animation:pulse 1.1s ease-in-out infinite}
+.hint-ring{fill:none;stroke:#7fd3ff;stroke-width:6;animation:pulse 1.1s ease-in-out infinite}
+.back-ring{fill:none;stroke:#fff;stroke-width:5;stroke-dasharray:10 7;animation:pulse 1.1s ease-in-out infinite}
+.hint-arrow{stroke:#7fd3ff;stroke-width:9;fill:none;stroke-linecap:round;opacity:.9}
+.hint-dot{fill:#7fd3ff;animation:pulse 1.1s ease-in-out infinite}
+.parity-x{stroke:rgba(255,255,255,.35);stroke-width:4;stroke-linecap:round}
+@keyframes appear{from{opacity:0;transform:scale(.3)}to{opacity:1;transform:scale(1)}}
+.appear{animation:appear .6s ease-out;transform-box:fill-box;transform-origin:center}
+@keyframes shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-6px)}75%{transform:translateX(6px)}}
+.shake{animation:shake .25s ease-in-out 2;transform-box:fill-box;transform-origin:center}
+
+/* ---------- Sheet (Einstellungen) ---------- */
+#backdrop{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:20;opacity:0;pointer-events:none;transition:opacity .25s}
+#backdrop.on{opacity:1;pointer-events:auto}
+#sheet{position:fixed;left:0;right:0;bottom:0;z-index:21;background:var(--panel);border-radius:22px 22px 0 0;max-height:calc(100% - var(--sat) - 30px);
+  transform:translateY(105%);transition:transform .3s cubic-bezier(.2,.8,.2,1);display:flex;flex-direction:column;box-shadow:0 -10px 40px rgba(0,0,0,.5)}
+#sheet.on{transform:translateY(0)}
+#sheet .handle{width:44px;height:5px;border-radius:3px;background:var(--line);margin:10px auto 4px;flex:none}
+#sheet .scroll{overflow-y:auto;-webkit-overflow-scrolling:touch;padding:4px 16px calc(var(--sab) + 16px)}
+#sheet h2{font-family:var(--serif);font-weight:400;font-size:20px;margin:18px 0 10px;color:var(--brass2)}
+#sheet h2:first-child{margin-top:6px}
+#sheet p{color:var(--muted);font-size:14px;line-height:1.45;margin:6px 0}
+.boards{display:flex;gap:10px;overflow-x:auto;padding:4px 2px 8px;scroll-snap-type:x mandatory;-webkit-overflow-scrolling:touch}
+.boardcard{flex:none;width:128px;scroll-snap-align:start;border-radius:14px;background:var(--panel2);padding:8px;border:2px solid transparent;text-align:center}
+.boardcard.on{border-color:var(--brass)}
+.boardcard svg{width:100%;height:auto;display:block;border-radius:8px}
+.boardcard .n{font-size:13px;margin-top:6px;color:var(--ink)}
+.boardcard .b{font-size:11px;color:var(--muted);margin-top:2px;min-height:14px}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chip{border-radius:999px;padding:8px 14px;background:var(--panel2);font-size:14px;border:2px solid transparent;display:flex;align-items:center;gap:8px}
+.chip.on{border-color:var(--brass);color:var(--brass2)}
+.chip .sw{width:18px;height:18px;border-radius:50%;box-shadow:inset 0 0 0 1px rgba(255,255,255,.15)}
+.dots{display:flex;flex-wrap:wrap;gap:10px}
+.dot{width:34px;height:34px;border-radius:50%;border:3px solid transparent;box-shadow:inset 0 -4px 8px rgba(0,0,0,.35),inset 0 4px 8px rgba(255,255,255,.25)}
+.dot.on{border-color:var(--brass2)}
+.row{display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--line);gap:10px}
+.row .t{font-size:15px}
+.row .d{font-size:12px;color:var(--muted);margin-top:2px}
+.switch{flex:none;width:52px;height:31px;border-radius:16px;background:#4a3f33;position:relative;transition:background .2s}
+.switch::after{content:"";position:absolute;top:3px;left:3px;width:25px;height:25px;border-radius:50%;background:#fff;transition:transform .2s;box-shadow:0 2px 4px rgba(0,0,0,.4)}
+.switch.on{background:var(--brass)}
+.switch.on::after{transform:translateX(21px)}
+.btnrow{display:flex;gap:10px;margin-top:16px}
+.btn{flex:1;padding:13px;border-radius:12px;background:var(--panel2);color:var(--ink);font-size:15px;text-align:center}
+.btn.primary{background:linear-gradient(180deg,#d9b25f,#b88f36);color:#1f1608}
+.btn.ghost{background:none;border:1px solid var(--line);color:var(--muted)}
+
+/* ---------- Modals ---------- */
+.modal{position:fixed;inset:0;z-index:30;display:flex;align-items:center;justify-content:center;background:rgba(10,7,5,.7);opacity:0;pointer-events:none;transition:opacity .25s;padding:24px}
+.modal.on{opacity:1;pointer-events:auto}
+.card{background:var(--panel);border-radius:20px;padding:22px 20px 18px;width:min(92vw,360px);text-align:center;box-shadow:0 20px 60px rgba(0,0,0,.6)}
+.card h3{font-family:var(--serif);font-weight:400;font-size:30px;margin:0 0 4px;color:var(--brass2)}
+.card .stars{font-size:26px;letter-spacing:6px;margin:6px 0;color:var(--brass2)}
+.card p{color:var(--muted);font-size:14px;line-height:1.45;margin:8px 0}
+.card .big{font-family:var(--serif);font-size:56px;line-height:1;color:var(--ink);margin:6px 0 2px}
+.card .big small{font-size:16px;color:var(--muted);font-family:var(--sans)}
+#toast{position:fixed;left:50%;bottom:calc(var(--sab) + 90px);transform:translateX(-50%) translateY(20px);background:#3a2f24;color:var(--ink);padding:10px 16px;border-radius:12px;font-size:14px;opacity:0;transition:.25s;z-index:40;pointer-events:none;max-width:90vw;text-align:center}
+#toast.on{opacity:1;transform:translateX(-50%) translateY(0)}
+@media (prefers-reduced-motion:reduce){
+  #splash .glint,.sel-ring,.tgt-dot,.hint-ring,.hint-dot,.back-ring{animation:none}
+}
+</style>
+</head>
+<body>
+
+<div id="splash" aria-label="Solitaire">
+  <h1>Solitaire</h1>
+  <p>Ein Stein soll bleiben.</p>
+  <svg id="splashArt" viewBox="0 0 400 400" aria-hidden="true"></svg>
+</div>
+
+<div id="app" hidden>
+  <header>
+    <div class="wordmark">Solitaire</div>
+    <button class="boardname" id="btnBoardName" aria-label="Spielfeld wählen"><span id="boardNameText">Englisch</span>
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 9l6 6 6-6"/></svg></button>
+  </header>
+  <div class="hud">
+    <div><b id="hudMoves">0</b><span>Sprünge</span></div>
+    <div><b id="hudLeft">32</b><span id="hudLeftLabel">Übrig von 32</span></div>
+    <div><b id="hudTime">0:00</b><span>Zeit</span></div>
+  </div>
+  <div class="quick"><button id="btnStrategy" class="pill" aria-pressed="false">Strategie-Hinweise: aus</button></div>
+  <div id="stage"><svg id="board" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Spielbrett"></svg></div>
+  <div id="status"></div>
+  <div id="lessonBar" hidden><div class="lt" id="lessonTitle"></div><div class="lx" id="lessonText"></div><div class="lb"><button class="btn" id="lsDemo">Vormachen</button><button class="btn" id="lsRestart">Abschnitt neu</button><button class="btn ghost" id="lsQuit">Beenden</button></div></div>
+  <div class="toolbar">
+    <button id="btnUndo" aria-label="Rückgängig"><svg viewBox="0 0 24 24"><path d="M9 14L4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 0 12h-3"/></svg>Zurück</button>
+    <button id="btnRedo" aria-label="Wiederholen"><svg viewBox="0 0 24 24"><path d="M15 14l5-5-5-5"/><path d="M20 9H10a6 6 0 0 0 0 12h3"/></svg>Vor</button>
+    <button id="btnHint" class="primary" aria-label="Tipp"><svg viewBox="0 0 24 24"><path d="M9 18h6"/><path d="M10 21h4"/><path d="M12 3a6 6 0 0 0-4 10.5c.8.8 1.3 1.6 1.5 2.5h5c.2-.9.7-1.7 1.5-2.5A6 6 0 0 0 12 3z"/></svg>Tipp</button>
+    <button id="btnNew" aria-label="Neues Spiel"><svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 0 1 15.5-6.3L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-15.5 6.3L3 16"/><path d="M3 21v-5h5"/></svg>Neu</button>
+    <button id="btnMenu" aria-label="Einstellungen"><svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></svg>Menü</button>
+  </div>
+</div>
+
+<div id="backdrop"></div>
+<div id="sheet" role="dialog" aria-label="Einstellungen">
+  <div class="handle"></div>
+  <div class="scroll">
+    <h2>Spielfeld</h2>
+    <div class="boards" id="boardList"></div>
+    <h2>Aussehen</h2>
+    <div class="chips" id="themeList"></div>
+    <div id="customLook" hidden>
+      <p style="margin-top:12px">Brett</p><div class="chips" id="boardLookList"></div>
+      <p style="margin-top:12px">Spielsteine</p><div class="chips" id="pegStyleList"></div>
+      <p style="margin-top:12px">Farbe</p><div class="dots" id="colorList"></div>
+    </div>
+    <h2>Lernen</h2>
+    <p>Lektionen: kurze Aufgaben mit vorbereiteten Stellungen.</p>
+    <div class="chips" id="lessonList"></div>
+    <div class="row"><div><div class="t">Trainer</div><div class="d">Bewertet nach jedem Zug, ob 1 Stein noch erreichbar ist, und nennt den Zug, der es gekostet hat.</div></div><button class="switch" id="swTrainer" role="switch" aria-label="Trainer"></button></div>
+    <div class="row"><div><div class="t">Gestrandete Steine markieren</div><div class="d">Steine, die in jeder bestmöglichen Fortsetzung stehen bleiben, bekommen ein Zeichen. Ab etwa 24 Steinen abwärts.</div></div><button class="switch" id="swMarks" role="switch" aria-label="Gestrandete Steine markieren"></button></div>
+    <h2>Steuerung</h2>
+    <div class="row"><div><div class="t">Auto-Sprung</div><div class="d">Antippen genügt, wenn nur ein Zug möglich ist. Bei mehreren: in Richtung wischen oder Zielfeld tippen.</div></div><button class="switch" id="swAuto" role="switch" aria-label="Auto-Sprung"></button></div>
+    <div class="row"><div><div class="t">Zielfelder anzeigen</div><div class="d">Mögliche Ziele des gewählten Steins markieren.</div></div><button class="switch" id="swTargets" role="switch" aria-label="Zielfelder anzeigen"></button></div>
+    <div class="row"><div><div class="t">Startloch frei wählen</div><div class="d">Beim Start alle Steine setzen und selbst einen herausnehmen.</div></div><button class="switch" id="swFree" role="switch" aria-label="Startloch frei wählen"></button></div>
+    <div class="row"><div><div class="t">Ton</div><div class="d">Kurze Klicks beim Ziehen, Jingle am Ende.</div></div><button class="switch" id="swSound" role="switch" aria-label="Ton"></button></div>
+    <h2>So geht's</h2>
+    <p>Ein Stein springt waagerecht, senkrecht (auf dem Dreieck auch schräg) über einen direkten Nachbarn in ein leeres Loch dahinter. Der übersprungene Stein wird entfernt. Ziel: nur ein Stein bleibt übrig – auf den Kreuzbrettern idealerweise in der Mitte.</p>
+    <p>Tipp: Die Suche berechnet, mit welchem Zug sich die kleinste Restzahl erreichen lässt. Ist das nachweisbar, steht „bewiesen" dabei; sonst gilt der beste gefundene Zug innerhalb des Rechenbudgets.</p>
+    <div class="btnrow"><button class="btn ghost" id="btnResetStats">Bestleistungen löschen</button><button class="btn primary" id="btnCloseSheet">Fertig</button></div>
+    <p style="text-align:center;margin-top:14px" id="versionLine"></p>
+  </div>
+</div>
+
+<div class="modal" id="resultModal"><div class="card">
+  <h3 id="resTitle">Gelöst</h3>
+  <div class="stars" id="resStars"></div>
+  <div class="big" id="resBig">1 <small>Stein übrig</small></div>
+  <p id="resText"></p>
+  <div class="btnrow"><button class="btn" id="resUndo">Zurück</button><button class="btn primary" id="resNew">Nochmal</button></div>
+  <div class="btnrow" style="margin-top:8px"><button class="btn ghost" id="resClose">Brett ansehen</button></div>
+</div></div>
+
+<div class="modal" id="confirmModal"><div class="card">
+  <h3 id="cfTitle">Laufendes Spiel verwerfen?</h3>
+  <p id="cfText">Der aktuelle Spielstand geht verloren.</p>
+  <div class="btnrow"><button class="btn" id="cfNo">Abbrechen</button><button class="btn primary" id="cfYes">Verwerfen</button></div>
+</div></div>
+
+<div id="toast"></div>
+
+<script>
+'use strict';
+const APP_VERSION='1.1';
+/* =========================================================================
+   Kern: Bretter, Züge, Symmetrien, Paritäts-Schranke, Solver
+   (als Fabrik, damit derselbe Code im Web Worker läuft)
+   ========================================================================= */
+function coreFactory(){
+  const GRID_DIRS=[[0,1],[0,-1],[1,0],[-1,0]];
+  const TRI_DIRS=[[0,1],[0,-1],[1,0],[-1,0],[1,1],[-1,-1]];
+  function gridDef(id,name,rows,start,center){ return {id,name,type:'grid',rows,start,center}; }
+  const BOARD_DEFS=[
+    gridDef('english','Englisch (33)',['..ooo..','..ooo..','ooooooo','ooooooo','ooooooo','..ooo..','..ooo..'],[3,3],[3,3]),
+    gridDef('european','Europäisch (37)',['..ooo..','.ooooo.','ooooooo','ooooooo','ooooooo','.ooooo.','..ooo..'],[0,2],[3,3]),
+    gridDef('wiegleb','Wiegleb (45)',['...ooo...','...ooo...','...ooo...','ooooooooo','ooooooooo','ooooooooo','...ooo...','...ooo...','...ooo...'],[4,4],[4,4]),
+    {id:'tri5',name:'Dreieck (15)',type:'tri',size:5,start:[0,0]},
+    {id:'tri6',name:'Dreieck (21)',type:'tri',size:6,start:[0,0]},
+    gridDef('square5','Quadrat (25)',['ooooo','ooooo','ooooo','ooooo','ooooo'],[0,2],[2,2]),
+  ];
+  function buildBoard(def){
+    const cells=[], index={};
+    if(def.type==='grid'){ def.rows.forEach((row,r)=>{ for(let c=0;c<row.length;c++) if(row[c]==='o'){ index[r+','+c]=cells.length; cells.push({r,c}); } }); }
+    else { for(let r=0;r<def.size;r++) for(let c=0;c<=r;c++){ index[r+','+c]=cells.length; cells.push({r,c}); } }
+    const dirs=def.type==='grid'?GRID_DIRS:TRI_DIRS;
+    const moves=[];
+    cells.forEach((cell,i)=>{ dirs.forEach((d,di)=>{ const o=index[(cell.r+d[0])+','+(cell.c+d[1])], t=index[(cell.r+2*d[0])+','+(cell.c+2*d[1])]; if(o!==undefined&&t!==undefined) moves.push({from:i,over:o,to:t,d:di}); }); });
+    const n=cells.length; const syms=[]; let transforms;
+    if(def.type==='grid'){ const R=def.rows.length, C=def.rows[0].length;
+      transforms=[(r,c)=>[r,c],(r,c)=>[R-1-r,c],(r,c)=>[r,C-1-c],(r,c)=>[R-1-r,C-1-c]];
+      if(R===C) transforms.push((r,c)=>[c,r],(r,c)=>[C-1-c,r],(r,c)=>[c,R-1-r],(r,c)=>[C-1-c,R-1-r]);
+    } else { const S=def.size-1; const perms=[[0,1,2],[0,2,1],[1,0,2],[1,2,0],[2,0,1],[2,1,0]];
+      transforms=perms.map(p=>(r,c)=>{ const v=[r-c,c,S-r]; const w=[v[p[0]],v[p[1]],v[p[2]]]; return [S-w[2],w[1]]; }); }
+    transforms.forEach(tf=>{ const perm=new Int32Array(n); let ok=true; for(let i=0;i<n;i++){ const rc=tf(cells[i].r,cells[i].c); const j=index[rc[0]+','+rc[1]]; if(j===undefined){ok=false;break;} perm[i]=j; } if(ok&&new Set(perm).size===n) syms.push(perm); });
+    // 3-Färbungen (a*r+b*c) mod 3, bei denen jeder Zug drei verschiedene Farben berührt -> Paritätsinvarianten
+    const colorings=[];
+    for(let a=0;a<3;a++) for(let b=0;b<3;b++){ if(a===0&&b===0) continue; const col=cells.map(x=>(((a*x.r+b*x.c)%3)+3)%3);
+      if(moves.every(m=>{ const s=new Set([col[m.from],col[m.over],col[m.to]]); return s.size===3; })){
+        if(!colorings.some(c2=>c2.every((v,i)=>v===col[i]))) colorings.push(col); } }
+    const startIdx=index[def.start[0]+','+def.start[1]];
+    const centerIdx=def.center?index[def.center[0]+','+def.center[1]]:-1;
+    return {def,cells,index,moves,syms,n,startIdx,centerIdx,dirs,colorings};
+  }
+  function fromArray(arr){ let lo=0,hi=0; for(let i=0;i<arr.length;i++) if(arr[i]){ if(i<32) lo|=(1<<i); else hi|=(1<<(i-32)); } return [lo,hi]; }
+  function key(lo,hi){ return (lo>>>0)+(hi>>>0)*4294967296; }
+  // Untere Schranke für die Restzahl aus den Paritätsinvarianten (1, 2 oder 3)
+  function parityLowerBound(board,arr){
+    let n=0; for(let i=0;i<arr.length;i++) if(arr[i]) n++;
+    if(n<=1) return n;
+    let lb=1;
+    for(const col of board.colorings){
+      const cnt=[0,0,0]; for(let i=0;i<arr.length;i++) if(arr[i]) cnt[col[i]]++;
+      const P=cnt.map(v=>v&1);
+      const pop=P[0]+P[1]+P[2];
+      let best=3;
+      for(let k=1;k<=3;k++){ const flip=((n-k)&1)===1; const need=flip?3-pop:pop; if(k>=need){best=k;break;} }
+      if(best>lb) lb=best;
+    }
+    return Math.min(lb,n);
+  }
+  function createSolver(board){
+    const M=board.moves.length;
+    const fmL=new Int32Array(M),fmH=new Int32Array(M),omL=new Int32Array(M),omH=new Int32Array(M),tmL=new Int32Array(M),tmH=new Int32Array(M);
+    const bit=i=> i<32?[1<<i,0]:[0,1<<(i-32)];
+    board.moves.forEach((m,k)=>{ let b=bit(m.from); fmL[k]=b[0]; fmH[k]=b[1]; b=bit(m.over); omL[k]=b[0]; omH[k]=b[1]; b=bit(m.to); tmL[k]=b[0]; tmH[k]=b[1]; });
+    const syms=board.syms.slice(1);
+    function canon(lo,hi){ let best=key(lo,hi);
+      for(let s=0;s<syms.length;s++){ const p=syms[s]; let l2=0,h2=0,x=lo;
+        while(x){ const t=x&-x; const i=31-Math.clz32(t); x^=t; const j=p[i]; if(j<32) l2|=(1<<j); else h2|=(1<<(j-32)); }
+        x=hi; while(x){ const t=x&-x; const i=63-Math.clz32(t); x^=t; const j=p[i]; if(j<32) l2|=(1<<j); else h2|=(1<<(j-32)); }
+        const k=key(l2,h2); if(k<best) best=k; }
+      return best; }
+    function solve(lo,hi,count,opts){
+      opts=opts||{}; const target=opts.target||1;
+      const maxNodes=opts.maxNodes||400000, deadline=Date.now()+(opts.timeMs||2500);
+      const visited=new Set(); let best=count,bestPath=[],nodes=0,aborted=false; const stack=[];
+      function dfs(lo,hi,count){
+        if(count<best){ best=count; bestPath=stack.slice(); if(best<=target) return true; }
+        nodes++;
+        if((nodes&2047)===0&&(nodes>maxNodes||Date.now()>deadline)){ aborted=true; return true; }
+        const k=canon(lo,hi); if(visited.has(k)) return false; visited.add(k);
+        for(let m=0;m<M;m++){
+          if(((lo&fmL[m])|(hi&fmH[m]))&&((lo&omL[m])|(hi&omH[m]))&&!((lo&tmL[m])|(hi&tmH[m]))){
+            stack.push(m); const done=dfs(lo^fmL[m]^omL[m]^tmL[m],hi^fmH[m]^omH[m]^tmH[m],count-1); stack.pop(); if(done) return true; } }
+        return false; }
+      dfs(lo,hi,count);
+      return {best,path:bestPath,complete:!aborted||best<=target,nodes};
+    }
+    return {solve,canon};
+  }
+  // Offene Hash-Tabelle über Float64Array: 8 Byte je gemerkter Stellung, wird je Suchlauf geleert
+  function createTable(bits){
+    const cap=1<<bits, mask=cap-1, keys=new Float64Array(cap); keys.fill(-1); let size=0; const limit=Math.floor(cap*0.85);
+    function slot(lo,hi){ let h=(Math.imul(lo,0x9E3779B1)^Math.imul((hi+0x7F4A7C15)|0,0x85EBCA6B))>>>0; h^=h>>>15; h=Math.imul(h,0x2C1B3C6D)>>>0; h^=h>>>12; return h&mask; }
+    return {
+      // true, wenn die Stellung schon bekannt war; sonst wird sie gemerkt (solange Platz ist)
+      seen(k,lo,hi){ let i=slot(lo,hi); for(;;){ const v=keys[i]; if(v===k) return true; if(v<0){ if(size<limit){ keys[i]=k; size++; } return false; } i=(i+1)&mask; } },
+      clear(){ keys.fill(-1); size=0; }, get size(){ return size; }, get full(){ return size>=limit; }
+    };
+  }
+  const tableCache={};
+  function getTable(bits){ if(!tableCache[bits]) tableCache[bits]=createTable(bits); return tableCache[bits]; }
+  // Unterbrechbare Tiefensuche (expliziter Stapel), damit Fortschritt, Abbruch und große Suchtiefen möglich sind.
+  // Gezählt werden verschiedene Stellungen (Spiegelungen/Drehungen zusammengefasst), nicht Besuche.
+  // noSym: ohne Symmetrie-Zusammenfassung; dann ist die Vereinigung aller je leeren Felder (everEmpty) exakt.
+  function createDFS(board,mv,lo0,hi0,count0,target,budget,table,noSym){
+    const M=mv.length;
+    const fmL=new Int32Array(M),fmH=new Int32Array(M),omL=new Int32Array(M),omH=new Int32Array(M),tmL=new Int32Array(M),tmH=new Int32Array(M);
+    const bit=i=> i<32?[1<<i,0]:[0,1<<(i-32)];
+    mv.forEach((m,k)=>{ let b=bit(m.from); fmL[k]=b[0]; fmH[k]=b[1]; b=bit(m.over); omL[k]=b[0]; omH[k]=b[1]; b=bit(m.to); tmL[k]=b[0]; tmH[k]=b[1]; });
+    const syms=noSym?[]:board.syms.slice(1);
+    function canon(lo,hi){ let best=key(lo,hi);
+      for(let s=0;s<syms.length;s++){ const p=syms[s]; let l2=0,h2=0,x=lo;
+        while(x){ const t=x&-x; const i=31-Math.clz32(t); x^=t; const j=p[i]; if(j<32) l2|=(1<<j); else h2|=(1<<(j-32)); }
+        x=hi; while(x){ const t=x&-x; const i=63-Math.clz32(t); x^=t; const j=p[i]; if(j<32) l2|=(1<<j); else h2|=(1<<(j-32)); }
+        const k=key(l2,h2); if(k<best) best=k; }
+      return best; }
+    let evLo=0, evHi=0;
+    const D=count0+2; const finLo=new Int32Array(D).fill(-1), finHi=new Int32Array(D).fill(-1), finCnt=new Int32Array(D); /* Endstellungen je Restzahl: UND der Belegung, Anzahl */ const sLo=new Int32Array(D),sHi=new Int32Array(D),sCnt=new Int32Array(D),sNext=new Int32Array(D),sMove=new Int32Array(D),fresh=new Uint8Array(D);
+    let d=0; sLo[0]=lo0; sHi[0]=hi0; sCnt[0]=count0; sNext[0]=0; fresh[0]=1;
+    let best=count0, path=null, used=0, status='running'; table.clear();
+    function step(k){ let n=0;
+      while(n<k){
+        if(d<0){ status='finished'; break; }
+        const lo=sLo[d], hi=sHi[d];
+        if(fresh[d]){ fresh[d]=0;
+          const kk=canon(lo,hi); const cl=(kk%4294967296)|0, ch=Math.floor(kk/4294967296)|0; if(table.seen(kk,cl,ch)){ d--; continue; }
+          n++; used++; evLo|=~lo; evHi|=~hi;
+          const c=sCnt[d]; if(c<best){ best=c; path=Array.prototype.slice.call(sMove,1,d+1); if(best<=target){ status='finished'; break; } }
+          if(used>budget){ status='budget'; break; } }
+        let m=sNext[d], found=-1;
+        for(;m<M;m++){ if(((lo&fmL[m])|(hi&fmH[m]))&&((lo&omL[m])|(hi&omH[m]))&&!((lo&tmL[m])|(hi&tmH[m]))){ found=m; break; } }
+        if(found<0){ if(sNext[d]===0){ const c=sCnt[d]; finLo[c]&=lo; finHi[c]&=hi; finCnt[c]++; } d--; continue; }
+        sNext[d]=found+1; d++; sLo[d]=lo^fmL[found]^omL[found]^tmL[found]; sHi[d]=hi^fmH[found]^omH[found]^tmH[found]; sCnt[d]=sCnt[d-1]-1; sNext[d]=0; sMove[d]=found; fresh[d]=1; }
+      return n; }
+    return {step, get best(){return best;}, get path(){return path;}, get status(){return status;}, get used(){return used;}, get everEmpty(){ return [evLo,evHi]; }, optFinal(c){ return finCnt[c]?{mask:[finLo[c],finHi[c]],count:finCnt[c]}:null; }};
+  }
+  // Portfolio aus Zugreihenfolgen + Zufallsneustarts, danach erschöpfende Suche – in Häppchen ausführbar
+  function createSearch(board,lo,hi,count,opts){
+    opts=opts||{}; const target=(opts.target!==undefined&&opts.target!==null)?opts.target:1;
+    const unlimited=!(opts.maxNodes>0&&isFinite(opts.maxNodes));
+    const totalNodes=unlimited?Infinity:opts.maxNodes;
+    let perRestart=opts.perRestart||(unlimited?(board.n>=30?150000:40000):(board.n>=30?Math.max(60000,Math.round(totalNodes/10)):Math.max(20000,Math.round(totalNodes/25))));
+    const tableBits=opts.tableBits||(board.n<=25?22:(board.n<=33?24:23)); const table=getTable(tableBits);
+    const full=!!opts.full; // vollständige Absuche ohne Frühabbruch und ohne Symmetrie (für „bleibt stehen"-Markierung)
+    // Anteil für Neustarts; danach erschöpfend. Ohne Limit auf dem Englischen Brett: nach 0,6 Mio. Stellungen alles absuchen (der ganze Raum ist endlich, 23,5 Mio.)
+    const restartShare=full?0:(unlimited?(board.n<=33?600000:Infinity):totalNodes*0.65);
+    let seed=(opts.seed||12345)>>>0; const rnd=()=>{ seed^=seed<<13; seed>>>=0; seed^=seed>>>17; seed^=seed<<5; seed>>>=0; return seed/4294967296; };
+    let cr=0,cc=0; board.cells.forEach(x=>{cr+=x.r;cc+=x.c;}); cr/=board.n; cc/=board.n;
+    const dist=i=>Math.hypot(board.cells[i].r-cr,board.cells[i].c-cc);
+    const base=board.moves;
+    const orders=[
+      m=>m.slice(),
+      m=>m.slice().sort((a,b)=>dist(b.from)-dist(a.from)),
+      m=>m.slice().sort((a,b)=>(dist(a.to)-dist(a.from))-(dist(b.to)-dist(b.from))),
+      m=>m.slice().sort((a,b)=>dist(a.to)-dist(b.to)),
+      m=>m.slice().sort((a,b)=>dist(a.from)-dist(b.from)),
+    ];
+    let best=count,bestPath=null,nodes=0,restarts=0,phase='restart',done=false,complete=false,cur=null,curMap=null;
+    let everEmpty=null, optFinal=null;
+    function startDFS(mv,budget){ curMap=mv.map(m=>base.indexOf(m)); cur=createDFS(board,mv,lo,hi,count,full?0:target,budget,table,full); }
+    function harvest(){ if(cur&&cur.best<best){ best=cur.best; bestPath=cur.path?cur.path.map(k=>curMap[k]):[]; } }
+    function run(chunk){
+      while(chunk>0&&!done){
+        if(!cur){
+          if(phase==='restart'){
+            if(nodes>=restartShare){ phase='exhaustive'; continue; }
+            let mv; if(restarts<orders.length) mv=orders[restarts](base);
+            else { mv=base.slice(); for(let i=mv.length-1;i>0;i--){ const j=Math.floor(rnd()*(i+1)); const t=mv[i]; mv[i]=mv[j]; mv[j]=t; } if(unlimited) perRestart=Math.min(20000000,Math.round(perRestart*1.3)); }
+            restarts++; startDFS(mv,perRestart);
+          } else {
+            if(nodes>=totalNodes){ done=true; break; }
+            startDFS(base,unlimited?Infinity:totalNodes-nodes);
+          }
+        }
+        const n=cur.step(chunk); chunk-=n; nodes+=n; harvest();
+        if(!full&&best<=target){ complete=true; done=true; break; }
+        if(cur.status==='finished'){ complete=true; done=true; if(full){ const e=cur.everEmpty; const m=board.n>=32?[-1, board.n>32?((1<<(board.n-32))-1):0]:[(1<<board.n)-1,0]; everEmpty=[e[0]&m[0], e[1]&m[1]]; optFinal=cur.optFinal(best); } break; }
+        if(cur.status==='budget'){ cur=null; if(phase==='exhaustive'){ done=true; } }
+      }
+      return {done,best,path:bestPath||[],complete,nodes,restarts,everEmpty,optFinal};
+    }
+    return {run};
+  }
+  function solveSmart(board,lo,hi,count,opts){
+    opts=opts||{}; const deadline=Date.now()+(opts.timeMs||3500); const s=createSearch(board,lo,hi,count,opts); let r;
+    do{ r=s.run(20000); }while(!r.done&&Date.now()<deadline);
+    return r;
+  }
+  return {BOARD_DEFS,buildBoard,createSolver,createSearch,solveSmart,fromArray,key,parityLowerBound};
+}
+const CORE=coreFactory();
+
+/* =========================================================================
+   Aussehen
+   ========================================================================= */
+const COLORS={
+  rot:'#c62828',orange:'#e8711c',gold:'#d4a02a',gruen:'#2e8b57',tuerkis:'#1fa8a0',blau:'#2f5fd1',violett:'#7b3fbf',rosa:'#e0559a',
+  weiss:'#ece8e1',schwarz:'#33333a',silber:'#b9bec7',holzhell:'#d8a56a',holzdunkel:'#7a4a25',bunt:'multi',juwel:'multi2',regenbogen:'hue'
+};
+const COLOR_NAMES={rot:'Rot',orange:'Orange',gold:'Gold',gruen:'Grün',tuerkis:'Türkis',blau:'Blau',violett:'Violett',rosa:'Rosa',weiss:'Weiß',schwarz:'Schwarz',silber:'Silber',holzhell:'Helles Holz',holzdunkel:'Dunkles Holz',bunt:'Bunt',juwel:'Juwelen',regenbogen:'Regenbogen'};
+const PALETTE_BUNT=['#c62828','#2f5fd1','#2e8b57','#d4a02a','#7b3fbf','#1fa8a0','#e8711c','#e0559a'];
+const HEX_NAMES={'#c62828':'Rot','#2f5fd1':'Blau','#2e8b57':'Grün','#d4a02a':'Gold','#7b3fbf':'Violett','#1fa8a0':'Türkis','#e8711c':'Orange','#e0559a':'Rosa','#c0223b':'Rubin','#2247b3':'Saphir','#1e9e5a':'Smaragd','#e39b1c':'Bernstein','#7c3fb8':'Amethyst','#23b5c9':'Aquamarin'};
+function pegName(pegId){ const look=currentLook(); const hex=pegColorFor(look.color,pegId,game.board.n); const v=COLORS[look.color]; if(v==='multi'||v==='multi2') return HEX_NAMES[hex]||null; return null; }
+const PALETTE_JUWEL=['#c0223b','#2247b3','#1e9e5a','#e39b1c','#7c3fb8','#23b5c9'];
+const PEG_STYLES={glas:'Glasmurmel',edel:'Edelstein',holz:'Holz',metall:'Metall',flach:'Flach',neon:'Neon'};
+const BOARD_LOOKS={
+  holz:{name:'Holz',base:'#8d5a2e',hole:'#3b2210',text:'#f1e7d4'},
+  holzdunkel:{name:'Nussbaum',base:'#5a3a22',hole:'#231409',text:'#f1e7d4'},
+  filz:{name:'Filz',base:'#2f6b47',hole:'#173622',text:'#f1e7d4'},
+  samtblau:{name:'Samt blau',base:'#1f2f5c',hole:'#0d1430',text:'#f1e7d4'},
+  samtschwarz:{name:'Samt schwarz',base:'#221b22',hole:'#0a070b',text:'#f1e7d4'},
+  schiefer:{name:'Schiefer',base:'#3f454c',hole:'#1b1e22',text:'#f1e7d4'},
+  neon:{name:'Neon dunkel',base:'#0d1020',hole:'#04050c',text:'#f1e7d4'},
+  marmor:{name:'Marmor',base:'#d6cfc3',hole:'#8f877a',text:'#2a2420'}
+};
+// Verifizierte 1-Stein-Lösungen (Zugindizes) für die Standard-Startstellungen
+const OPENING_BOOK={"english":[7,12,1,3,19,10,25,28,35,1,30,35,41,45,43,4,53,6,46,55,70,64,72,34,74,72,48,54,24,62,56],"european":[3,31,34,7,14,73,75,43,36,1,6,59,43,16,8,29,34,43,79,83,88,50,91,40,51,4,7,13,50,85,65,89,56,65,77],"wiegleb":[13,2,22,18,65,6,67,15,4,28,1,20,70,26,18,34,40,87,42,89,22,33,42,74,99,101,104,106,11,73,104,79,39,86,80,73,95,99,74,25,52,16,61],"tri5":[8,12,1,17,23,27,30,3,5,35,13,32,24],"tri6":[8,12,1,18,24,31,33,2,47,16,38,5,43,53,44,58,48,57,13],"square5":[0,7,24,0,16,20,29,6,32,22,44,48,10,50,12,38,55,17,42,58,36,51,58]};
+
+/* =========================================================================
+   Lektionen (alle Stellungen und Zugfolgen mit dem Solver verifiziert)
+   ========================================================================= */
+const LESSONS=[
+ {id:'dreier',title:'1 · Dreier-Purge',pegs:['3,2','3,3','3,4','2,2'],
+  intro:'Drei Steine in einer Reihe und ein Hilfsstein schräg über dem Ende. In drei Zügen verschwindet die Reihe – und der Hilfsstein steht danach wieder auf seinem Platz. Das ist der Grundbaustein: Wer ihn sieht, räumt Reihen ab, ohne etwas zu verlieren.',
+  steps:'Hilfsstein springt hinunter · äußerer Stein springt über die Mitte · Hilfsstein springt zurück.',
+  phases:[{pkg:['3,2','3,3','3,4'],cat:'2,2',moves:[['2,2','4,2'],['3,4','3,2'],['4,2','2,2']],text:'Führe den Dreier-Purge aus: Am Ende steht nur der Hilfsstein, genau dort, wo er begonnen hat.'}],
+  done:'Die Reihe ist weg, der Hilfsstein unversehrt. Dieses Muster funktioniert in jeder Richtung und an jeder Stelle des Bretts.'},
+ {id:'sechser',title:'2 · Sechser-Purge',pegs:['0,2','0,3','0,4','1,2','1,3','1,4','3,4'],
+  intro:'Ein 2×3-Block – genau die Form eines Arms des Kreuzes – mit einem Hilfsstein zwei Felder darunter. Sechs Züge, und der ganze Arm ist leer; der Hilfsstein steht wieder, wo er war.',
+  steps:'Die drei oberen Steine springen nacheinander hinunter · der Hilfsstein springt hoch · der linke Stein springt nach rechts · der Hilfsstein springt zurück.',
+  phases:[{pkg:['0,2','0,3','0,4','1,2','1,3','1,4'],cat:'3,4',moves:[['0,4','2,4'],['0,3','2,3'],['0,2','2,2'],['3,4','1,4'],['2,2','2,4'],['1,4','3,4']],text:'Räume den Arm mit dem Sechser-Purge ab.'}],
+  done:'Ein kompletter Arm in sechs Zügen. Die vier Arme des Bretts sind vier solche Blöcke.'},
+ {id:'neuner',title:'3 · Neuner-Purge',pegs:['2,2','2,3','2,4','3,2','3,3','3,4','4,2','4,3','4,4','1,3'],
+  intro:'Der 3×3-Block mit einem Hilfsstein direkt darüber. Neun Züge räumen den Block, der Hilfsstein kehrt zurück. Das ist die Mitte des Bretts.',
+  steps:'Zuerst wird der Block nach außen geöffnet, dann fressen sich die Züge hinein; der letzte Zug bringt den Hilfsstein heim.',
+  phases:[{pkg:['2,2','2,3','2,4','3,2','3,3','3,4','4,2','4,3','4,4'],cat:'1,3',moves:[['2,3','2,5'],['3,2','1,2'],['1,2','1,4'],['4,4','2,4'],['1,4','3,4'],['4,2','4,4'],['4,4','2,4'],['2,5','2,3'],['3,3','1,3']],text:'Räume den 3×3-Block mit dem Neuner-Purge ab.'}],
+  done:'Neun Steine weg, der Hilfsstein zurück. Wer Dreier, Sechser und Neuner beherrscht, kann jede Stellung in Blöcke zerlegen.'},
+ {id:'endfelder',title:'4 · Die fünf Endfelder',pegs:["2,4", "3,4", "4,1", "4,4", "5,2", "5,3", "6,3", "6,4"],
+  intro:'Der letzte Stein kann nicht überall landen. Färbt man das Brett in drei Farben, so berührt jeder Sprung immer drei verschiedene Farben – die Verteilung der Farben ändert sich nach einer festen Regel. Daraus folgt: Aus der Standard-Startstellung kann der letzte Stein nur in der Mitte oder auf einer der vier Randmitten enden. Die hellen Ringe zeigen, wo er hier landen kann.',
+  steps:'Spiele die Stellung zu Ende. Wo immer du hinkommst: Es ist eines der markierten Felder.',
+  phases:[{free:true,text:'Bringe die Stellung auf einen Stein. Beobachte, wo er landet.'}],
+  done:'Der letzte Stein steht auf einem der markierten Felder – ein anderes war nie möglich. Merke dir: Halte im Endspiel Steine bereit, die dorthin führen.'},
+ {id:'partie',title:'5 · Die Partie als Purge-Folge',pegs:null,
+  intro:'Die Standardpartie, in sechs Abschnitte zerlegt: zwei Dreier-Purges öffnen das Brett, drei Sechser-Purges räumen drei Arme, ein kurzes Endspiel beendet es. Jeder Abschnitt wird angezeigt: Paket gepunktet, Hilfsstein grün.',
+  steps:'Spiele Abschnitt für Abschnitt. „Vormachen" spielt den aktuellen Abschnitt für dich.',
+  phases:[{pkg:["2,3", "2,4", "2,5"],cat:"1,3",moves:[["1,3", "3,3"], ["2,5", "2,3"], ["3,3", "1,3"]],text:"Abschnitt 1 – Dreier-Purge: Reihe gepunktet, Hilfsstein grün. Drei Züge, der Hilfsstein kehrt zurück."},{pkg:["2,2", "3,2", "4,2"],cat:"2,1",moves:[["2,1", "2,3"], ["4,2", "2,2"], ["2,3", "2,1"]],text:"Abschnitt 2 – Dreier-Purge: Reihe gepunktet, Hilfsstein grün. Drei Züge, der Hilfsstein kehrt zurück."},{pkg:["0,4", "0,3", "0,2", "1,4", "1,3", "1,2"],cat:"3,4",moves:[["0,4", "2,4"], ["0,3", "2,3"], ["0,2", "2,2"], ["3,4", "1,4"], ["2,2", "2,4"], ["1,4", "3,4"]],text:"Abschnitt 3 – Sechser-Purge: der markierte Arm verschwindet in sechs Zügen, der grüne Hilfsstein kehrt zurück."},{pkg:["4,0", "3,0", "2,0", "4,1", "3,1", "2,1"],cat:"4,3",moves:[["4,0", "4,2"], ["3,0", "3,2"], ["2,0", "2,2"], ["4,3", "4,1"], ["2,2", "4,2"], ["4,1", "4,3"]],text:"Abschnitt 4 – Sechser-Purge: der markierte Arm verschwindet in sechs Zügen, der grüne Hilfsstein kehrt zurück."},{pkg:["6,2", "6,3", "6,4", "5,2", "5,3", "5,4"],cat:"4,3",moves:[["6,2", "4,2"], ["6,4", "6,2"], ["5,4", "5,2"], ["4,3", "4,1"], ["6,2", "4,2"], ["4,1", "4,3"]],text:"Abschnitt 5 – Sechser-Purge: der markierte Arm verschwindet in sechs Zügen, der grüne Hilfsstein kehrt zurück."},{free:true,moves:[["3,4", "5,4"], ["4,6", "4,4"], ["2,6", "4,6"], ["4,3", "4,5"], ["4,6", "4,4"], ["5,4", "3,4"], ["3,4", "3,6"]],text:"Abschnitt 6 – Endspiel: sieben Züge bis zum letzten Stein. Die Vormach-Funktion zeigt einen Weg; jeder eigene Weg zu 1 Stein zählt."}],done:'Ein Stein. Das war die ganze Partie: 2 × Dreier, 3 × Sechser, Endspiel. Beim nächsten Spiel: erst Reihen und Arme als Blöcke sehen, dann ziehen.'}
+];
+
+const THEMES={
+  holz:{name:'Holzbrett',board:'holz',peg:'holz',color:'holzhell'},
+  glas:{name:'Samt & Glas',board:'samtblau',peg:'glas',color:'bunt'},
+  edel:{name:'Edelsteine',board:'samtschwarz',peg:'edel',color:'juwel'},
+  messing:{name:'Schiefer & Messing',board:'schiefer',peg:'metall',color:'gold'},
+  filz:{name:'Spielfilz',board:'filz',peg:'flach',color:'rot'},
+  neon:{name:'Neon',board:'neon',peg:'neon',color:'tuerkis'},
+  marmor:{name:'Marmor & Chrom',board:'marmor',peg:'metall',color:'silber'},
+  eigene:{name:'Eigene Kombination',custom:true}
+};
+
+function hexToRgb(h){ h=h.replace('#',''); if(h.length===3) h=h.split('').map(c=>c+c).join(''); const v=parseInt(h,16); return [(v>>16)&255,(v>>8)&255,v&255]; }
+function rgbToHex(r,g,b){ const c=v=>Math.max(0,Math.min(255,Math.round(v))).toString(16).padStart(2,'0'); return '#'+c(r)+c(g)+c(b); }
+function mix(hex,target,t){ const a=hexToRgb(hex), b=hexToRgb(target); return rgbToHex(a[0]+(b[0]-a[0])*t,a[1]+(b[1]-a[1])*t,a[2]+(b[2]-a[2])*t); }
+const lighten=(h,t)=>mix(h,'#ffffff',t), darken=(h,t)=>mix(h,'#000000',t);
+function hslHex(h,s,l){ s/=100; l/=100; const k=n=>(n+h/30)%12, a=s*Math.min(l,1-l), f=n=>l-a*Math.max(-1,Math.min(k(n)-3,Math.min(9-k(n),1))); return rgbToHex(255*f(0),255*f(8),255*f(4)); }
+function pegColorFor(colorKey,pegId,total){
+  const v=COLORS[colorKey]||'#c62828';
+  if(v==='multi') return PALETTE_BUNT[pegId%PALETTE_BUNT.length];
+  if(v==='multi2') return PALETTE_JUWEL[pegId%PALETTE_JUWEL.length];
+  if(v==='hue') return hslHex(Math.round(pegId/Math.max(1,total)*360),70,50);
+  return v;
+}
+
+/* =========================================================================
+   Speicher (localStorage darf fehlen)
+   ========================================================================= */
+const Store={
+  get(k,fb){ try{ const v=localStorage.getItem('solitaire.'+k); return v===null?fb:JSON.parse(v); }catch(e){ return fb; } },
+  set(k,v){ try{ localStorage.setItem('solitaire.'+k,JSON.stringify(v)); }catch(e){} },
+  del(k){ try{ localStorage.removeItem('solitaire.'+k); }catch(e){} }
+};
+const settings=Object.assign({board:'english',theme:'glas',boardLook:'holz',pegStyle:'glas',pegColor:'bunt',autoJump:true,showTargets:true,freeStart:false,sound:true,trainer:false,marks:false,strategy:false},Store.get('settings',{}));
+function saveSettings(){ Store.set('settings',settings); }
+function currentLook(){ const t=THEMES[settings.theme]||THEMES.glas; return t.custom?{board:settings.boardLook,peg:settings.pegStyle,color:settings.pegColor}:{board:t.board,peg:t.peg,color:t.color}; }
+
+/* =========================================================================
+   Ton
+   ========================================================================= */
+const Sound={ctx:null,
+  ensure(){ if(!settings.sound) return null; try{ if(!this.ctx) this.ctx=new (window.AudioContext||window.webkitAudioContext)(); if(this.ctx.state==='suspended') this.ctx.resume(); return this.ctx; }catch(e){ return null; } },
+  tone(f0,f1,dur,type,gain,when){ const c=this.ensure(); if(!c) return; const t=c.currentTime+(when||0); const o=c.createOscillator(), g=c.createGain();
+    o.type=type||'sine'; o.frequency.setValueAtTime(f0,t); if(f1) o.frequency.exponentialRampToValueAtTime(f1,t+dur);
+    g.gain.setValueAtTime(0.0001,t); g.gain.exponentialRampToValueAtTime(gain||0.2,t+0.01); g.gain.exponentialRampToValueAtTime(0.0001,t+dur);
+    o.connect(g).connect(c.destination); o.start(t); o.stop(t+dur+0.02); },
+  select(){ this.tone(880,0,0.05,'sine',0.08); },
+  jump(){ this.tone(600,300,0.11,'sine',0.18); },
+  bad(){ this.tone(140,90,0.14,'square',0.06); },
+  win(){ [523,659,784,1047].forEach((f,i)=>this.tone(f,0,0.16,'triangle',0.16,i*0.13)); },
+  lose(){ [330,262,220].forEach((f,i)=>this.tone(f,0,0.2,'triangle',0.12,i*0.18)); }
+};
+
+/* =========================================================================
+   Layout & SVG-Rendering
+   ========================================================================= */
+const P=100, MARG=70, R_PEG=34, R_HOLE=25;
+const svgNS='http://www.w3.org/2000/svg';
+function el(tag,attrs,children){ const e=document.createElementNS(svgNS,tag); if(attrs) for(const k in attrs) e.setAttribute(k,attrs[k]); if(children) children.forEach(c=>e.appendChild(c)); return e; }
+function layoutBoard(board){
+  const pos=[]; let W,H;
+  if(board.def.type==='grid'){ const R=board.def.rows.length, C=board.def.rows[0].length; W=C*P+2*MARG; H=R*P+2*MARG; board.cells.forEach(c=>pos.push({x:MARG+(c.c+0.5)*P,y:MARG+(c.r+0.5)*P})); }
+  else { const S=board.def.size; W=S*P+2*MARG; H=2*MARG+P+(S-1)*P*0.866; board.cells.forEach(c=>pos.push({x:MARG+P/2+(c.c+(S-1-c.r)/2)*P,y:MARG+P/2+c.r*P*0.866})); }
+  return {W,H,pos};
+}
+function trayMarkup(board,lay,look,idPrefix){
+  const L=BOARD_LOOKS[look]||BOARD_LOOKS.holz; const base=L.base;
+  let defs='', fill=`url(#${idPrefix}tray)`;
+  if(look==='holz'||look==='holzdunkel'){
+    defs+=`<linearGradient id="${idPrefix}tray" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="${lighten(base,.18)}"/><stop offset=".5" stop-color="${base}"/><stop offset="1" stop-color="${darken(base,.28)}"/></linearGradient>`;
+    defs+=`<pattern id="${idPrefix}grain" width="60" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(-8)"><path d="M0 4 Q15 1 30 5 T60 4" fill="none" stroke="${darken(base,.35)}" stroke-width="1.6" opacity=".22"/><path d="M0 11 Q20 8 35 12 T60 11" fill="none" stroke="${lighten(base,.35)}" stroke-width="1" opacity=".14"/></pattern>`;
+  } else if(look==='filz'){
+    defs+=`<radialGradient id="${idPrefix}tray" cx=".5" cy=".45" r=".75"><stop offset="0" stop-color="${lighten(base,.08)}"/><stop offset="1" stop-color="${darken(base,.2)}"/></radialGradient>`;
+    defs+=`<pattern id="${idPrefix}grain" width="6" height="6" patternUnits="userSpaceOnUse"><circle cx="1.5" cy="1.5" r=".9" fill="#000" opacity=".12"/><circle cx="4.5" cy="4.5" r=".9" fill="#fff" opacity=".06"/></pattern>`;
+  } else if(look==='neon'){
+    defs+=`<radialGradient id="${idPrefix}tray" cx=".5" cy=".5" r=".8"><stop offset="0" stop-color="${lighten(base,.08)}"/><stop offset="1" stop-color="${darken(base,.5)}"/></radialGradient>`;
+    defs+=`<pattern id="${idPrefix}grain" width="50" height="50" patternUnits="userSpaceOnUse"><path d="M50 0H0V50" fill="none" stroke="#3ae2ff" stroke-width="1" opacity=".13"/></pattern>`;
+  } else if(look==='marmor'){
+    defs+=`<linearGradient id="${idPrefix}tray" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="${lighten(base,.2)}"/><stop offset=".45" stop-color="${base}"/><stop offset="1" stop-color="${darken(base,.12)}"/></linearGradient>`;
+    defs+=`<pattern id="${idPrefix}grain" width="180" height="120" patternUnits="userSpaceOnUse" patternTransform="rotate(25)"><path d="M0 30 C40 10 80 60 120 40 S170 20 180 50" fill="none" stroke="#7a7268" stroke-width="1.5" opacity=".28"/><path d="M-10 90 C50 70 90 110 140 85 S180 70 190 95" fill="none" stroke="#5d564d" stroke-width="1" opacity=".22"/></pattern>`;
+  } else {
+    defs+=`<radialGradient id="${idPrefix}tray" cx=".5" cy=".4" r=".8"><stop offset="0" stop-color="${lighten(base,.14)}"/><stop offset="1" stop-color="${darken(base,.35)}"/></radialGradient>`;
+    defs+=`<pattern id="${idPrefix}grain" width="8" height="8" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1" fill="#fff" opacity=".035"/><circle cx="6" cy="6" r="1" fill="#000" opacity=".1"/></pattern>`;
+  }
+  defs+=`<radialGradient id="${idPrefix}hole" cx=".5" cy=".42" r=".6"><stop offset="0" stop-color="${darken(L.hole,.35)}"/><stop offset="1" stop-color="${L.hole}"/></radialGradient>`;
+  defs+=`<linearGradient id="${idPrefix}edge" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".22"/><stop offset="1" stop-color="#000" stop-opacity=".35"/></linearGradient>`;
+  let shape;
+  const m=MARG*0.35;
+  if(board.def.type==='grid'){
+    shape=`<rect x="${m}" y="${m}" width="${lay.W-2*m}" height="${lay.H-2*m}" rx="46" fill="${fill}"/><rect x="${m}" y="${m}" width="${lay.W-2*m}" height="${lay.H-2*m}" rx="46" fill="url(#${idPrefix}grain)"/><rect x="${m+3}" y="${m+3}" width="${lay.W-2*m-6}" height="${lay.H-2*m-6}" rx="43" fill="none" stroke="url(#${idPrefix}edge)" stroke-width="6"/>`;
+  } else {
+    const ax=lay.W/2, ay=m+30, bx=m+24, by=lay.H-m-12, cx=lay.W-m-24, cy=by;
+    const pts=`${ax},${ay} ${cx},${cy} ${bx},${by}`;
+    shape=`<polygon points="${pts}" fill="${fill}" stroke="${fill}" stroke-width="70" stroke-linejoin="round"/><polygon points="${pts}" fill="url(#${idPrefix}grain)" stroke="url(#${idPrefix}grain)" stroke-width="70" stroke-linejoin="round"/><polygon points="${pts}" fill="none" stroke="url(#${idPrefix}edge)" stroke-width="6" stroke-linejoin="round" transform="translate(0,-2)"/>`;
+  }
+  return {defs,shape};
+}
+function pegMarkup(style,color,x,y,extraClass,prefix){
+  const c=color, lt=lighten(c,.5), lt2=lighten(c,.22), dk=darken(c,.45), dk2=darken(c,.25);
+  const gid=(prefix||'m')+'pg_'+style+'_'+c.slice(1);
+  let g='';
+  if(!pegDefsCache.has(gid)){
+    let d='';
+    if(style==='glas'||style==='edel') d=`<radialGradient id="${gid}" cx=".36" cy=".3" r=".72"><stop offset="0" stop-color="${lt}"/><stop offset=".38" stop-color="${lt2}"/><stop offset=".8" stop-color="${c}"/><stop offset="1" stop-color="${dk}"/></radialGradient>`;
+    else if(style==='holz') d=`<radialGradient id="${gid}" cx=".4" cy=".35" r=".7"><stop offset="0" stop-color="${lighten(c,.28)}"/><stop offset=".6" stop-color="${c}"/><stop offset="1" stop-color="${darken(c,.42)}"/></radialGradient>`;
+    else if(style==='metall') d=`<linearGradient id="${gid}" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="${lighten(c,.65)}"/><stop offset=".3" stop-color="${lt2}"/><stop offset=".55" stop-color="${dk2}"/><stop offset=".75" stop-color="${lt2}"/><stop offset="1" stop-color="${dk}"/></linearGradient>`;
+    else if(style==='flach') d=`<linearGradient id="${gid}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${lighten(c,.12)}"/><stop offset="1" stop-color="${darken(c,.18)}"/></linearGradient>`;
+    else d=`<radialGradient id="${gid}" cx=".5" cy=".5" r=".55"><stop offset="0" stop-color="#0a0a10"/><stop offset=".72" stop-color="#101423"/><stop offset=".86" stop-color="${lt}"/><stop offset="1" stop-color="${c}"/></radialGradient>`;
+    pegDefsCache.set(gid,d);
+  }
+  g+=`<ellipse cx="4" cy="7" rx="${R_PEG-1}" ry="${R_PEG-3}" fill="#000" opacity=".38"/>`;
+  if(style==='neon') g+=`<circle r="${R_PEG+11}" fill="${c}" opacity=".14"/><circle r="${R_PEG+5}" fill="${c}" opacity=".22"/>`;
+  g+=`<circle r="${R_PEG}" fill="url(#${gid})"/>`;
+  if(style==='glas') g+=`<ellipse cx="-11" cy="-14" rx="12" ry="8" fill="#fff" opacity=".75" transform="rotate(-25)"/><ellipse cx="9" cy="17" rx="13" ry="6" fill="#fff" opacity=".13"/>`;
+  else if(style==='edel'){ const h=[]; for(let i=0;i<6;i++){ const a=Math.PI/3*i-Math.PI/6; h.push((Math.cos(a)*R_PEG*0.62).toFixed(1)+','+(Math.sin(a)*R_PEG*0.62).toFixed(1)); }
+    g+=`<polygon points="${h.join(' ')}" fill="none" stroke="#fff" stroke-width="1.6" opacity=".45"/>`; for(let i=0;i<6;i++){ const a=Math.PI/3*i-Math.PI/6; g+=`<line x1="${(Math.cos(a)*R_PEG*0.62).toFixed(1)}" y1="${(Math.sin(a)*R_PEG*0.62).toFixed(1)}" x2="${(Math.cos(a)*R_PEG).toFixed(1)}" y2="${(Math.sin(a)*R_PEG).toFixed(1)}" stroke="#fff" stroke-width="1.4" opacity=".35"/>`; }
+    g+=`<ellipse cx="-10" cy="-13" rx="9" ry="5" fill="#fff" opacity=".8" transform="rotate(-30)"/>`; }
+  else if(style==='holz') g+=`<circle r="${R_PEG*0.7}" fill="none" stroke="${darken(c,.4)}" stroke-width="1.5" opacity=".35"/><circle r="${R_PEG*0.42}" fill="none" stroke="${darken(c,.4)}" stroke-width="1.5" opacity=".3"/><ellipse cx="-10" cy="-12" rx="10" ry="6" fill="#fff" opacity=".22" transform="rotate(-25)"/><circle r="${R_PEG-1}" fill="none" stroke="${darken(c,.5)}" stroke-width="2" opacity=".5"/>`;
+  else if(style==='metall') g+=`<ellipse cx="-10" cy="-13" rx="11" ry="6" fill="#fff" opacity=".7" transform="rotate(-30)"/><circle r="${R_PEG-1.5}" fill="none" stroke="${darken(c,.55)}" stroke-width="2.5" opacity=".55"/>`;
+  else if(style==='flach') g+=`<circle r="${R_PEG-2}" fill="none" stroke="#fff" stroke-width="2" opacity=".18"/><circle r="${R_PEG-1}" fill="none" stroke="${darken(c,.45)}" stroke-width="2" opacity=".55"/>`;
+  else g+=`<circle r="${R_PEG-4}" fill="none" stroke="${lt}" stroke-width="2.5" opacity=".95"/><circle r="${R_PEG-10}" fill="none" stroke="${c}" stroke-width="1.2" opacity=".5"/>`;
+  return `<g class="peg ${extraClass||''}" transform="translate(${x},${y})"><g class="body">${g}</g></g>`;
+}
+const pegDefsCache=new Map();
+
+/* =========================================================================
+   Spielzustand
+   ========================================================================= */
+const boards={}; CORE.BOARD_DEFS.forEach(d=>boards[d.id]=CORE.buildBoard(d));
+const game={board:null,lay:null,pegAt:[],initial:[],history:[],future:[],selected:-1,phase:'play',startedAt:0,elapsedBefore:0,finished:false,
+  line:null,bookLine:null,hintOn:false,searching:false,animating:false,autoplay:false,startCount:0,evalRes:null,prevEval:null,evaluating:false,lastMove:null,lesson:null,demo:false,showBetter:null};
+
+const $=id=>document.getElementById(id);
+const boardSvg=$('board'), statusEl=$('status');
+let defsEl,trayLayer,holesLayer,pegsLayer,overlayLayer;
+
+function occ(){ return game.pegAt.map(v=>v>=0?1:0); }
+function pegCount(){ let n=0; for(const v of game.pegAt) if(v>=0) n++; return n; }
+function legalMovesFrom(i){ const a=game.pegAt; return game.board.moves.filter(m=>m.from===i&&a[m.from]>=0&&a[m.over]>=0&&a[m.to]<0); }
+function anyLegalMove(){ const a=game.pegAt; return game.board.moves.some(m=>a[m.from]>=0&&a[m.over]>=0&&a[m.to]<0); }
+function stateKey(){ const [lo,hi]=CORE.fromArray(occ()); return CORE.key(lo,hi); }
+// bekannte beste Fortsetzung für die aktuelle Stellung (aus Suche oder Eröffnungsbuch)
+function currentLine(){ const k=stateKey(); if(game.line&&game.line.key===k&&game.line.path.length) return game.line; if(game.bookLine&&game.bookLine.key===k&&game.bookLine.path.length) return game.bookLine; return null; }
+
+function newGame(boardId,keepPhase){
+  if(boardId) settings.board=boardId;
+  const board=boards[settings.board]||boards.english; game.board=board; game.lay=layoutBoard(board);
+  game.lastMove=null; if(!keepPhase) game.lesson=null;
+  game.pegAt=new Array(board.n); for(let i=0;i<board.n;i++) game.pegAt[i]=i;
+  game.phase=settings.freeStart?'choose':'play';
+  if(!settings.freeStart) game.pegAt[board.startIdx]=-1;
+  game.initial=game.pegAt.slice(); game.history=[]; game.future=[]; game.selected=-1; game.finished=false;
+  game.startedAt=0; game.elapsedBefore=0; game.line=null; game.hintOn=false; game.autoplay=false; game.startCount=pegCount();
+  game.evalRes=null; game.prevEval=null; cancelEval();
+  game.bookLine=(!settings.freeStart&&OPENING_BOOK[board.def.id])?{key:stateKey(),path:OPENING_BOOK[board.def.id].slice(),best:1,complete:true,nodes:0,lb:1,book:true}:null;
+  buildBoardSvg(); render(); saveSettings(); fitStage();
+  $('boardNameText').textContent=board.def.name; if(!keepPhase) $('lessonBar').hidden=true;
+  if(game.phase==='choose') setStatus('Tippe den Stein an, der zu Beginn herausgenommen wird.');
+  else setStatus(settings.autoJump?'Tippe einen Stein an – bei mehreren Zielen wische in die Richtung.':'Tippe einen Stein an, dann das Zielfeld oder wische in die Richtung.');
+}
+function applyMove(m,record){
+  const a=game.pegAt; const jumped=a[m.over]; a[m.to]=a[m.from]; a[m.from]=-1; a[m.over]=-1;
+  if(record!==false){ game.history.push({mi:game.board.moves.indexOf(m),jumped}); game.future=[]; }
+  if(!game.startedAt){ game.startedAt=Date.now(); }
+  const mi=game.board.moves.indexOf(m); const ln=game.line; game.hintOn=false;
+  const known=(ln&&ln.path.length&&ln.complete)?ln:((game.bookLine&&game.bookLine.path.length)?game.bookLine:null);
+  if(game.evalRes){ game.prevEval={best:game.evalRes.best,complete:game.evalRes.complete,path:(game.evalRes.path||[]).slice(),optFinal:game.evalRes.optFinal||null,played:mi}; }
+  else if(known){ game.prevEval={best:known.best,complete:true,path:known.path.slice(),optFinal:null,played:mi}; } else game.prevEval=null;
+  game.evalRes=null; cancelEval();
+  if(ln&&ln.path.length&&ln.path[0]===mi){ ln.path.shift(); ln.key=stateKey(); } else game.line=null;
+  const bl=game.bookLine; if(bl&&bl.path.length&&bl.path[0]===mi){ bl.path.shift(); bl.key=stateKey(); } else game.bookLine=null;
+}
+function undo(){
+  if(!game.history.length) return;
+  if(game.animating) finishAnimation();
+  const h=game.history.pop(); const m=game.board.moves[h.mi];
+  game.selected=-1; game.line=null; game.hintOn=false; hideModal('resultModal');
+  const nJ=pegName(game.pegAt[m.to]), nO=pegName(h.jumped);
+  game.lastMove={mi:h.mi,dir:'undo',text:'Zurück: '+(nJ?nJ:'Stein')+' zurück, '+(nO?nO:'Geschlagener')+' wieder da.',count:'Zug '+(game.history.length+1)+' von '+(game.history.length+game.future.length+1)};
+  game.evalRes=null; game.prevEval=null; cancelEval(); renderOverlay(); setStatus(game.lastMove.text,'',null,null,game.lastMove.count);
+  animateMove(m,()=>{
+    const a=game.pegAt; a[m.from]=a[m.to]; a[m.to]=-1; a[m.over]=h.jumped;
+    game.future.push(h);
+    if(game.finished){ game.finished=false; game.startedAt=Date.now(); }
+    render(); const el=pegsLayer.querySelector(`[data-idx="${m.over}"] .body`); if(el) el.classList.add('appear');
+    if(game.lesson){ const ls=game.lesson; const L=LESSONS.find(x=>x.id===ls.id);
+      if(ls.solved){ ls.solved=false; game.finished=false; $('lsDemo').disabled=false; }
+      let p=0; for(let i=0;i<L.phases.length;i++){ if(ls.phaseStarts&&ls.phaseStarts[i]!==undefined&&ls.phaseStarts[i]<=game.history.length) p=i; }
+      ls.phase=p; ls.movesAtStart=ls.phaseStarts[p]||0; ls.expected=ls.phaseExpected?ls.phaseExpected[p]:null;
+      const ph=L.phases[p]; $('lessonText').textContent=ph.text; }
+    if(settings.trainer||settings.marks||settings.strategy) evaluatePosition();
+    if(game.showBetter){ const m0=game.board.moves[game.showBetter.path[0]]; if(m0&&game.pegAt[m0.from]>=0&&game.pegAt[m0.over]>=0&&game.pegAt[m0.to]<0){ game.line={key:stateKey(),path:game.showBetter.path.slice(),best:1,complete:true,nodes:0,lb:1}; game.hintOn=true; game.lastMove=null; renderOverlay(); setStatus('Der bessere Zug ist markiert: '+moveWords(m0,game.pegAt)+'.','hint'); } }
+    game.showBetter=null;
+  },true,'slow',400);
+}
+function redo(){
+  if(!game.future.length) return;
+  if(game.animating) finishAnimation();
+  const h=game.future.pop(); const m=game.board.moves[h.mi]; game.selected=-1; game.hintOn=false;
+  const nJ=pegName(game.pegAt[m.from]), nO=pegName(h.jumped);
+  game.lastMove={mi:h.mi,dir:'redo',text:'Vor: '+(nJ?nJ:'Stein')+' springt über '+(nO?nO:'den Nachbarn')+'.',count:'Zug '+(game.history.length+1)+' von '+(game.history.length+game.future.length+1)};
+  cancelEval(); renderOverlay(); setStatus(game.lastMove.text,'',null,null,game.lastMove.count);
+  animateMove(m,()=>{ applyMove(m,false); game.history.push(h); game.lastMove.dir='redo';
+    render(); afterMove(true);
+    if(anyLegalMove()&&!(settings.trainer&&!game.hintOn)) setStatus(game.lastMove.text,'',null,null,game.lastMove.count); },false,'slow',400);
+}
+function elapsedMs(){ return game.elapsedBefore+(game.startedAt&&!game.finished?Date.now()-game.startedAt:0); }
+function fmtTime(ms){ const s=Math.floor(ms/1000); return Math.floor(s/60)+':'+String(s%60).padStart(2,'0'); }
+
+/* ---------- Rendering ---------- */
+function buildBoardSvg(){
+  const b=game.board, lay=game.lay, look=currentLook();
+  boardSvg.setAttribute('viewBox',`0 0 ${lay.W} ${lay.H}`);
+  boardSvg.innerHTML='';
+  const t=trayMarkup(b,lay,look.board,'m_');
+  defsEl=el('defs'); defsEl.innerHTML=t.defs+`<marker id="arrowHead" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="4" markerHeight="4" orient="auto"><path d="M0 0L10 5 0 10z" fill="#7fd3ff"/></marker><marker id="arrowHeadWhite" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="4" markerHeight="4" orient="auto"><path d="M0 0L10 5 0 10z" fill="rgba(255,255,255,.55)"/></marker><marker id="arrowHeadRed" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="4" markerHeight="4" orient="auto"><path d="M0 0L10 5 0 10z" fill="#e0574a"/></marker>`;
+  const pegDefs=el('g'); pegDefs.setAttribute('id','pegDefs'); defsEl.appendChild(pegDefs);
+  boardSvg.appendChild(defsEl);
+  trayLayer=el('g'); trayLayer.innerHTML=t.shape; boardSvg.appendChild(trayLayer);
+  holesLayer=el('g'); boardSvg.appendChild(holesLayer);
+  b.cells.forEach((c,i)=>{ const p=lay.pos[i];
+    const g=el('g',{class:'hole','data-idx':i});
+    g.appendChild(el('circle',{cx:p.x,cy:p.y,r:R_HOLE+8,fill:'transparent'}));
+    g.appendChild(el('circle',{cx:p.x,cy:p.y,r:R_HOLE,fill:'url(#m_hole)'}));
+    g.appendChild(el('circle',{cx:p.x,cy:p.y+1.5,r:R_HOLE,fill:'none',stroke:'#fff','stroke-opacity':'.09','stroke-width':'2'}));
+    holesLayer.appendChild(g); });
+  pegsLayer=el('g'); boardSvg.appendChild(pegsLayer);
+  overlayLayer=el('g'); overlayLayer.setAttribute('pointer-events','none'); boardSvg.appendChild(overlayLayer);
+  pegDefsCache.clear();
+}
+function renderPegs(){
+  const look=currentLook(); const b=game.board, lay=game.lay; let html='';
+  for(let i=0;i<b.n;i++){ const id=game.pegAt[i]; if(id<0) continue; const p=lay.pos[i];
+    html+=pegMarkup(look.peg,pegColorFor(look.color,id,b.n),p.x,p.y).replace('<g class=','<g data-idx="'+i+'" data-peg="'+id+'" class='); }
+  const pd=defsEl.querySelector('#pegDefs'); let defs=''; pegDefsCache.forEach(v=>defs+=v); pd.innerHTML=defs;
+  pegsLayer.innerHTML=html;
+}
+function renderOverlay(){
+  overlayLayer.innerHTML=''; const lay=game.lay;
+  if(game.phase==='choose'){ return; }
+  const ev=game.evalRes; if(settings.marks&&ev&&ev.key===stateKey()&&ev.optFinal&&ev.best>1){
+    const om=ev.optFinal.mask;
+    for(let i=0;i<game.board.n;i++){ if(game.pegAt[i]<0) continue; const stays= i<32?!!((om[0]>>>i)&1):!!((om[1]>>>(i-32))&1);
+      if(stays){ const p=lay.pos[i]; overlayLayer.appendChild(el('circle',{cx:p.x+24,cy:p.y+24,r:11,fill:'#1a1512',stroke:'#e2a95c','stroke-width':'2'})); overlayLayer.appendChild(el('path',{d:`M${p.x+19} ${p.y+19}l10 10M${p.x+29} ${p.y+19}l-10 10`,stroke:'#e2a95c','stroke-width':'2.5','stroke-linecap':'round'})); } } }
+  if(game.lesson&&!game.lesson.solved){ const {L,ph}=lessonPhase();
+    if(ph&&ph.pkg){ ph.pkg.forEach(k=>{ const i=game.board.index[k]; if(game.pegAt[i]>=0){ const p=lay.pos[i]; overlayLayer.appendChild(el('circle',{class:'pkg-ring',cx:p.x,cy:p.y,r:R_PEG+6})); } });
+      const ci=game.board.index[ph.cat]; if(ci!==undefined){ const p=lay.pos[ci]; overlayLayer.appendChild(el('circle',{class:'cat-ring',cx:p.x,cy:p.y,r:R_PEG+7})); } }
+    if(L.id==='endfelder'){ allowedEndCells(game.board,occ()).forEach(i=>{ const p=lay.pos[i]; overlayLayer.appendChild(el('circle',{class:'end-ring',cx:p.x,cy:p.y,r:R_HOLE+6})); }); } }
+  if(game.lastMove){ const m=game.board.moves[game.lastMove.mi]; const undo=game.lastMove.dir==='undo';
+    // Markierung zeigt immer den Zug selbst (Start gestrichelt, Ziel Ring, geschlagener Stein Punkt) – beim Zurück mit ↶
+    const a=lay.pos[m.from], c=lay.pos[m.to], o=lay.pos[m.over];
+    const ev=game.evalRes, prev=game.prevEval; const lost=!undo&&ev&&ev.key===stateKey()&&ev.complete&&prev&&prev.complete&&prev.best<ev.best;
+    const col=lost?'#e0574a':'rgba(255,255,255,.7)';
+    const dx=c.x-a.x, dy=c.y-a.y, L=Math.hypot(dx,dy), ux=dx/L, uy=dy/L;
+    overlayLayer.appendChild(el('circle',{cx:a.x,cy:a.y,r:R_HOLE+4,fill:'none',stroke:col,'stroke-width':'4','stroke-dasharray':'6 6'}));
+    overlayLayer.appendChild(el('path',{d:`M${a.x+ux*(R_HOLE+8)} ${a.y+uy*(R_HOLE+8)} L${c.x-ux*(R_PEG+12)} ${c.y-uy*(R_PEG+12)}`,stroke:col,'stroke-width':'7','stroke-linecap':'round',fill:'none','marker-end':lost?'url(#arrowHeadRed)':'url(#arrowHeadWhite)'}));
+    overlayLayer.appendChild(el('circle',{cx:c.x,cy:c.y,r:R_PEG+8,fill:'none',stroke:col,'stroke-width':'5'}));
+    overlayLayer.appendChild(el('circle',{cx:o.x,cy:o.y,r:9,fill:col}));
+    if(undo){ overlayLayer.appendChild(el('circle',{class:'back-ring',cx:o.x,cy:o.y,r:R_PEG+8}));
+      // ↶ neben der Pfeilmitte: dieser Zug wird zurückgenommen
+      const mx=(a.x+c.x)/2-uy*38, my=(a.y+c.y)/2+ux*38;
+      overlayLayer.appendChild(el('circle',{cx:mx,cy:my,r:17,fill:'#1a1512',stroke:col,'stroke-width':'2'}));
+      overlayLayer.appendChild(el('path',{d:`M${mx+7} ${my+4} A8 8 0 1 0 ${mx-3} ${my-8}`,fill:'none',stroke:col,'stroke-width':'2.6','stroke-linecap':'round'}));
+      overlayLayer.appendChild(el('path',{d:`M${mx-3} ${my-8} l-6 -3 m6 3 l1 6`,fill:'none',stroke:col,'stroke-width':'2.6','stroke-linecap':'round'})); }
+    else if(lost) overlayLayer.appendChild(el('path',{d:`M${o.x-14} ${o.y-14}l28 28M${o.x+14} ${o.y-14}l-28 28`,stroke:col,'stroke-width':'5','stroke-linecap':'round'})); }
+  if(game.selected>=0){ const p=lay.pos[game.selected];
+    overlayLayer.appendChild(el('circle',{class:'sel-ring',cx:p.x,cy:p.y,r:R_PEG+8}));
+    if(settings.showTargets) legalMovesFrom(game.selected).forEach(m=>{ const q=lay.pos[m.to]; overlayLayer.appendChild(el('circle',{class:'tgt-dot',cx:q.x,cy:q.y,r:11})); });
+  }
+  const ln=game.hintOn?currentLine():null;
+  if(ln){ const m=game.board.moves[ln.path[0]]; const a=lay.pos[m.from], c=lay.pos[m.to];
+    const dx=c.x-a.x, dy=c.y-a.y, L=Math.hypot(dx,dy), ux=dx/L, uy=dy/L;
+    overlayLayer.appendChild(el('circle',{class:'hint-ring',cx:a.x,cy:a.y,r:R_PEG+8}));
+    overlayLayer.appendChild(el('path',{class:'hint-arrow',d:`M${a.x+ux*(R_PEG+14)} ${a.y+uy*(R_PEG+14)} L${c.x-ux*30} ${c.y-uy*30}`,'marker-end':'url(#arrowHead)'}));
+    overlayLayer.appendChild(el('circle',{class:'hint-dot',cx:c.x,cy:c.y,r:11}));
+  }
+}
+function renderHud(){
+  $('hudMoves').textContent=game.history.length; $('hudLeft').textContent=pegCount(); $('hudLeftLabel').textContent='Übrig von '+game.startCount; $('hudTime').textContent=fmtTime(elapsedMs());
+  $('btnUndo').disabled=!game.history.length||game.animating; $('btnRedo').disabled=!game.future.length||game.animating;
+  $('btnHint').disabled=game.phase==='choose'||game.finished||game.searching||game.animating||!!game.lesson;
+}
+// Feste Brettgröße: hängt nur von Fenster und Lektionsmodus ab, nicht von der Textlänge darunter
+function fitStage(){
+  const app=$('app'); const W=app.clientWidth-24; const H=window.innerHeight;
+  const top=$('stage').offsetTop; const toolbarH=document.querySelector('.toolbar').offsetHeight+16;
+  const reserve=game.lesson?230:74;
+  const avail=H-top-toolbarH-reserve-16;
+  const lay=game.lay; const ratio=lay?lay.H/lay.W:1;
+  let w=Math.min(W,Math.max(180,avail)/ratio); if(w*ratio>Math.max(180,avail)) w=Math.max(180,avail)/ratio; w=Math.min(w,W);
+  boardSvg.style.width=Math.round(w)+'px'; boardSvg.style.height=Math.round(w*ratio)+'px';
+}
+window.addEventListener('resize',()=>fitStage());
+function renderStrategyBtn(){ const b=$('btnStrategy'); b.classList.toggle('on',!!settings.strategy); b.setAttribute('aria-pressed',String(!!settings.strategy)); b.textContent='Strategie-Hinweise: '+(settings.strategy?'an':'aus'); }
+$('btnStrategy').addEventListener('click',()=>{ settings.strategy=!settings.strategy; saveSettings(); renderStrategyBtn(); if(settings.strategy){ toast('Nach jedem Zug: War das ein strategischer Fehler – und was wäre besser gewesen?'); evaluatePosition(); } else if(!settings.trainer) setStatus(pegCount()+' Steine übrig.'); });
+renderStrategyBtn();
+function render(){ renderPegs(); renderOverlay(); renderHud(); }
+setInterval(()=>{ if(game.startedAt&&!game.finished) $('hudTime').textContent=fmtTime(elapsedMs()); },500);
+
+function setStatus(text,cls,linkText,linkFn,note){
+  statusEl.className=cls||''; statusEl.textContent=''; statusEl.appendChild(document.createTextNode(text));
+  const links=Array.isArray(linkText)?linkText:(linkText?[[linkText,linkFn]]:[]);
+  const noteText=Array.isArray(linkText)?linkFn:note;
+  if(noteText){ const n=document.createElement('div'); n.className='note'; n.textContent=noteText; statusEl.appendChild(n); }
+  links.forEach(l=>{ const b=document.createElement('button'); b.className='link'; b.textContent=l[0]; b.addEventListener('click',l[1]); statusEl.appendChild(b); });
+}
+let toastTimer=0;
+function toast(t){ const e=$('toast'); e.textContent=t; e.classList.add('on'); clearTimeout(toastTimer); toastTimer=setTimeout(()=>e.classList.remove('on'),1800); }
+function showModal(id){ $(id).classList.add('on'); }
+function hideModal(id){ $(id).classList.remove('on'); }
+
+/* ---------- Zug mit Animation ---------- */
+let animFinish=null, animCancel=null;
+function finishAnimation(){ if(animCancel){ animCancel(); animCancel=null; } if(animFinish){ const f=animFinish; animFinish=null; game.animating=false; f(); } }
+// reverse=true: Stein springt von m.to nach m.from zurück, der geschlagene Stein bleibt unsichtbar bis zum Neuzeichnen
+function animateMove(m,done,reverse,fast,delay){
+  finishAnimation();
+  if(delay){ game.animating=true; renderHud(); animFinish=done; const timer=setTimeout(()=>{ animCancel=null; animFinish=null; game.animating=false; animateMove(m,done,reverse,fast,0); },delay); animCancel=()=>clearTimeout(timer); return; }
+  const lay=game.lay, a=reverse?lay.pos[m.to]:lay.pos[m.from], c=reverse?lay.pos[m.from]:lay.pos[m.to];
+  const pegEl=pegsLayer.querySelector(`[data-idx="${reverse?m.to:m.from}"]`), overEl=reverse?null:pegsLayer.querySelector(`[data-idx="${m.over}"]`);
+  const reduce=window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  // Die Sprungbewegung ist Information, keine Dekoration: auch bei „Bewegung reduzieren" volle Dauer, nur ohne Bogen und Vergrößerung
+  const dur=fast==='slow'?650:(fast?170:230); const arc=reduce?0:42, grow=reduce?0:0.22; const t0=performance.now(); game.animating=true; renderHud();
+  if(pegEl&&pegEl.parentNode) pegsLayer.appendChild(pegEl);
+  let token={}; animFinish=done; const my=token;
+  function step(now){ if(animFinish!==done) return; const t=Math.min(1,(now-t0)/dur); const e=t<.5?2*t*t:-1+(4-2*t)*t; const x=a.x+(c.x-a.x)*e, y=a.y+(c.y-a.y)*e-Math.sin(Math.PI*t)*arc; const s=1+Math.sin(Math.PI*t)*grow;
+    if(pegEl) pegEl.setAttribute('transform',`translate(${x},${y}) scale(${s})`);
+    if(overEl&&t>0.45){ const k=(t-0.45)/0.55; overEl.setAttribute('transform',`translate(${lay.pos[m.over].x},${lay.pos[m.over].y}) scale(${1-k})`); overEl.style.opacity=String(1-k); }
+    if(t<1) requestAnimationFrame(step); else finishAnimation(); }
+  requestAnimationFrame(step);
+}
+function playMove(m){
+  if(game.animating||game.finished) return;
+  game.lastMove=null;
+  game.selected=-1; renderOverlay(); Sound.jump();
+  animateMove(m,()=>{ applyMove(m,true); render(); afterMove(true); },false,game.demo?'slow':false);
+}
+function afterMove(fresh){
+  if(game.lesson){ lessonAfterMove(); if(game.lesson.solved){ game.autoplay=false; game.finished=true; game.elapsedBefore=elapsedMs(); game.startedAt=0; renderHud(); return; } }
+  if(anyLegalMove()){
+    const ln=currentLine();
+    if(game.autoplay&&ln){ setTimeout(()=>{ if(game.autoplay){ const l2=currentLine(); if(l2) playMove(game.board.moves[l2.path[0]]); } },game.demo?600:260); return; }
+    game.autoplay=false; game.demo=false;
+    if(fresh) setStatus(pegCount()+' Steine übrig.');
+    if(fresh&&(settings.trainer||settings.marks||settings.strategy)) evaluatePosition(); else { game.evalRes=null; }
+    return;
+  }
+  game.autoplay=false; game.elapsedBefore=elapsedMs(); game.finished=true; game.startedAt=0; renderHud();
+  if(game.lesson) return;
+  const left=pegCount(); const b=game.board; const lastIdx=game.pegAt.findIndex(v=>v>=0); const inCenter=left===1&&b.centerIdx>=0&&lastIdx===b.centerIdx;
+  const stats=Store.get('stats',{}); const prev=stats[b.def.id]; const t=game.elapsedBefore;
+  const better=!prev||left<prev.left||(left===prev.left&&t<prev.time); if(better){ stats[b.def.id]={left,time:t,moves:game.history.length}; Store.set('stats',stats); }
+  $('resTitle').textContent=left===1?(inCenter?'Perfekt':'Gelöst'):'Keine Züge mehr';
+  $('resStars').textContent=left===1?'★★★':left===2?'★★☆':left===3?'★☆☆':'☆☆☆';
+  $('resBig').innerHTML=left+' <small>'+(left===1?'Stein übrig':'Steine übrig')+'</small>';
+  let txt=game.history.length+' Sprünge in '+fmtTime(t)+'.';
+  if(left===1&&inCenter) txt+=' Der letzte Stein steht genau in der Mitte.';
+  if(better&&prev) txt+=' Neue Bestleistung.'; else if(prev) txt+=' Bestleistung auf diesem Brett: '+prev.left+(prev.left===1?' Stein':' Steine')+' in '+fmtTime(prev.time)+'.';
+  $('resText').textContent=txt;
+  if(left===1) Sound.win(); else Sound.lose();
+  setStatus(left===1?'Gelöst – '+left+' Stein übrig.':'Keine Züge mehr – '+left+' Steine übrig.',left===1?'hint':'bad');
+  setTimeout(()=>{ if(game.finished) showModal('resultModal'); },350);
+}
+
+/* ---------- Eingabe: Tippen & Wischen ---------- */
+let ptr=null;
+boardSvg.addEventListener('pointerdown',e=>{
+  if(game.animating||game.autoplay){ if(game.autoplay){ game.autoplay=false; game.demo=false; toast('Automatik gestoppt.'); } return; }
+  const cell=e.target.closest?e.target.closest('[data-idx]'):null; if(!cell) return;
+  Sound.ensure();
+  ptr={idx:+cell.getAttribute('data-idx'),x:e.clientX,y:e.clientY,id:e.pointerId};
+  try{ boardSvg.setPointerCapture(e.pointerId); }catch(err){}
+  e.preventDefault();
+},{passive:false});
+boardSvg.addEventListener('pointerup',e=>{
+  if(!ptr||e.pointerId!==ptr.id) return; const p=ptr; ptr=null;
+  const dx=e.clientX-p.x, dy=e.clientY-p.y; const dist=Math.hypot(dx,dy);
+  if(dist>=18) onSwipe(p.idx,dx,dy); else onTap(p.idx);
+});
+boardSvg.addEventListener('pointercancel',()=>{ ptr=null; });
+function shakeCell(i){ const e=pegsLayer.querySelector(`[data-idx="${i}"] .body`); if(!e) return; e.classList.add('shake'); setTimeout(()=>e.classList.remove('shake'),600); }
+function onTap(i){
+  if(game.finished){ showModal('resultModal'); return; }
+  const a=game.pegAt;
+  if(game.phase==='choose'){ if(a[i]<0) return; a[i]=-1; game.initial=a.slice(); game.phase='play'; game.startCount=pegCount(); render(); Sound.select();
+    const lb=CORE.parityLowerBound(game.board,occ());
+    if(lb>1) setStatus('Von hier ist 1 Stein nachweislich unmöglich (Paritätsargument). Bestmöglich: '+lb+' Steine.','bad'); else setStatus('Startloch gesetzt. Viel Erfolg.');
+    return; }
+  if(a[i]>=0){
+    game.lastMove=null;
+    if(game.selected===i){ game.selected=-1; renderOverlay(); return; }
+    const mv=legalMovesFrom(i);
+    if(!mv.length){ Sound.bad(); shakeCell(i); setStatus('Dieser Stein kann nicht springen.','bad'); return; }
+    if(settings.autoJump&&mv.length===1){ playMove(mv[0]); return; }
+    game.selected=i; renderOverlay(); Sound.select();
+    setStatus(mv.length===1?'Tippe das Zielfeld oder wische dorthin.':mv.length+' Züge möglich – wische in die Richtung oder tippe das Zielfeld.');
+  } else {
+    if(game.selected>=0){ const m=legalMovesFrom(game.selected).find(m=>m.to===i); if(m){ playMove(m); return; } Sound.bad(); setStatus('Dorthin geht kein Sprung.','bad'); }
+    game.selected=-1; renderOverlay();
+  }
+}
+function onSwipe(i,dx,dy){
+  if(game.finished||game.phase==='choose') return;
+  let src=i; if(game.pegAt[i]<0&&game.selected>=0) src=game.selected; if(game.pegAt[src]<0) return;
+  const mv=legalMovesFrom(src); if(!mv.length){ Sound.bad(); shakeCell(src); setStatus('Dieser Stein kann nicht springen.','bad'); return; }
+  const L=Math.hypot(dx,dy); let best=null,bestCos=0.6; const lay=game.lay;
+  mv.forEach(m=>{ const vx=lay.pos[m.to].x-lay.pos[m.from].x, vy=lay.pos[m.to].y-lay.pos[m.from].y; const cos=(vx*dx+vy*dy)/(Math.hypot(vx,vy)*L); if(cos>bestCos){bestCos=cos;best=m;} });
+  if(best) playMove(best); else { Sound.bad(); shakeCell(src); game.selected=src; renderOverlay(); setStatus('In diese Richtung geht kein Sprung.','bad'); }
+}
+
+/* ---------- Tipp / Solver (Web Worker, sonst Hauptthread) ---------- */
+let worker=null, workerBroken=false, workerReady=false, workerFailHook=null;
+function markWorkerBroken(){ workerBroken=true; workerReady=false; if(worker){ try{ worker.terminate(); }catch(e){} } worker=null; const f=workerFailHook; workerFailHook=null; if(f) f(); }
+function getWorker(){
+  if(worker||workerBroken) return worker;
+  try{ const src=`const CORE=(${coreFactory.toString()})();let cancelled={};self.onmessage=e=>{const d=e.data;if(d.ping){self.postMessage({pong:true});return;}if(d.cancel){cancelled[d.cancel]=true;return;}
+const b=CORE.buildBoard(d.def);const s=CORE.createSearch(b,d.lo,d.hi,d.count,d.opts);const t0=Date.now();let last=0;
+function loop(){const r=s.run(30000);const now=Date.now();if(r.done||cancelled[d.id]){r.ms=now-t0;r.cancelled=!!cancelled[d.id];self.postMessage({id:d.id,r});return;}if(now-last>200){last=now;self.postMessage({id:d.id,progress:{nodes:r.nodes,best:r.best,ms:now-t0}});}setTimeout(loop,0);}
+loop();};`;
+    worker=new Worker(URL.createObjectURL(new Blob([src],{type:'application/javascript'})));
+    worker.onerror=()=>markWorkerBroken();
+    worker.addEventListener('message',e=>{ if(e.data&&e.data.pong) workerReady=true; });
+    worker.postMessage({ping:true});
+    setTimeout(()=>{ if(worker&&!workerReady) markWorkerBroken(); },2500);
+  }catch(e){ workerBroken=true; worker=null; }
+  return worker;
+}
+// Startprüfung: scheitert der Worker (z. B. in abgeschotteten Vorschauen), rechnet der Tipp im Vordergrund
+setTimeout(getWorker,300);
+let hintSeq=0, cancelHint=null, lastSearchWhere='';
+function fmtNum(n){ return n<1000000?n.toLocaleString('de-DE'):(n/1e6).toFixed(1).replace('.',',')+' Mio.'; }
+function requestHint(again){
+  if(game.searching||game.finished||game.phase==='choose'||game.animating) return;
+  const ev=game.evalRes; if(!again&&!currentLine()&&ev&&ev.key===stateKey()&&ev.complete&&ev.path.length){ game.line={key:ev.key,best:ev.best,path:ev.path.slice(),complete:true,nodes:ev.nodes,lb:ev.lb,ms:ev.ms}; }
+  if(!again&&currentLine()){ game.hintOn=true; describeHint(); renderOverlay(); return; }
+  const arr=occ(); const count=pegCount(); const lb=CORE.parityLowerBound(game.board,arr);
+  if(count<=1||!anyLegalMove()) return;
+  const [lo,hi]=CORE.fromArray(arr);
+  const opts={target:lb,maxNodes:0,timeMs:24*60*60*1000,seed:(Date.now()%100000)+7};
+  cancelEval(); game.searching=true; renderHud(); $('btnHint').classList.add('busy');
+  const id=++hintSeq; const key=stateKey(); const t0=Date.now();
+  const progress=(nodes,best,where)=>{ if(id!==hintSeq) return; lastSearchWhere=where; const el=Date.now()-t0;
+    const note=el<1500?'':fmtNum(nodes)+' Stellungen in '+Math.round(el/1000)+' s'+(best<count?', bisher '+best+(best===1?' Stein':' Steine'):'');
+    setStatus('Rechne…','', el<1500?null:'Abbrechen', ()=>{ if(cancelHint) cancelHint(); }, note); };
+  const finish=r=>{ if(id!==hintSeq) return; game.searching=false; cancelHint=null; $('btnHint').classList.remove('busy');
+    if(key!==stateKey()){ renderHud(); return; }
+    if(!r.path||!r.path.length){ setStatus('Keine Fortsetzung gefunden.','bad'); renderHud(); return; }
+    game.line={key,best:r.best,path:r.path.slice(),complete:r.complete&&!r.cancelled,nodes:r.nodes,lb,where:r.where,ms:r.ms||(Date.now()-t0),cancelled:!!r.cancelled}; game.hintOn=true; describeHint(); render();
+    if(settings.marks&&!(game.evalRes&&game.evalRes.key===key)) evaluatePosition(); };
+  const runMain=()=>{ if(id!==hintSeq) return;
+    let search; try{ search=CORE.createSearch(game.board,lo,hi,count,opts); }catch(e){ game.searching=false; $('btnHint').classList.remove('busy'); setStatus('Die Suche ist fehlgeschlagen: '+e.message,'bad'); renderHud(); return; }
+    let cancelled=false; cancelHint=()=>{ cancelled=true; }; let lastProg=0;
+    const tick=()=>{ if(id!==hintSeq) return; let r; try{ r=search.run(12000); }catch(e){ game.searching=false; $('btnHint').classList.remove('busy'); setStatus('Die Suche ist fehlgeschlagen: '+e.message,'bad'); renderHud(); return; }
+      if(r.done||cancelled){ r.where='Vordergrund'; r.cancelled=cancelled&&!r.done; r.ms=Date.now()-t0; finish(r); return; }
+      const now=Date.now(); if(now-lastProg>200){ lastProg=now; progress(r.nodes,r.best,'Vordergrund'); } setTimeout(tick,0); };
+    progress(0,count,'Vordergrund'); setTimeout(tick,30); };
+  const w=getWorker();
+  if(w){ let done=false; progress(0,count,'Hintergrund');
+    const handler=e=>{ if(!e.data||e.data.id!==id) return;
+      if(e.data.progress){ progress(e.data.progress.nodes,e.data.progress.best,'Hintergrund'); resetDog(); return; }
+      done=true; clearTimeout(dog); workerFailHook=null; w.removeEventListener('message',handler); e.data.r.where='Hintergrund'; finish(e.data.r); };
+    let dog=0; const resetDog=()=>{ clearTimeout(dog); dog=setTimeout(()=>{ if(done) return; done=true; w.removeEventListener('message',handler); setStatus('Hintergrund-Rechner antwortet nicht – weiche aus.','bad'); markWorkerBroken(); runMain(); },6000); };
+    resetDog();
+    workerFailHook=()=>{ if(done) return; done=true; clearTimeout(dog); runMain(); };
+    cancelHint=()=>{ try{ w.postMessage({cancel:id}); }catch(e){} };
+    w.addEventListener('message',handler);
+    try{ w.postMessage({id,def:game.board.def,lo,hi,count,opts}); }catch(e){ if(!done){ done=true; clearTimeout(dog); markWorkerBroken(); runMain(); } } }
+  else runMain();
+}
+/* ---------- Lektionen ---------- */
+function allowedEndCells(board,arr){
+  let n=0; for(const v of arr) if(v) n++; let allowed=board.cells.map(()=>true);
+  for(const col of board.colorings){ const cnt=[0,0,0]; arr.forEach((v,i)=>{ if(v) cnt[col[i]]++; }); const P=cnt.map(v=>v&1); const flip=((n-1)&1)===1; const pat=flip?P.map(v=>1-v):P;
+    const odd=pat.reduce((a,v)=>a+v,0); if(odd!==1) return []; const k=pat.indexOf(1); allowed=allowed.map((a,i)=>a&&col[i]===k); }
+  return board.cells.map((c,i)=>i).filter(i=>allowed[i]);
+}
+function resolveMoves(list){ return list.map(([f,t])=>game.board.moves.find(m=>m.from===game.board.index[f]&&m.to===game.board.index[t])); }
+function startLesson(id){
+  const L=LESSONS.find(x=>x.id===id); if(!L) return;
+  settings.board='english'; game.lesson={id,phase:0,phaseStart:null,expected:null,solved:false}; newGame('english',true);
+  if(game.phase==='choose'){ game.phase='play'; game.pegAt[game.board.startIdx]=-1; }
+  if(L.pegs){ const b=game.board; for(let i=0;i<b.n;i++) game.pegAt[i]=-1; L.pegs.forEach((k,j)=>game.pegAt[b.index[k]]=j); }
+  game.initial=game.pegAt.slice(); game.startCount=pegCount();
+  game.bookLine=null; game.line=null; game.hintOn=false; game.evalRes=null;
+  $('boardNameText').textContent=L.title; $('lessonBar').hidden=false; $('lessonTitle').textContent=L.title;
+  lessonBeginPhase(); render(); $('lessonText').textContent=L.intro; setStatus(L.steps); fitStage();
+}
+function lessonPhase(){ const L=LESSONS.find(x=>x.id===game.lesson.id); return {L,ph:L.phases[game.lesson.phase]}; }
+function lessonBeginPhase(){
+  const {L,ph}=lessonPhase(); if(!ph) return; const ls=game.lesson; ls.phaseStart=game.pegAt.slice(); ls.movesAtStart=game.history.length; ls.phaseStarts=ls.phaseStarts||[]; ls.phaseStarts[ls.phase]=game.history.length; ls.phaseExpected=ls.phaseExpected||[];
+  if(ph.pkg){ let exp=game.pegAt.slice(); ph.pkg.forEach(k=>exp[game.board.index[k]]=-1); ls.expected=exp.map(v=>v>=0?1:0).join(''); } else ls.expected=null;
+  ls.phaseExpected[ls.phase]=ls.expected;
+  $('lessonText').textContent=ph.text; $('lsDemo').disabled=false;
+}
+function lessonAfterMove(){
+  const ls=game.lesson; if(!ls||ls.solved) return; const {L,ph}=lessonPhase(); if(!ph) return;
+  const cur=occ().join(''); const used=game.history.length-ls.movesAtStart;
+  if(ph.free){ $('lessonText').textContent=ph.text; if(pegCount()===1){ lessonSolved(L); } else if(!anyLegalMove()){ setStatus('Keine Züge mehr – '+pegCount()+' Steine übrig. „Abschnitt neu" setzt zurück.','bad'); } else setStatus(pegCount()+' Steine übrig.'); return; }
+  if(cur===ls.expected){ lessonNextPhase(L); return; }
+  if(used>=ph.moves.length||!anyLegalMove()){ setStatus('Das war nicht das Muster – die Endstellung stimmt nicht. „Abschnitt neu" setzt den Abschnitt zurück.','bad'); }
+  else { $('lessonText').textContent=ph.text; setStatus(used+' von '+ph.moves.length+' Zügen.'); }
+}
+function lessonNextPhase(L){
+  game.lesson.phase++; game.autoplay=false; game.demo=false;
+  if(game.lesson.phase>=L.phases.length){ lessonSolved(L); return; }
+  lessonBeginPhase(); renderOverlay(); Sound.select(); setStatus('Abschnitt '+game.lesson.phase+' von '+L.phases.length+' geschafft.','ok');
+}
+function lessonSolved(L){
+  game.lesson.solved=true; game.autoplay=false; game.demo=false; $('lessonText').textContent=L.done; setStatus('Lektion geschafft.','ok'); Sound.win(); $('lsDemo').disabled=true;
+  const done=Store.get('lessons',{}); done[L.id]=true; Store.set('lessons',done);
+}
+function lessonRestartPhase(){
+  const ls=game.lesson; if(!ls) return; if(game.animating) finishAnimation();
+  if(ls.solved){ startLesson(ls.id); return; }
+  while(game.history.length>ls.movesAtStart){ const h=game.history.pop(); const m=game.board.moves[h.mi]; const a=game.pegAt; a[m.from]=a[m.to]; a[m.to]=-1; a[m.over]=h.jumped; }
+  game.future=[]; game.selected=-1; game.line=null; game.hintOn=false; game.autoplay=false; game.finished=false; game.lastMove=null; hideModal('resultModal');
+  const {ph}=lessonPhase(); render(); setStatus(ph?ph.text:'');
+}
+function lessonDemo(){
+  const ls=game.lesson; if(!ls||ls.solved||game.animating) return; const {ph}=lessonPhase(); if(!ph||!ph.moves) return;
+  if(game.history.length!==ls.movesAtStart) lessonRestartPhase();
+  const moves=resolveMoves(ph.moves); if(moves.some(m=>!m)) return;
+  game.line={key:stateKey(),path:moves.map(m=>game.board.moves.indexOf(m)),best:pegCount()-moves.length,complete:true,nodes:0,lb:1};
+  game.autoplay=true; game.demo=true; playMove(moves[0]);
+}
+function quitLesson(){ game.lesson=null; game.autoplay=false; $('lessonBar').hidden=true; newGame('english'); fitStage(); }
+$('lsDemo').addEventListener('click',lessonDemo); $('lsRestart').addEventListener('click',lessonRestartPhase); $('lsQuit').addEventListener('click',quitLesson);
+
+/* ---------- Generischer Suchlauf: Worker, sonst Hauptthread in Häppchen ---------- */
+let runSeq=0;
+function runSearch(lo,hi,count,opts,onProgress,onDone){
+  const id='rs'+(++runSeq); const t0=Date.now(); let finished=false, cancelled=false;
+  const done=r=>{ if(finished) return; finished=true; r.ms=Date.now()-t0; onDone(r); };
+  const main=()=>{ let search; try{ search=CORE.createSearch(game.board,lo,hi,count,opts); }catch(e){ done({best:count,path:[],complete:false,nodes:0,error:e.message}); return; }
+    const tick=()=>{ if(cancelled||finished) return; let r; try{ r=search.run(12000); }catch(e){ done({best:count,path:[],complete:false,nodes:0,error:e.message}); return; }
+      if(r.done){ done(r); return; } if(Date.now()-t0>opts.timeMs){ r.timeout=true; done(r); return; } if(onProgress) onProgress(r); setTimeout(tick,0); };
+    setTimeout(tick,20); };
+  const w=getWorker();
+  if(w){ const handler=e=>{ if(!e.data||e.data.id!==id) return; if(e.data.progress){ if(onProgress) onProgress(e.data.progress); if(Date.now()-t0>opts.timeMs){ try{ w.postMessage({cancel:id}); }catch(x){} } return; }
+      w.removeEventListener('message',handler); const r=e.data.r; if(r.cancelled&&!cancelled) r.timeout=true; done(r); };
+    w.addEventListener('message',handler);
+    try{ w.postMessage({id,def:game.board.def,lo,hi,count,opts}); }catch(e){ w.removeEventListener('message',handler); main(); }
+    const dog=setTimeout(()=>{ if(!finished){ w.removeEventListener('message',handler); try{ w.postMessage({cancel:id}); }catch(x){} markWorkerBroken(); main(); } },opts.timeMs+4000);
+    return ()=>{ cancelled=true; clearTimeout(dog); try{ w.postMessage({cancel:id}); }catch(x){} };
+  }
+  main(); return ()=>{ cancelled=true; };
+}
+/* ---------- Fehler suchen: rückwärts durch die Partie, bis 1 Stein noch erreichbar war ---------- */
+let mistakeCancel=null;
+function findMistake(){
+  if(mistakeCancel){ mistakeCancel(); mistakeCancel=null; }
+  const hist=game.history.slice(); const n=hist.length; if(!n) return;
+  const book=(!settings.freeStart&&OPENING_BOOK[game.board.def.id])?OPENING_BOOK[game.board.def.id]:null;
+  // Stellungen (Belegung + Stein-IDs) je Index rekonstruieren
+  const pegs=[game.initial.slice()]; for(let k=0;k<n;k++){ const a=pegs[k].slice(); const m=game.board.moves[hist[k].mi]; a[m.to]=a[m.from]; a[m.from]=-1; a[m.over]=-1; pegs.push(a); }
+  let k=n-1; let lastEval=game.evalRes&&game.evalRes.key===stateKey()?game.evalRes:null; let stopped=false;
+  const step=()=>{ if(stopped) return;
+    if(k<0){ setStatus('Kein Zug gefunden, der die Lösung gekostet hat – die Stellung war von Anfang an nicht auf 1 Stein lösbar.','bad'); mistakeCancel=null; return; }
+    const arr=pegs[k].map(v=>v>=0?1:0); const count=arr.reduce((a,v)=>a+v,0);
+    const onBook=book&&hist.slice(0,k).every((h,i)=>h.mi===book[i]);
+    const report=(path)=>{ mistakeCancel=null; const culprit=game.board.moves[hist[k].mi]; const better=game.board.moves[path[0]];
+      const later=path.slice(1).some(mi=>{ const m=game.board.moves[mi]; return m.from===culprit.from&&m.to===culprit.to; });
+      let cat='Struktur'; if(later) cat='Reihenfolge'; else if(better.over===culprit.over||better.from===culprit.from) cat='Falsche Richtung';
+      const txt='Der entscheidende Fehler war Zug '+(k+1)+' von '+n+' ('+cat+'): '+moveWords(culprit,pegs[k])+'. Besser war: '+moveWords(better,pegs[k])+'.';
+      setStatus(txt,'bad',[['Dorthin zurück & Zug zeigen',()=>rewindTo(k,path)]],'Danach war 1 Stein nicht mehr erreichbar.'); };
+    if(onBook){ report(book.slice(k)); return; }
+    setStatus('Suche den Fehler… prüfe Zug '+(k+1)+' von '+n,'', 'Abbrechen',()=>{ stopped=true; if(mistakeCancel) mistakeCancel(); mistakeCancel=null; setStatus('Suche abgebrochen.'); });
+    const [lo,hi]=CORE.fromArray(arr); const lb=CORE.parityLowerBound(game.board,arr);
+    mistakeCancel=runSearch(lo,hi,count,{target:lb,maxNodes:0,timeMs:8000,seed:(Date.now()%100000)+7},null,r=>{ if(stopped) return;
+      if(r.complete&&!r.timeout&&r.best===1){ report(r.path); return; }
+      if(!(r.complete&&!r.timeout)){ mistakeCancel=null; setStatus('Bis Zug '+(k+2)+' zurück geprüft: dort war 1 Stein schon nicht mehr erreichbar. Weiter zurück ist die Stellung zu groß für eine schnelle Bewertung.','bad'); return; }
+      k--; step(); });
+  };
+  step();
+}
+function rewindTo(k,path){
+  if(game.animating) finishAnimation(); cancelEval();
+  while(game.history.length>k){ const h=game.history.pop(); const m=game.board.moves[h.mi]; const a=game.pegAt; a[m.from]=a[m.to]; a[m.to]=-1; a[m.over]=h.jumped; game.future.unshift(h); }
+  game.finished=false; game.selected=-1; game.lastMove=null; game.evalRes=null; game.prevEval=null; hideModal('resultModal');
+  const m0=game.board.moves[path[0]];
+  if(m0&&game.pegAt[m0.from]>=0&&game.pegAt[m0.over]>=0&&game.pegAt[m0.to]<0){ game.line={key:stateKey(),path:path.slice(),best:1,complete:true,nodes:0,lb:1}; game.hintOn=true; }
+  render(); setStatus('Zurück auf Zug '+k+'. Der bessere Zug ist markiert: '+moveWords(m0,game.pegAt)+'.','hint');
+}
+
+/* ---------- Trainer: stille Bewertung nach jedem Zug ---------- */
+let evalSeq=0, evalCurrentId=null;
+function cancelEval(){ if(evalCurrentId!==null&&worker){ try{ worker.postMessage({cancel:evalCurrentId}); }catch(e){} } evalCurrentId=null; evalSeq++; game.evaluating=false; }
+function evaluatePosition(){
+  if(game.lesson) return; if(mistakeCancel){ mistakeCancel(); mistakeCancel=null; }
+  if(!(settings.trainer||settings.marks||settings.strategy)){ game.evalRes=null; renderOverlay(); return; }
+  if(game.finished||game.phase==='choose'||game.searching) return;
+  const count=pegCount(); if(count<=1||!anyLegalMove()) return;
+  const key=stateKey(); if(game.evalRes&&game.evalRes.key===key) { showTrainer(); return; }
+  const arr=occ(); const lb=CORE.parityLowerBound(game.board,arr); const [lo,hi]=CORE.fromArray(arr);
+  const full=count<=24;                       // vollständige Absuche nur, wenn sie schnell ist
+  const opts={target:lb,maxNodes:0,timeMs:6000,seed:(Date.now()%100000)+7,full};
+  const id=++evalSeq; evalCurrentId='ev'+id; const t0=Date.now(); game.evaluating=true;
+  if(settings.trainer&&!game.hintOn){ if(game.lastMove) setStatus(game.lastMove.text,'',null,null,game.lastMove.count+' · Trainer prüft…'); else setStatus('Trainer prüft…'); }
+  const finish=r=>{ if(id!==evalSeq) return; game.evaluating=false; if(key!==stateKey()) return;
+    game.evalRes={key,best:r.best,complete:r.complete&&!r.cancelled&&!r.timeout,path:r.path||[],nodes:r.nodes,lb,ms:Date.now()-t0,everEmpty:r.everEmpty||null,optFinal:r.optFinal||null,full};
+    showTrainer(); renderOverlay(); };
+  const runMain=()=>{ let search; try{ search=CORE.createSearch(game.board,lo,hi,count,opts); }catch(e){ game.evaluating=false; return; }
+    const tick=()=>{ if(id!==evalSeq) return; let r; try{ r=search.run(12000); }catch(e){ game.evaluating=false; return; }
+      if(r.done){ finish(r); return; } if(Date.now()-t0>opts.timeMs){ r.timeout=true; finish(r); return; } setTimeout(tick,0); };
+    setTimeout(tick,20); };
+  const w=getWorker();
+  if(w){ let done=false;
+    const handler=e=>{ if(!e.data||e.data.id!=='ev'+id) return; if(e.data.progress){ if(Date.now()-t0>opts.timeMs){ try{ w.postMessage({cancel:'ev'+id}); }catch(x){} } return; }
+      done=true; w.removeEventListener('message',handler); const r=e.data.r; if(r.cancelled) r.timeout=true; finish(r); };
+    w.addEventListener('message',handler);
+    try{ w.postMessage({id:'ev'+id,def:game.board.def,lo,hi,count,opts}); }catch(e){ if(!done){ done=true; w.removeEventListener('message',handler); runMain(); } }
+    setTimeout(()=>{ if(!done&&id===evalSeq){ done=true; w.removeEventListener('message',handler); try{ w.postMessage({cancel:'ev'+id}); }catch(x){} game.evaluating=false; if(settings.trainer) setStatus('Trainer: Stellung zu groß für eine schnelle Bewertung.'); } },opts.timeMs+2500);
+  } else runMain();
+}
+function dirWord(m){ const a=game.board.cells[m.from], b=game.board.cells[m.to]; const dr=b.r-a.r, dc=b.c-a.c; if(game.board.def.type==='tri') return dc>0&&dr===0?'nach rechts':dc<0&&dr===0?'nach links':dr>0?'nach unten':'nach oben'; return dr>0?'nach unten':dr<0?'nach oben':dc>0?'nach rechts':'nach links'; }
+function moveWords(m,pegAt){ const j=pegName(pegAt[m.from]!==undefined&&pegAt[m.from]>=0?pegAt[m.from]:-1), o=pegName(pegAt[m.over]>=0?pegAt[m.over]:-1); return (j||'Stein')+' über '+(o||'den Nachbarn')+' '+dirWord(m); }
+function regionWord(i){ const c=game.board.cells[i]; if(game.board.def.type!=='grid') return ''; const R=game.board.def.rows.length; const mid=(R-1)/2; if(Math.abs(c.r-mid)<=1&&Math.abs(c.c-mid)<=1) return ' in der Mitte'; if(c.r<mid-1) return ' im oberen Arm'; if(c.r>mid+1) return ' im unteren Arm'; if(c.c<mid-1) return ' im linken Arm'; return ' im rechten Arm'; }
+function strategyAdvice(prev,ev){
+  // prev: Bewertung der Stellung vor dem Zug (mit bester Linie), ev: Bewertung danach. Nur wenn der Zug den Beweis-Stand verschlechtert hat.
+  if(!prev||!prev.complete||!ev.complete||!(prev.best<ev.best)||!prev.path||!prev.path.length) return null;
+  const b=game.board; const played=b.moves[prev.played], better=b.moves[prev.path[0]];
+  // Stellung vor dem Zug rekonstruieren (für Farbnamen)
+  const before=game.pegAt.slice(); before[played.from]=before[played.to]; before[played.to]=-1; before[played.over]=game.history.length?game.history[game.history.length-1].jumped:-1;
+  let cat, why;
+  const later=prev.path.slice(1).some(mi=>{ const m=b.moves[mi]; return m.from===played.from&&m.to===played.to; });
+  if(later){ cat='Reihenfolge'; why='Dein Zug gehört zur Lösung, aber erst später – vorher musste etwas anderes passieren.'; }
+  else if(better.over===played.over){ cat='Falsche Richtung'; why='Derselbe Stein musste geschlagen werden, aber vom anderen Nachbarn aus.'; }
+  else if(better.from===played.from){ cat='Falsche Richtung'; why='Der richtige Stein, aber in die falsche Richtung gesprungen.'; }
+  else { let stranded=[]; if(ev.optFinal){ for(let i=0;i<b.n;i++){ if(game.pegAt[i]>=0&&((i<32?(ev.optFinal.mask[0]>>>i):(ev.optFinal.mask[1]>>>(i-32)))&1)) stranded.push(i); } }
+    if(stranded.length){ cat='Stein gestrandet'; why=stranded.slice(0,2).map(i=>(pegName(game.pegAt[i])||'Ein Stein')+regionWord(i)).join(' und ')+(stranded.length>2?' und weitere':'')+' bleib'+(stranded.length===1?'t':'en')+' in jeder guten Fortsetzung stehen – kein Nachbar kann sie noch überspringen.'; }
+    else { cat='Struktur'; why='Nach dem Zug fehlt ein Stein an der Stelle, an der später ein Sprung gebraucht wird.'; } }
+  const betterTxt=moveWords(better,before);
+  return {cat,why,betterTxt,best:ev.best,path:prev.path};
+}
+function showTrainer(){
+  const ev=game.evalRes; if(!ev||ev.key!==stateKey()) return;
+  const prev=game.prevEval;
+  if(settings.strategy&&!game.hintOn){ const adv=strategyAdvice(prev,ev);
+    if(adv){ setStatus('Strategischer Fehler – '+adv.cat+'. '+adv.why+' Besser: '+adv.betterTxt+'.','bad',[['Zurück & Zug zeigen',()=>{ game.showBetter={path:adv.path.slice()}; undo(); }]],'Jetzt bestenfalls '+adv.best+' Steine, vorher war 1 erreichbar.');
+      Sound.bad(); return; }
+    if(!settings.trainer){
+      if(!ev.complete){ setStatus('Zug noch nicht bewertbar – zu viele Stellungen. Ab etwa 26 Steinen wird jeder Zug geprüft.'); return; }
+      if(ev.best===1){ setStatus('In Ordnung – 1 Stein ist weiterhin erreichbar.','ok'); return; }
+      const nf=ev.optFinal?ev.optFinal.count:0;
+      setStatus('Bestenfalls '+ev.best+' Steine'+(nf>1?' ('+nf+' Endbilder)':'')+' – der entscheidende Fehler lag früher.','bad',[['Fehler suchen',()=>findMistake()]]); return; } }
+  if(!settings.trainer||game.hintOn) return;
+  if(!ev.complete){ setStatus('Trainer: Stellung zu groß für eine schnelle Bewertung – ab etwa 26 Steinen wird bewertet.'); return; }
+  const note=game.lastMove?game.lastMove.text+' '+game.lastMove.count:'';
+  if(ev.best===1){ setStatus('Trainer: 1 Stein ist noch erreichbar.','ok',null,null,note); return; }
+  const lost=prev&&prev.complete&&prev.best<ev.best;
+  const nf=ev.optFinal?ev.optFinal.count:0;
+  const t='Trainer: ab hier bestenfalls '+ev.best+' Steine'+(nf>1?' ('+nf+' verschiedene Endbilder)':nf===1?' (ein einziges Endbild)':'')+'.'+(lost?' Der letzte Zug hat das gekostet.':'');
+  setStatus(t,'bad',lost?[['Zurück',()=>undo()]]:[['Fehler suchen',()=>findMistake()]],note);
+}
+function describeHint(){
+  const h=currentLine(); if(!h){ setStatus('Kein Zug gefunden.','bad'); return; }
+  let t;
+  const sec=h.ms?(h.ms<1000?(h.ms/1000).toFixed(2):(h.ms/1000).toFixed(1)).replace('.',',')+' s':'';
+  const rate=(h.ms>=500&&h.nodes)?', '+(h.nodes/h.ms/1000).toFixed(1).replace('.',',')+' Mio./s':'';
+  const perf=h.nodes?fmtNum(h.nodes)+' Stellungen'+(sec?' in '+sec:'')+rate:'';
+  if(h.complete){ t=(h.best===1?'Dieser Zug führt sicher zu 1 Stein.':'Bewiesen: bestenfalls '+h.best+' Steine bleiben – dieser Zug erreicht das.'); }
+  else t=(h.cancelled?'Abgebrochen. ':'')+'Bisher bester Zug: erreichbar '+h.best+(h.best===1?' Stein':' Steine')+'. '+(h.lb<h.best?(h.lb===1?'1 Stein ist':h.lb+' Steine sind')+' nicht ausgeschlossen.':'');
+  const links=[];
+  if(h.path.length) links.push(['Rest automatisch spielen',()=>{ const l=currentLine(); if(!l) return; game.autoplay=true; playMove(game.board.moves[l.path[0]]); }]);
+  if(!h.complete) links.push(['Weiter suchen',()=>requestHint(true)]);
+  setStatus(t,'hint',links,perf);
+}
+
+/* ---------- Einstellungen ---------- */
+function previewSvg(board,markStart){
+  const lay=layoutBoard(board); const L=BOARD_LOOKS[currentLook().board]||BOARD_LOOKS.holz; let s=`<svg viewBox="0 0 ${lay.W} ${lay.H}" xmlns="${svgNS}">`;
+  const m=MARG*0.35;
+  if(board.def.type==='grid') s+=`<rect x="${m}" y="${m}" width="${lay.W-2*m}" height="${lay.H-2*m}" rx="46" fill="${L.base}"/>`;
+  else s+=`<polygon points="${lay.W/2},${m+30} ${lay.W-m-24},${lay.H-m-12} ${m+24},${lay.H-m-12}" fill="${L.base}" stroke="${L.base}" stroke-width="70" stroke-linejoin="round"/>`;
+  board.cells.forEach((c,i)=>{ const p=lay.pos[i]; const empty=markStart&&i===board.startIdx&&!settings.freeStart; s+=`<circle cx="${p.x}" cy="${p.y}" r="${empty?R_HOLE:R_PEG}" fill="${empty?L.hole:'#e9cd7c'}"/>`; });
+  return s+'</svg>';
+}
+function buildSheet(){
+  const stats=Store.get('stats',{});
+  const bl=$('boardList'); bl.innerHTML='';
+  CORE.BOARD_DEFS.forEach(d=>{ const b=boards[d.id]; const card=document.createElement('button'); card.className='boardcard'+(settings.board===d.id?' on':''); card.setAttribute('aria-label',d.name);
+    const st=stats[d.id]; card.innerHTML=previewSvg(b,true)+`<div class="n">${d.name}</div><div class="b">${st?'Best: '+st.left+(st.left===1?' Stein':' Steine')+' · '+fmtTime(st.time):'noch nicht gespielt'}</div>`;
+    card.addEventListener('click',()=>{ if(settings.board===d.id){ closeSheet(); return; } confirmDiscard(()=>{ newGame(d.id); closeSheet(); }); });
+    bl.appendChild(card); });
+  const tl=$('themeList'); tl.innerHTML='';
+  Object.keys(THEMES).forEach(k=>{ const t=THEMES[k]; const ch=document.createElement('button'); ch.className='chip'+(settings.theme===k?' on':'');
+    if(!t.custom){ const bl2=BOARD_LOOKS[t.board]; ch.innerHTML=`<span class="sw" style="background:${bl2.base}"></span><span class="sw" style="background:${pegColorFor(t.color,0,8)}"></span>`; }
+    ch.appendChild(document.createTextNode(t.name));
+    ch.addEventListener('click',()=>{ settings.theme=k; saveSettings(); applyLook(); buildSheet(); }); tl.appendChild(ch); });
+  $('customLook').hidden=!THEMES[settings.theme].custom;
+  const ll=$('boardLookList'); ll.innerHTML='';
+  Object.keys(BOARD_LOOKS).forEach(k=>{ const ch=document.createElement('button'); ch.className='chip'+(settings.boardLook===k?' on':''); ch.innerHTML=`<span class="sw" style="background:${BOARD_LOOKS[k].base}"></span>`; ch.appendChild(document.createTextNode(BOARD_LOOKS[k].name));
+    ch.addEventListener('click',()=>{ settings.boardLook=k; saveSettings(); applyLook(); buildSheet(); }); ll.appendChild(ch); });
+  const pl=$('pegStyleList'); pl.innerHTML='';
+  Object.keys(PEG_STYLES).forEach(k=>{ const ch=document.createElement('button'); ch.className='chip'+(settings.pegStyle===k?' on':''); ch.textContent=PEG_STYLES[k];
+    ch.addEventListener('click',()=>{ settings.pegStyle=k; saveSettings(); applyLook(); buildSheet(); }); pl.appendChild(ch); });
+  const cl=$('colorList'); cl.innerHTML='';
+  Object.keys(COLORS).forEach(k=>{ const d=document.createElement('button'); d.className='dot'+(settings.pegColor===k?' on':''); d.setAttribute('aria-label',COLOR_NAMES[k]); d.title=COLOR_NAMES[k];
+    const v=COLORS[k]; d.style.background= v==='multi'?'conic-gradient(#c62828,#d4a02a,#2e8b57,#2f5fd1,#7b3fbf,#c62828)': v==='multi2'?'conic-gradient(#c0223b,#e39b1c,#1e9e5a,#2247b3,#7c3fb8,#c0223b)': v==='hue'?'conic-gradient(red,yellow,lime,cyan,blue,magenta,red)':v;
+    d.addEventListener('click',()=>{ settings.pegColor=k; saveSettings(); applyLook(); buildSheet(); }); cl.appendChild(d); });
+  $('versionLine').textContent='Solitaire v'+APP_VERSION;
+  const ll2=$('lessonList'); ll2.innerHTML='';
+  LESSONS.forEach(L=>{ const ch=document.createElement('button'); ch.className='chip'+(game.lesson&&game.lesson.id===L.id?' on':''); ch.textContent=L.title; ch.addEventListener('click',()=>{ closeSheet(); confirmDiscard(()=>startLesson(L.id)); }); ll2.appendChild(ch); });
+  ['swAuto:autoJump','swTargets:showTargets','swFree:freeStart','swSound:sound','swTrainer:trainer','swMarks:marks'].forEach(s=>{ const [id,k]=s.split(':'); const e=$(id); e.classList.toggle('on',!!settings[k]); e.setAttribute('aria-checked',String(!!settings[k])); });
+}
+function applyLook(){ buildBoardSvg(); render(); }
+function openSheet(){ buildSheet(); $('sheet').classList.add('on'); $('backdrop').classList.add('on'); }
+function closeSheet(){ $('sheet').classList.remove('on'); $('backdrop').classList.remove('on'); }
+let confirmFn=null;
+function confirmDiscard(fn){ if(!game.history.length||game.finished){ fn(); return; } confirmFn=fn; showModal('confirmModal'); }
+$('cfYes').addEventListener('click',()=>{ hideModal('confirmModal'); const f=confirmFn; confirmFn=null; if(f) f(); });
+$('cfNo').addEventListener('click',()=>{ hideModal('confirmModal'); confirmFn=null; });
+$('btnMenu').addEventListener('click',openSheet); $('btnBoardName').addEventListener('click',openSheet);
+$('btnCloseSheet').addEventListener('click',closeSheet); $('backdrop').addEventListener('click',closeSheet);
+$('sheet').querySelector('.handle').addEventListener('click',closeSheet);
+$('btnResetStats').addEventListener('click',()=>{ Store.del('stats'); buildSheet(); toast('Bestleistungen gelöscht.'); });
+$('swAuto').addEventListener('click',()=>{ settings.autoJump=!settings.autoJump; saveSettings(); buildSheet(); });
+$('swTargets').addEventListener('click',()=>{ settings.showTargets=!settings.showTargets; saveSettings(); buildSheet(); renderOverlay(); });
+$('swTrainer').addEventListener('click',()=>{ settings.trainer=!settings.trainer; saveSettings(); buildSheet(); evaluatePosition(); });
+$('swMarks').addEventListener('click',()=>{ settings.marks=!settings.marks; saveSettings(); buildSheet(); evaluatePosition(); });
+$('swSound').addEventListener('click',()=>{ settings.sound=!settings.sound; saveSettings(); buildSheet(); if(settings.sound){ Sound.ensure(); Sound.select(); } });
+$('swFree').addEventListener('click',()=>{ settings.freeStart=!settings.freeStart; saveSettings(); buildSheet(); confirmDiscard(()=>newGame()); });
+$('btnUndo').addEventListener('click',undo); $('btnRedo').addEventListener('click',redo);
+$('btnHint').addEventListener('click',()=>requestHint());
+$('btnNew').addEventListener('click',()=>confirmDiscard(()=>{ if(game.lesson){ startLesson(game.lesson.id); return; } newGame(); toast('Neues Spiel.'); }));
+$('resNew').addEventListener('click',()=>{ hideModal('resultModal'); newGame(); });
+$('resUndo').addEventListener('click',()=>{ hideModal('resultModal'); undo(); });
+$('resClose').addEventListener('click',()=>hideModal('resultModal'));
+document.addEventListener('keydown',e=>{ if(e.key==='z'&&(e.metaKey||e.ctrlKey)){ e.preventDefault(); if(e.shiftKey) redo(); else undo(); } else if(e.key==='Escape'){ closeSheet(); hideModal('resultModal'); hideModal('confirmModal'); } else if(e.key==='h'||e.key==='?') requestHint(); });
+document.addEventListener('visibilitychange',()=>{ if(document.hidden&&game.startedAt&&!game.finished){ game.elapsedBefore=elapsedMs(); game.startedAt=0; game.paused=true; } else if(!document.hidden&&game.paused){ game.paused=false; if(game.history.length&&!game.finished) game.startedAt=Date.now(); } });
+
+/* ---------- Startbild ---------- */
+function buildSplash(){
+  const svg=$('splashArt'); const b=boards.english; const lay=layoutBoard(b); const t=trayMarkup(b,lay,'holzdunkel','s_');
+  let html=`<defs>${t.defs}`; pegDefsCache.clear();
+  const pegs=[]; b.cells.forEach((c,i)=>{ if(i===b.startIdx) return; pegs.push(pegMarkup('glas',PALETTE_BUNT[i%PALETTE_BUNT.length],lay.pos[i].x,lay.pos[i].y,(i%5===0?'glint':''),'s')); });
+  pegDefsCache.forEach(v=>html+=v); html+='</defs>';
+  svg.setAttribute('viewBox',`0 0 ${lay.W} ${lay.H}`);
+  html+=t.shape;
+  b.cells.forEach((c,i)=>{ const p=lay.pos[i]; html+=`<circle cx="${p.x}" cy="${p.y}" r="${R_HOLE}" fill="url(#s_hole)"/>`; });
+  html+=pegs.join('');
+  svg.innerHTML=html; pegDefsCache.clear();
+}
+
+/* ---------- Start ---------- */
+buildSplash();
+newGame();
+$('app').hidden=false;
+fitStage(); setTimeout(fitStage,50);
+setTimeout(()=>{ $('splash').classList.add('out'); setTimeout(()=>{ $('splash').hidden=true; },700); },2000);
+</script>
+</body>
+</html>
