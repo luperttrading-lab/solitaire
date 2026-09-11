@@ -24,16 +24,17 @@ Autor/Product Owner: Lutz („Neo"). Sprache im Chat und in der App: Deutsch, pe
 - Erreichbare Stellungen zweier Beispielstellungen mit 27 Steinen: 5.717.512 und 5.965.349 (exakt, BFS = DFS).
 
 ## Konventionen von Lutz
-- Lieferung immer als `index.html` UND `Solitaire_v<Version>.html` (identisch); Version in `APP_VERSION` und im Menü.
+- Eine ausgelieferte Datei: `index.html`. Version in `APP_VERSION` und im Menü; jeder Stand bekommt zusätzlich ein Git-Tag (`v1.1`). Keine versionierte Zweitkopie im Repo – Git hält die Stände.
 - Weitere Dateien durchnummeriert (`1-sw.js`, `2-icon.png`).
 - Nie „Budget" in Nutzertexten. Statuszeile: Hauptsatz, Messwerte/Zähler in eigener Zeile darunter, einzeilig auch mit längsten Farbnamen (Bernstein/Aquamarin) – Test misst das.
 - Nichts raten, was Lutz in wenigen Handgriffen prüfen kann; Diagnosen in die Ausgabe schreiben; Tests dürfen nicht dieselbe Annahme treffen wie der Code (Literaturwerte, unabhängige BFS).
 - Keine Zustimmungsfloskeln; Widerspruch mit Grund.
 
-## Tests (headless Chromium via Puppeteer, `npm i puppeteer`)
+## Tests (headless Chromium via Puppeteer, einmal `npm install`)
+- `npm test` – alle sechs Suiten nacheinander; jede meldet Fehler über den Exit-Code. Einzeln z. B. `npm run test:browser`.
 - `node tests/test_browser.js` – 76 Prüfungen (Spiel, Tipp, Trainer, Markierung, Strategie, Fehlersuche, Spulen, Textbreiten).
-- `node tests/test_lessons.js`, `node tests/test_worker.js` (Worker-Ausfallszenarien), `node tests/test_full.js` (everEmpty gegen BFS), `node tests/test_table.js` (Exaktheit gegen Stellungszählung), `node tests/test_motion.js` (Animationsdauern).
-- Werkzeuge: `tools/gen_book2.js` (Eröffnungsbuch neu rechnen), `tools/purge_find.js`/`purge_find2.js`/`purge_plan2.js` (Purge-Muster und Partie-Plan), `tools/count_pos2.js` (Stellungen zählen).
+- `node tests/test_lessons.js`, `node tests/test_worker.js` (Worker-Ausfallszenarien), `node tests/test_full.js` (everEmpty gegen BFS), `node tests/test_table.js` (Exaktheit gegen Stellungszählung), `node tests/test_motion.js` (Animationsdauern: Zug 230 ms, Spulen 400 ms Vorlauf + 650 ms).
+- Werkzeuge: `tools/gen_book2.js` (Eröffnungsbuch neu rechnen), `tools/purge_find.js`/`purge_find2.js`/`purge_plan2.js` (Purge-Muster und Partie-Plan), `tools/count_pos2.js` (Stellungen zählen), `tools/exp_parity.js` (Paritätsschranke prüfen). Ergebnisse liegen als `tools/patterns.json` (Purge-Muster) und `tools/plan.json` (Partie als Purge-Folge) daneben.
 
 ## Offene Ideen
 - Service Worker `1-sw.js` für Offline-Betrieb; Splash-Bild aus dem Walnuss-Icon.
