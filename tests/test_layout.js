@@ -44,7 +44,11 @@ const FAELLE=[
       zeilenZahl:zeilen,
       textUeberlauf:Math.max(0,Math.ceil(st.scrollHeight-st.clientHeight)),
       leisteUeberRand:Math.round(Math.max(0,tr.bottom-unten)),
-      vollstaendig:statusFullText()===txt+note+'Zur\u00fcck & Zug zeigen'};
+      vollstaendig:statusFullText()===txt+note+'Zur\u00fcck & Zug zeigen',
+      // Ein falsch geschriebenes Sonderzeichen landet sonst als Buchstaben-
+      // folge auf dem Bildschirm ("u00a0") - das faellt nur auf, wenn man den
+      // sichtbaren Text selbst ansieht.
+      sichtbar:[...st.querySelectorAll('.anker,.kurz')].map(e=>e.textContent).join(' ')};
   },TXT,NOTE,sat,sab,fs);
   console.log('INFO '+name+': '+JSON.stringify(r));
   ok('Meldungszeile steht ueber der Fussleiste ('+name+')',r.zeileVerdeckt===0,r.zeileVerdeckt+' px');
@@ -54,6 +58,8 @@ const FAELLE=[
   ok('Steinzahl steht fest in der oberen Zeile ('+name+')',/\d+ Steine? übrig/.test(r.ankerText),JSON.stringify(r.ankerText));
   ok('Zeile bleibt bei hoechstens zwei Zeilen ('+name+')',r.zeilenZahl<=2,r.zeilenZahl+' Zeilen');
   ok('Voller Wortlaut bleibt abrufbar ('+name+')',r.vollstaendig,r.vollstaendig);
+  ok('Keine Zeichenreste im sichtbaren Text ('+name+')',
+     !/u[0-9a-f]{4}|\\[nu]|&[a-z]+;/i.test(r.sichtbar), JSON.stringify(r.sichtbar.slice(0,60)));
   ok('Meldung laeuft nicht aus ihrem Kasten ('+name+')',r.textUeberlauf===0,r.textUeberlauf+' px');
   ok('Fussleiste bleibt im sichtbaren Bereich ('+name+')',r.leisteUeberRand===0,r.leisteUeberRand+' px');
   ok('Brett bleibt benutzbar gross ('+name+')',r.brett>=100,r.brett+' px');

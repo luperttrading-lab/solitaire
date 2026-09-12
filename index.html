@@ -54,21 +54,21 @@ header .boardname:active{background:var(--panel2)}
 #stage{flex:none;display:flex;align-items:center;justify-content:center;padding:8px 0}
 #board{touch-action:none;display:block}
 .toolbar{flex:none;margin-top:auto}
-#status,#statusProbe{min-height:68px;flex-shrink:0;padding:4px 8px;color:var(--muted);font-size:14px;line-height:1.35;display:flex;align-items:center;justify-content:center;gap:12px}
+#status,#statusProbe{min-height:75px;flex-shrink:0;padding:4px 8px 11px;color:var(--muted);font-size:14px;line-height:1.35;display:flex;align-items:flex-end;justify-content:center;gap:12px}
 #status .saeule,#statusProbe .saeule{display:flex;flex-direction:column;align-items:center;gap:2px;min-width:0;flex:1;overflow:hidden}
 #status .anker,#statusProbe .anker{color:var(--ink);font-size:15px;white-space:nowrap}
 #status .kurz,#statusProbe .kurz{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-align:center;max-width:100%}
 #status .kurz{min-height:19px}
-#status .kurz:empty::after{content:'\u00a0'}
 #status.tapbar{cursor:pointer}
-#status .dot{flex:none;width:22px;height:22px;border-radius:50%;background:var(--muted);box-shadow:inset 0 -2px 4px rgba(0,0,0,.35),0 1px 2px rgba(0,0,0,.4)}
+#status .dot{flex:none;margin-bottom:-1px;width:22px;height:22px;border-radius:50%;background:var(--muted);box-shadow:inset 0 -2px 4px rgba(0,0,0,.35),0 1px 2px rgba(0,0,0,.4)}
 #status.ok .dot{background:#3fae6a}
 #status.warn .dot{background:#d9a72c}
 #status.bad .dot{background:#e0574a}
 #status.hint .dot{background:var(--brass2)}
-#status .mehr{flex:none;width:34px;height:34px;margin:-8px 0;border-radius:50%;border:1.5px solid var(--brass2);background:rgba(217,178,95,.12);color:var(--brass2);font-family:var(--serif);font-size:19px;line-height:31px;font-style:italic}
+#status .mehr{flex:none;width:34px;height:34px;margin:0 0 -7px;border-radius:50%;border:1.5px solid var(--brass2);background:rgba(217,178,95,.12);display:flex;align-items:center;justify-content:center}
+#status .mehr svg{width:16px;height:16px;stroke:var(--brass2);fill:none;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
 #status.tapbar:active .mehr{background:rgba(217,178,95,.3)}
-#status .rad{flex:none;width:26px;height:26px;margin:-2px;border-radius:50%;border:3px solid rgba(217,178,95,.22);border-top-color:var(--brass2);border-right-color:var(--brass2);animation:dreh .8s linear infinite}
+#status .rad{flex:none;width:26px;height:26px;margin:0 -2px -3px;border-radius:50%;border:3px solid rgba(217,178,95,.22);border-top-color:var(--brass2);border-right-color:var(--brass2);animation:dreh .8s linear infinite}
 /* Zusaetzlich zum Rad laeuft ein Band unter der Zeile durch - ueber die
    ganze Breite, damit auch ein kurzer Rechenschritt zu sehen ist. */
 #rechenband{flex:none;height:3px;margin:0 8px;border-radius:2px;background:var(--line);overflow:hidden;opacity:0;transition:opacity .15s}
@@ -812,8 +812,12 @@ function renderHud(){
    Meldung hinter der Fussleiste (gemessen: bis 148 px noetig, fest reserviert
    waren 74). Gemessen wird einmal je Breite, damit das Brett nicht bei jedem
    Zug seine Groesse aendert. */
+/* Eigenes Zeichen statt eines Emojis: iOS faerbt \u2139 blau ein, egal was
+   im CSS steht. Ein Winkel nach oben sagt ausserdem, was passiert - das
+   Blatt kommt von unten. */
+const CHEVRON='<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 15l6-6 6 6"/></svg>';
 const STATUS_MAX_TEXT='Strategischer Fehler \u2013 Stein gestrandet im linken Arm und rechts\u2026';
-let statusReserveCache={w:-1,h:68};
+let statusReserveCache={w:-1,h:75};
 function statusReserve(){
   const w=Math.round(statusEl.getBoundingClientRect().width);
   if(w<=0) return statusReserveCache.h;
@@ -825,9 +829,9 @@ function statusReserve(){
   const an=document.createElement('span'); an.className='anker'; an.textContent='28 Steine übrig'; sa.appendChild(an);
   const k=document.createElement('span'); k.className='kurz'; k.textContent=STATUS_MAX_TEXT; sa.appendChild(k);
   probe.appendChild(sa);
-  const i=document.createElement('span'); i.className='mehr'; i.textContent='\u2139'; probe.appendChild(i);
+  const i=document.createElement('span'); i.className='mehr'; i.innerHTML=CHEVRON; probe.appendChild(i);
   document.body.appendChild(probe);
-  const h=Math.max(68,Math.ceil(probe.getBoundingClientRect().height));
+  const h=Math.max(75,Math.ceil(probe.getBoundingClientRect().height));
   probe.remove(); statusReserveCache={w:w,h:h}; return h;
 }
 /* Sicherheitsnetz gegen alles, was sich nicht vorausberechnen laesst
@@ -900,12 +904,14 @@ function setStatus(text,cls,linkText,linkFn,note,kurz){
   const dot=document.createElement('span'); dot.className=rechnet?'rad':'dot'; statusEl.appendChild(dot);
   const saeule=document.createElement('span'); saeule.className='saeule';
   const anker=document.createElement('span'); anker.className='anker'; anker.textContent=ankerText(); saeule.appendChild(anker);
-  const k=document.createElement('span'); k.className='kurz'; k.textContent=kurzT; saeule.appendChild(k);
+  const k=document.createElement('span'); k.className='kurz'; k.textContent=kurzT;
+  if(kurzT!==text) k.setAttribute('aria-hidden','true');
+  saeule.appendChild(k);
   statusEl.appendChild(saeule);
   if(kurzT!==text){ const v=document.createElement('span'); v.className='voll'; v.textContent=text; statusEl.appendChild(v); }
   if(noteText){ const n=document.createElement('div'); n.className='note'; n.textContent=noteText; statusEl.appendChild(n); }
   links.forEach(l=>{ const b=document.createElement('button'); b.className='link'; b.textContent=l[0]; b.addEventListener('click',l[1]); statusEl.appendChild(b); });
-  const i=document.createElement('span'); i.className='mehr'; i.textContent='\u2139'; i.style.visibility=mehr?'':'hidden'; statusEl.appendChild(i);
+  const i=document.createElement('span'); i.className='mehr'; i.innerHTML=CHEVRON; i.style.visibility=mehr?'':'hidden'; statusEl.appendChild(i);
   statusEl.classList.toggle('tapbar',mehr);
   statusEl.setAttribute('role',mehr?'button':'status');
   ensureStatusFits();
