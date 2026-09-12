@@ -26,14 +26,14 @@ Autor/Product Owner: Lutz („Neo"). Sprache im Chat und in der App: Deutsch, pe
 ## Konventionen von Lutz
 - Eine ausgelieferte Datei: `index.html`. Version in `APP_VERSION` und im Menü; jeder Stand bekommt zusätzlich ein Git-Tag (`v1.1`). Keine versionierte Zweitkopie im Repo – Git hält die Stände.
 - Weitere Dateien durchnummeriert (`1-sw.js`, `2-icon.png`).
-- Nie „Budget" in Nutzertexten. Statuszeile: Ampelpunkt (grün = 1 Stein erreichbar, gelb = nicht bewertbar, rot = nicht mehr erreichbar) plus Kurzfassung, höchstens zwei Zeilen. Begründung, Zusatzzeile und Aktionen stehen im Blatt `#detail`, das ein Tippen auf die Zeile öffnet; `statusFullText()` liefert den vollen Wortlaut. So bleibt das Brett so groß, wie die Bildschirmbreite erlaubt (iPhone 14 Pro: 369 px).
+- Nie „Budget" in Nutzertexten. Statuszeile: links der Ampelpunkt (22 px; grün = 1 Stein erreichbar, gelb = nicht bewertbar, rot = nicht mehr erreichbar), in der Mitte zwei Zeilen – oben fest die Steinzahl (`ankerText()`, wird von `render()` nachgezogen), darunter die Meldung in Kurzfassung –, rechts der ⓘ-Knopf (34 px). Eine Meldung, die nur die Steinzahl wiederholt, lässt die untere Zeile leer, damit dort nichts flackert. Während gerechnet wird, ersetzt ein drehendes Rad den Ampelpunkt; der Text bleibt stehen. Begründung, Zusatzzeile und Aktionen stehen im Blatt `#detail`, das ein Tippen auf die Zeile öffnet; `statusFullText()` liefert den vollen Wortlaut. So bleibt das Brett so groß, wie die Bildschirmbreite erlaubt (iPhone 14 Pro: 369 px).
 - Nichts raten, was Lutz in wenigen Handgriffen prüfen kann; Diagnosen in die Ausgabe schreiben; Tests dürfen nicht dieselbe Annahme treffen wie der Code (Literaturwerte, unabhängige BFS).
 - Keine Zustimmungsfloskeln; Widerspruch mit Grund.
 
 ## Tests (headless Chromium via Puppeteer, einmal `npm install`)
 - `npm test` – alle sieben Suiten nacheinander; jede meldet Fehler über den Exit-Code. Einzeln z. B. `npm run test:browser`.
 - `node tests/test_browser.js` – 76 Prüfungen (Spiel, Tipp, Trainer, Markierung, Strategie, Fehlersuche, Spulen, Textbreiten).
-- `node tests/test_lessons.js`, `node tests/test_worker.js` (Worker-Ausfallszenarien), `node tests/test_full.js` (everEmpty gegen BFS), `node tests/test_table.js` (Exaktheit gegen Stellungszählung), `node tests/test_motion.js` (Animationsdauern: Zug 230 ms, Spulen 400 ms Vorlauf + 650 ms), `node tests/test_layout.js` (nichts verschwindet hinter der Fußleiste, über sechs Geräte- und Schriftgrößen; Brett springt nicht).
+- `node tests/test_lessons.js`, `node tests/test_worker.js` (Worker-Ausfallszenarien), `node tests/test_full.js` (everEmpty gegen BFS), `node tests/test_table.js` (Exaktheit gegen Stellungszählung), `node tests/test_motion.js` (Animationsdauern: Zug 230 ms, Spulen 400 ms Vorlauf + 650 ms), `node tests/test_layout.js` (nichts verschwindet hinter der Fußleiste, über sechs Geräte- und Schriftgrößen; Brett springt nicht; Ampel ≥ 20 px, ⓘ ≥ 30 px, Steinzahl steht fest).
 - Werkzeuge: `tools/gen_book2.js` (Eröffnungsbuch neu rechnen), `tools/purge_find.js`/`purge_find2.js`/`purge_plan2.js` (Purge-Muster und Partie-Plan), `tools/count_pos2.js` (Stellungen zählen), `tools/exp_parity.js` (Paritätsschranke prüfen). Ergebnisse liegen als `tools/patterns.json` (Purge-Muster) und `tools/plan.json` (Partie als Purge-Folge) daneben.
 
 ## Offene Ideen

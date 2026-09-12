@@ -32,12 +32,15 @@ const FAELLE=[
     const tb=document.querySelector('.toolbar'), app=document.getElementById('app');
     const unten=app.getBoundingClientRect().bottom-parseFloat(getComputedStyle(app).paddingBottom||0);
     const tr=tb.getBoundingClientRect();
-    const kurz=st.querySelector('.kurz'), dot=st.querySelector('.dot');
+    const kurz=st.querySelector('.kurz'), dot=st.querySelector('.dot'), anker=st.querySelector('.anker'), mehr=st.querySelector('.mehr');
     const zeilen=Math.round(kurz.getBoundingClientRect().height/(parseFloat(getComputedStyle(st).fontSize)*1.35));
     return {brett:Math.round(document.getElementById('board').getBoundingClientRect().width),
       shrink:stageShrink,
       zeileVerdeckt:Math.round(Math.max(0,st.getBoundingClientRect().bottom-tr.top)),
       ampelDa:!!dot&&dot.getBoundingClientRect().width>0,
+      ampelGross:dot?Math.round(dot.getBoundingClientRect().width):0,
+      knopfGross:mehr?Math.round(Math.min(mehr.getBoundingClientRect().width,mehr.getBoundingClientRect().height)):0,
+      ankerText:anker?anker.textContent:'',
       zeilenZahl:zeilen,
       textUeberlauf:Math.max(0,Math.ceil(st.scrollHeight-st.clientHeight)),
       leisteUeberRand:Math.round(Math.max(0,tr.bottom-unten)),
@@ -46,6 +49,9 @@ const FAELLE=[
   console.log('INFO '+name+': '+JSON.stringify(r));
   ok('Meldungszeile steht ueber der Fussleiste ('+name+')',r.zeileVerdeckt===0,r.zeileVerdeckt+' px');
   ok('Ampelpunkt ist sichtbar ('+name+')',r.ampelDa,r.ampelDa);
+  ok('Ampelpunkt ist gross genug zum Erkennen ('+name+')',r.ampelGross>=20,r.ampelGross+' px');
+  ok('Knopf fuer die Erklaerung ist gross genug zum Treffen ('+name+')',r.knopfGross>=30,r.knopfGross+' px');
+  ok('Steinzahl steht fest in der oberen Zeile ('+name+')',/\d+ Steine? übrig/.test(r.ankerText),JSON.stringify(r.ankerText));
   ok('Zeile bleibt bei hoechstens zwei Zeilen ('+name+')',r.zeilenZahl<=2,r.zeilenZahl+' Zeilen');
   ok('Voller Wortlaut bleibt abrufbar ('+name+')',r.vollstaendig,r.vollstaendig);
   ok('Meldung laeuft nicht aus ihrem Kasten ('+name+')',r.textUeberlauf===0,r.textUeberlauf+' px');

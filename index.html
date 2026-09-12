@@ -54,17 +54,20 @@ header .boardname:active{background:var(--panel2)}
 #stage{flex:none;display:flex;align-items:center;justify-content:center;padding:8px 0}
 #board{touch-action:none;display:block}
 .toolbar{flex:none;margin-top:auto}
-#status,#statusProbe{min-height:44px;flex-shrink:0;padding:4px 8px;text-align:center;color:var(--muted);font-size:14px;line-height:1.35;display:flex;align-items:center;justify-content:center;gap:8px;flex-wrap:wrap}
+#status,#statusProbe{min-height:52px;flex-shrink:0;padding:4px 8px;color:var(--muted);font-size:14px;line-height:1.35;display:flex;align-items:center;justify-content:center;gap:12px}
+#status .saeule,#statusProbe .saeule{display:flex;flex-direction:column;align-items:center;gap:2px;min-width:0;flex:1}
+#status .anker,#statusProbe .anker{color:var(--ink);font-size:15px;white-space:nowrap}
+#status .kurz,#statusProbe .kurz{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;text-align:center}
+#status .kurz:empty{display:none}
 #status.tapbar{cursor:pointer}
-#status .dot{flex:none;width:12px;height:12px;border-radius:50%;background:var(--muted)}
+#status .dot{flex:none;width:22px;height:22px;border-radius:50%;background:var(--muted);box-shadow:inset 0 -2px 4px rgba(0,0,0,.35),0 1px 2px rgba(0,0,0,.4)}
 #status.ok .dot{background:#3fae6a}
 #status.warn .dot{background:#d9a72c}
 #status.bad .dot{background:#e0574a}
 #status.hint .dot{background:var(--brass2)}
-#status .kurz{max-width:calc(100% - 60px);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
-#status .mehr{flex:none;width:30px;height:30px;margin:-6px 0;border-radius:50%;border:1.5px solid var(--brass2);background:rgba(217,178,95,.12);color:var(--brass2);font-family:var(--serif);font-size:17px;line-height:27px;font-style:italic}
+#status .mehr{flex:none;width:34px;height:34px;margin:-8px 0;border-radius:50%;border:1.5px solid var(--brass2);background:rgba(217,178,95,.12);color:var(--brass2);font-family:var(--serif);font-size:19px;line-height:31px;font-style:italic}
 #status.tapbar:active .mehr{background:rgba(217,178,95,.3)}
-#status .rad{flex:none;width:14px;height:14px;border-radius:50%;border:2px solid var(--line);border-top-color:var(--brass2);animation:dreh 1s linear infinite}
+#status .rad{flex:none;width:22px;height:22px;border-radius:50%;border:3px solid var(--line);border-top-color:var(--brass2);border-right-color:var(--brass2);animation:dreh .9s linear infinite}
 @keyframes dreh{to{transform:rotate(360deg)}}
 @media (prefers-reduced-motion:reduce){#status .rad{animation-duration:2.4s}}
 /* Volltext, Zusatzzeile und Aktionen stehen im Blatt; hier bleiben sie im
@@ -802,7 +805,7 @@ function renderHud(){
    waren 74). Gemessen wird einmal je Breite, damit das Brett nicht bei jedem
    Zug seine Groesse aendert. */
 const STATUS_MAX_TEXT='Strategischer Fehler \u2013 Stein gestrandet im linken Arm und rechts\u2026';
-let statusReserveCache={w:-1,h:44};
+let statusReserveCache={w:-1,h:52};
 function statusReserve(){
   const w=Math.round(statusEl.getBoundingClientRect().width);
   if(w<=0) return statusReserveCache.h;
@@ -810,10 +813,13 @@ function statusReserve(){
   const probe=document.createElement('div'); probe.id='statusProbe'; probe.className='bad';
   probe.style.cssText='position:absolute;left:-10000px;top:0;width:'+w+'px';
   const d=document.createElement('span'); d.className='dot'; probe.appendChild(d);
-  const k=document.createElement('span'); k.className='kurz'; k.textContent=STATUS_MAX_TEXT; probe.appendChild(k);
+  const sa=document.createElement('span'); sa.className='saeule';
+  const an=document.createElement('span'); an.className='anker'; an.textContent='28 Steine übrig'; sa.appendChild(an);
+  const k=document.createElement('span'); k.className='kurz'; k.textContent=STATUS_MAX_TEXT; sa.appendChild(k);
+  probe.appendChild(sa);
   const i=document.createElement('span'); i.className='mehr'; i.textContent='\u2139'; probe.appendChild(i);
   document.body.appendChild(probe);
-  const h=Math.max(44,Math.ceil(probe.getBoundingClientRect().height));
+  const h=Math.max(52,Math.ceil(probe.getBoundingClientRect().height));
   probe.remove(); statusReserveCache={w:w,h:h}; return h;
 }
 /* Sicherheitsnetz gegen alles, was sich nicht vorausberechnen laesst
@@ -847,7 +853,7 @@ window.addEventListener('resize',()=>{ statusReserveCache={w:-1,h:statusReserveC
 function renderStrategyBtn(){ const b=$('btnStrategy'); b.classList.toggle('on',!!settings.strategy); b.setAttribute('aria-pressed',String(!!settings.strategy)); b.textContent='Strategie-Hinweise: '+(settings.strategy?'an':'aus'); }
 $('btnStrategy').addEventListener('click',()=>{ settings.strategy=!settings.strategy; saveSettings(); renderStrategyBtn(); if(settings.strategy){ toast('Nach jedem Zug: War das ein strategischer Fehler – und was wäre besser gewesen?'); evaluatePosition(); } else if(!settings.trainer) setStatus(pegCount()+' Steine übrig.'); });
 renderStrategyBtn();
-function render(){ renderPegs(); renderOverlay(); renderHud(); }
+function render(){ renderPegs(); renderOverlay(); renderHud(); refreshAnker(); }
 setInterval(()=>{ if(game.startedAt&&!game.finished) $('hudTime').textContent=fmtTime(elapsedMs()); },500);
 
 /* Die Zeile unter dem Brett zeigt eine Ampel und hoechstens zwei Zeilen.
@@ -870,21 +876,37 @@ function setStatus(text,cls,linkText,linkFn,note,kurz){
   const isArr=Array.isArray(linkText);
   const links=isArr?linkText:(linkText?[[linkText,linkFn]]:[]);
   const noteText=isArr?linkFn:note;
-  const kurzT=(isArr?note:kurz)||kurzfassung(text);
+  let kurzT=(isArr?note:kurz)||kurzfassung(text);
+  /* Die Steinzahl steht fest in der oberen Zeile. Eine Meldung, die nichts
+     anderes sagt, laesst die untere Zeile leer, statt dieselbe Zahl zu
+     wiederholen - so flackert dort nichts. */
+  const nurZahl=/^\d+ Steine? übrig\.?$/.test(text.trim());
+  if(nurZahl){ kurzT=''; }
   statusEl.className=cls||''; statusEl.textContent='';
-  const mehr=links.length>0||!!noteText||kurzT!==text;
-  statusDetail=mehr?{text:text,cls:cls||'',note:noteText||'',links:links,kurz:kurzT}:null;
+  const mehr=links.length>0||!!noteText||(kurzT!==text&&!nurZahl);
+  statusDetail=mehr?{text:text,cls:cls||'',note:noteText||'',links:links,kurz:kurzT||text}:null;
 
   const dot=document.createElement('span'); dot.className=rechnet?'rad':'dot'; statusEl.appendChild(dot);
-  const k=document.createElement('span'); k.className='kurz'; k.textContent=kurzT; statusEl.appendChild(k);
+  const saeule=document.createElement('span'); saeule.className='saeule';
+  const anker=document.createElement('span'); anker.className='anker'; anker.textContent=ankerText(); saeule.appendChild(anker);
+  const k=document.createElement('span'); k.className='kurz'; k.textContent=kurzT; saeule.appendChild(k);
+  statusEl.appendChild(saeule);
   if(kurzT!==text){ const v=document.createElement('span'); v.className='voll'; v.textContent=text; statusEl.appendChild(v); }
   if(noteText){ const n=document.createElement('div'); n.className='note'; n.textContent=noteText; statusEl.appendChild(n); }
   links.forEach(l=>{ const b=document.createElement('button'); b.className='link'; b.textContent=l[0]; b.addEventListener('click',l[1]); statusEl.appendChild(b); });
-  if(mehr){ const i=document.createElement('span'); i.className='mehr'; i.textContent='\u2139'; statusEl.appendChild(i); }
+  const i=document.createElement('span'); i.className='mehr'; i.textContent='\u2139'; i.style.visibility=mehr?'':'hidden'; statusEl.appendChild(i);
   statusEl.classList.toggle('tapbar',mehr);
   statusEl.setAttribute('role',mehr?'button':'status');
   ensureStatusFits();
 }
+/* Obere Zeile: wie viele Steine noch liegen. Sie steht immer da, damit der
+   Blick unten am Brett einen festen Punkt hat. */
+function ankerText(){
+  if(!game.board||!game.pegAt.length) return '';
+  const n=pegCount();
+  return n===1?'1 Stein übrig':n+' Steine übrig';
+}
+function refreshAnker(){ const a=statusEl.querySelector('.anker'); if(a) a.textContent=ankerText(); }
 /* Vollstaendiger Wortlaut der Meldung, unabhaengig davon, was gerade sichtbar
    ist - fuer die Tests und fuer Vorlesehilfen. */
 function statusFullText(){
