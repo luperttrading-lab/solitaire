@@ -62,7 +62,11 @@ header .boardname:active{background:var(--panel2)}
 #status.bad .dot{background:#e0574a}
 #status.hint .dot{background:var(--brass2)}
 #status .kurz{max-width:calc(100% - 60px);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
-#status .mehr{flex:none;width:20px;height:20px;border-radius:50%;border:1px solid var(--line);color:var(--muted);font-size:12px;line-height:18px}
+#status .mehr{flex:none;width:30px;height:30px;margin:-6px 0;border-radius:50%;border:1.5px solid var(--brass2);background:rgba(217,178,95,.12);color:var(--brass2);font-family:var(--serif);font-size:17px;line-height:27px;font-style:italic}
+#status.tapbar:active .mehr{background:rgba(217,178,95,.3)}
+#status .rad{flex:none;width:14px;height:14px;border-radius:50%;border:2px solid var(--line);border-top-color:var(--brass2);animation:dreh 1s linear infinite}
+@keyframes dreh{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){#status .rad{animation-duration:2.4s}}
 /* Volltext, Zusatzzeile und Aktionen stehen im Blatt; hier bleiben sie im
    Dokument, damit statusFullText() sie liefert, sind aber nicht zu sehen. */
 #status .voll,#status .note,#status .link{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
@@ -856,6 +860,12 @@ function kurzfassung(text){
   return k;
 }
 let statusDetail=null;
+/* Solange gerechnet wird, dreht sich an der Stelle der Ampel ein Rad - der
+   Text bleibt stehen, statt durch "pruefe..." ersetzt zu werden. */
+let rechnet=false;
+function zeigeRechnet(an){ if(rechnet===an) return; rechnet=an;
+  const alt=statusEl.querySelector(an?'.dot':'.rad'); if(!alt) return;
+  const neu=document.createElement('span'); neu.className=an?'rad':'dot'; alt.replaceWith(neu); }
 function setStatus(text,cls,linkText,linkFn,note,kurz){
   const isArr=Array.isArray(linkText);
   const links=isArr?linkText:(linkText?[[linkText,linkFn]]:[]);
@@ -865,7 +875,7 @@ function setStatus(text,cls,linkText,linkFn,note,kurz){
   const mehr=links.length>0||!!noteText||kurzT!==text;
   statusDetail=mehr?{text:text,cls:cls||'',note:noteText||'',links:links,kurz:kurzT}:null;
 
-  const dot=document.createElement('span'); dot.className='dot'; statusEl.appendChild(dot);
+  const dot=document.createElement('span'); dot.className=rechnet?'rad':'dot'; statusEl.appendChild(dot);
   const k=document.createElement('span'); k.className='kurz'; k.textContent=kurzT; statusEl.appendChild(k);
   if(kurzT!==text){ const v=document.createElement('span'); v.className='voll'; v.textContent=text; statusEl.appendChild(v); }
   if(noteText){ const n=document.createElement('div'); n.className='note'; n.textContent=noteText; statusEl.appendChild(n); }
@@ -1177,7 +1187,7 @@ function rewindTo(k,path){
 
 /* ---------- Trainer: stille Bewertung nach jedem Zug ---------- */
 let evalSeq=0, evalCurrentId=null;
-function cancelEval(){ if(evalCurrentId!==null&&worker){ try{ worker.postMessage({cancel:evalCurrentId}); }catch(e){} } evalCurrentId=null; evalSeq++; game.evaluating=false; }
+function cancelEval(){ if(evalCurrentId!==null&&worker){ try{ worker.postMessage({cancel:evalCurrentId}); }catch(e){} } evalCurrentId=null; evalSeq++; game.evaluating=false; zeigeRechnet(false); }
 function evaluatePosition(){
   if(game.lesson) return; if(mistakeCancel){ mistakeCancel(); mistakeCancel=null; }
   if(!(settings.trainer||settings.marks||settings.strategy)){ game.evalRes=null; renderOverlay(); return; }
@@ -1188,8 +1198,11 @@ function evaluatePosition(){
   const full=count<=24;                       // vollständige Absuche nur, wenn sie schnell ist
   const opts={target:lb,maxNodes:0,timeMs:6000,seed:(Date.now()%100000)+7,full};
   const id=++evalSeq; evalCurrentId='ev'+id; const t0=Date.now(); game.evaluating=true;
-  if(settings.trainer&&!game.hintOn){ if(game.lastMove) setStatus(game.lastMove.text,'',null,null,game.lastMove.count+' · Trainer prüft…'); else setStatus('Trainer prüft…'); }
-  const finish=r=>{ if(id!==evalSeq) return; game.evaluating=false; if(key!==stateKey()) return;
+  if(settings.trainer&&!game.hintOn){
+    if(game.lastMove) setStatus(game.lastMove.text,'',null,null,game.lastMove.count);
+    else if(!statusEl.querySelector('.kurz')||!statusEl.querySelector('.kurz').textContent) setStatus(pegCount()+' Steine übrig.');
+    zeigeRechnet(true); }
+  const finish=r=>{ if(id!==evalSeq) return; game.evaluating=false; zeigeRechnet(false); if(key!==stateKey()) return;
     game.evalRes={key,best:r.best,complete:r.complete&&!r.cancelled&&!r.timeout,path:r.path||[],nodes:r.nodes,lb,ms:Date.now()-t0,everEmpty:r.everEmpty||null,optFinal:r.optFinal||null,full};
     showTrainer(); renderOverlay(); };
   const runMain=()=>{ let search; try{ search=CORE.createSearch(game.board,lo,hi,count,opts); }catch(e){ game.evaluating=false; return; }
@@ -1202,7 +1215,7 @@ function evaluatePosition(){
       done=true; w.removeEventListener('message',handler); const r=e.data.r; if(r.cancelled) r.timeout=true; finish(r); };
     w.addEventListener('message',handler);
     try{ w.postMessage({id:'ev'+id,def:game.board.def,lo,hi,count,opts}); }catch(e){ if(!done){ done=true; w.removeEventListener('message',handler); runMain(); } }
-    setTimeout(()=>{ if(!done&&id===evalSeq){ done=true; w.removeEventListener('message',handler); try{ w.postMessage({cancel:'ev'+id}); }catch(x){} game.evaluating=false; if(settings.trainer) setStatus('Trainer: Stellung zu groß für eine schnelle Bewertung.'); } },opts.timeMs+2500);
+    setTimeout(()=>{ if(!done&&id===evalSeq){ done=true; w.removeEventListener('message',handler); try{ w.postMessage({cancel:'ev'+id}); }catch(x){} game.evaluating=false; zeigeRechnet(false); if(settings.trainer) setStatus('Trainer: Stellung zu groß für eine schnelle Bewertung.','warn'); } },opts.timeMs+2500);
   } else runMain();
 }
 function dirWord(m){ const a=game.board.cells[m.from], b=game.board.cells[m.to]; const dr=b.r-a.r, dc=b.c-a.c; if(game.board.def.type==='tri') return dc>0&&dr===0?'nach rechts':dc<0&&dr===0?'nach links':dr>0?'nach unten':'nach oben'; return dr>0?'nach unten':dr<0?'nach oben':dc>0?'nach rechts':'nach links'; }
