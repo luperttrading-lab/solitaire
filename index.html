@@ -602,7 +602,11 @@ const Sound={ctx:null,
   jump(){ this.tone(600,300,0.11,'sine',0.18); },
   bad(){ this.tone(140,90,0.14,'square',0.06); },
   win(){ [523,659,784,1047].forEach((f,i)=>this.tone(f,0,0.16,'triangle',0.16,i*0.13)); },
-  lose(){ [330,262,220].forEach((f,i)=>this.tone(f,0,0.2,'triangle',0.12,i*0.18)); }
+  lose(){ [330,262,220].forEach((f,i)=>this.tone(f,0,0.2,'triangle',0.12,i*0.18)); },
+  /* Deutlich anders als bad() (kurzer Stups) und lose() (Ende der Partie):
+     zwei fallende Saegezahn-Toene, wie ein Warnsignal. Laeuft zusammen mit
+     dem roten Aufleuchten, wenn ein Zug die Loesung kostet. */
+  alarm(){ [0,0.19].forEach(d=>this.tone(208,150,0.26,'sawtooth',0.11,d)); }
 };
 
 /* =========================================================================
@@ -682,7 +686,7 @@ const pegDefsCache=new Map();
    ========================================================================= */
 const boards={}; CORE.BOARD_DEFS.forEach(d=>boards[d.id]=CORE.buildBoard(d));
 const game={board:null,lay:null,pegAt:[],initial:[],history:[],future:[],selected:-1,phase:'play',startedAt:0,elapsedBefore:0,finished:false,
-  line:null,bookLine:null,hintOn:false,searching:false,animating:false,autoplay:false,startCount:0,evalRes:null,prevEval:null,evaluating:false,lastMove:null,lesson:null,demo:false,showBetter:null};
+  line:null,bookLine:null,hintOn:false,searching:false,animating:false,autoplay:false,startCount:0,evalRes:null,prevEval:null,evaluating:false,lastMove:null,lesson:null,demo:false,showBetter:null,markAus:false};
 
 const $=id=>document.getElementById(id);
 const boardSvg=$('board'), statusEl=$('status');
@@ -730,7 +734,7 @@ function undo(){
   const h=game.history.pop(); const m=game.board.moves[h.mi];
   game.selected=-1; game.line=null; game.hintOn=false; hideModal('resultModal');
   const nJ=pegName(game.pegAt[m.to]), nO=pegName(h.jumped);
-  game.lastMove={mi:h.mi,dir:'undo',text:'Zurück: '+(nJ?nJ:'Stein')+' zurück, '+(nO?nO:'Geschlagener')+' wieder da.',count:'Zug '+(game.history.length+1)+' von '+(game.history.length+game.future.length+1)};
+  game.markAus=false; game.lastMove={mi:h.mi,dir:'undo',text:'Zurück: '+(nJ?nJ:'Stein')+' zurück, '+(nO?nO:'Geschlagener')+' wieder da.',count:'Zug '+(game.history.length+1)+' von '+(game.history.length+game.future.length+1)};
   game.evalRes=null; game.prevEval=null; cancelEval(); renderOverlay(); setStatus(game.lastMove.text,'',null,null,game.lastMove.count);
   animateMove(m,()=>{
     const a=game.pegAt; a[m.from]=a[m.to]; a[m.to]=-1; a[m.over]=h.jumped;
@@ -752,7 +756,7 @@ function redo(){
   if(game.animating) finishAnimation();
   const h=game.future.pop(); const m=game.board.moves[h.mi]; game.selected=-1; game.hintOn=false;
   const nJ=pegName(game.pegAt[m.from]), nO=pegName(h.jumped);
-  game.lastMove={mi:h.mi,dir:'redo',text:'Vor: '+(nJ?nJ:'Stein')+' springt über '+(nO?nO:'den Nachbarn')+'.',count:'Zug '+(game.history.length+1)+' von '+(game.history.length+game.future.length+1)};
+  game.markAus=false; game.lastMove={mi:h.mi,dir:'redo',text:'Vor: '+(nJ?nJ:'Stein')+' springt über '+(nO?nO:'den Nachbarn')+'.',count:'Zug '+(game.history.length+1)+' von '+(game.history.length+game.future.length+1)};
   cancelEval(); renderOverlay(); setStatus(game.lastMove.text,'',null,null,game.lastMove.count);
   animateMove(m,()=>{ applyMove(m,false); game.history.push(h); game.lastMove.dir='redo';
     render(); afterMove(true);
@@ -800,7 +804,7 @@ function renderOverlay(){
     if(ph&&ph.pkg){ ph.pkg.forEach(k=>{ const i=game.board.index[k]; if(game.pegAt[i]>=0){ const p=lay.pos[i]; overlayLayer.appendChild(el('circle',{class:'pkg-ring',cx:p.x,cy:p.y,r:R_PEG+6})); } });
       const ci=game.board.index[ph.cat]; if(ci!==undefined){ const p=lay.pos[ci]; overlayLayer.appendChild(el('circle',{class:'cat-ring',cx:p.x,cy:p.y,r:R_PEG+7})); } }
     if(L.id==='endfelder'){ allowedEndCells(game.board,occ()).forEach(i=>{ const p=lay.pos[i]; overlayLayer.appendChild(el('circle',{class:'end-ring',cx:p.x,cy:p.y,r:R_HOLE+6})); }); } }
-  if(game.lastMove){ const m=game.board.moves[game.lastMove.mi]; const undo=game.lastMove.dir==='undo';
+  if(game.lastMove&&!game.markAus){ const m=game.board.moves[game.lastMove.mi]; const undo=game.lastMove.dir==='undo';
     // Markierung zeigt immer den Zug selbst (Start gestrichelt, Ziel Ring, geschlagener Stein Punkt) – beim Zurück mit ↶
     const a=lay.pos[m.from], c=lay.pos[m.to], o=lay.pos[m.over];
     const ev=game.evalRes, prev=game.prevEval; const lost=!undo&&ev&&ev.key===stateKey()&&ev.complete&&prev&&prev.complete&&prev.best<ev.best;
@@ -925,6 +929,7 @@ let rechnet=false;
 let warnblitzTimer=0;
 function warnblitz(erzwingen){
   if(!settings.alarm&&!erzwingen) return;
+  Sound.alarm();
   const e=$('warnblitz'); if(!e) return;
   e.classList.remove('an'); void e.offsetWidth; e.classList.add('an');
   clearTimeout(warnblitzTimer); warnblitzTimer=setTimeout(()=>e.classList.remove('an'),1300);
@@ -1077,6 +1082,9 @@ boardSvg.addEventListener('pointercancel',()=>{ ptr=null; });
 function shakeCell(i){ const e=pegsLayer.querySelector(`[data-idx="${i}"] .body`); if(!e) return; e.classList.add('shake'); setTimeout(()=>e.classList.remove('shake'),600); }
 function onTap(i){
   if(game.finished){ showModal('resultModal'); return; }
+  /* Die Markierung des letzten Zuges bleibt sonst liegen und stoert beim
+     Nachdenken. Wer das Brett beruehrt, will spielen - sie geht weg. */
+  if(game.lastMove&&!game.markAus){ game.markAus=true; renderOverlay(); }
   const a=game.pegAt;
   if(game.phase==='choose'){ if(a[i]<0) return; a[i]=-1; game.initial=a.slice(); game.phase='play'; game.startCount=pegCount(); render(); Sound.select();
     const lb=CORE.parityLowerBound(game.board,occ());

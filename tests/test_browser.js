@@ -257,6 +257,24 @@ let fails=0; const ok=(name,cond,extra)=>{ console.log((cond?'OK  ':'FAIL')+' '+
   ok('Rote Meldung ohne Bewertung loest keinen Warnblitz aus',
      !await page.evaluate(()=>document.getElementById('warnblitz').classList.contains('an')));
 
+  // Die Markierung des zurueckgenommenen Zuges soll beim Tippen aufs Brett
+  // verschwinden - sie stoert sonst beim Nachdenken - und beim naechsten
+  // Spulen wieder erscheinen.
+  await page.evaluate(()=>{ newGame('english');
+    for(let k=0;k<2;k++){ const l=currentLine()||game.bookLine; applyMove(game.board.moves[l.path[0]],true); } render(); undo(); });
+  await page.waitForFunction(()=>!game.animating,{timeout:20000}); await sleep(300);
+  const markZaehlen=()=>page.evaluate(()=>document.querySelectorAll('#board .back-ring').length);
+  const markNachZurueck=await markZaehlen();
+  await page.evaluate(()=>{ const leer=game.pegAt.findIndex(v=>v<0); onTap(leer); }); await sleep(200);
+  const markNachTipp=await markZaehlen();
+  await page.evaluate(()=>undo()); await page.waitForFunction(()=>!game.animating,{timeout:20000}); await sleep(300);
+  const markNachSpulen=await markZaehlen();
+  ok('Zurueck-Markierung erscheint beim Spulen', markNachZurueck>0, markNachZurueck);
+  ok('Zurueck-Markierung verschwindet beim Tippen aufs Brett', markNachTipp===0, markNachTipp);
+  ok('Zurueck-Markierung kommt beim naechsten Spulen wieder', markNachSpulen>0, markNachSpulen);
+  ok('Eigener Alarmton fuer den Verlust der Loesung vorhanden',
+     await page.evaluate(()=>typeof Sound.alarm==='function'&&Sound.alarm!==Sound.bad));
+
   // Stellung fuer die Fehlersuche neu aufbauen
   await page.evaluate(()=>{ newGame('english');
     for(let k=0;k<12;k++){ const l=currentLine(); applyMove(game.board.moves[l.path[0]],true); } render(); });
