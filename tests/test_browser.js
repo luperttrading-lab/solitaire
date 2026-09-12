@@ -222,6 +222,39 @@ let fails=0; const ok=(name,cond,extra)=>{ console.log((cond?'OK  ':'FAIL')+' '+
   let culprit=-1;
   for(const mi of legal3){ const r=await page.evaluate(i=>{ const arr=occ(); const m=game.board.moves[i]; const c=arr.slice(); c[m.from]=0; c[m.over]=0; c[m.to]=1; const [lo,hi]=CORE.fromArray(c); const rr=CORE.solveSmart(game.board,lo,hi,19,{maxNodes:0,timeMs:8000,target:1}); return rr.best; },mi); if(r>1){ culprit=mi; break; } }
   ok('Fehlzug gefunden (Testaufbau)', culprit>=0);
+
+  // Warnblitz: genau beim Uebergang "1 Stein erreichbar" -> "nicht mehr", und
+  // nur dann. Erst bewerten lassen, damit prevEval steht, dann den Fehlzug
+  // ueber die normale Zugbehandlung spielen.
+  await page.evaluate(()=>{ game.evalRes=null; game.prevEval=null; evaluatePosition(); });
+  await page.waitForFunction(()=>!game.evaluating,{timeout:60000}); await sleep(100);
+  const vorBlitz=await page.evaluate(()=>game.evalRes&&game.evalRes.best);
+  await page.evaluate(()=>document.getElementById('warnblitz').classList.remove('an'));
+  await page.evaluate(i=>playMove(game.board.moves[i]),culprit);
+  await page.waitForFunction(()=>!game.evaluating&&!game.animating,{timeout:60000}); await sleep(300);
+  const blitzNachFehlzug=await page.evaluate(()=>document.getElementById('warnblitz').classList.contains('an'));
+  const nachBlitz=await page.evaluate(()=>game.evalRes&&game.evalRes.best);
+  console.log('INFO Warnblitz: best '+vorBlitz+' -> '+nachBlitz);
+  ok('Warnblitz kommt beim Verlust der Loesung', vorBlitz===1&&nachBlitz>1&&blitzNachFehlzug, vorBlitz+' -> '+nachBlitz+', Blitz '+blitzNachFehlzug);
+  await sleep(1400);
+  await page.evaluate(()=>document.getElementById('warnblitz').classList.remove('an'));
+  await page.evaluate(()=>{ const m=game.board.moves.find(m=>game.pegAt[m.from]>=0&&game.pegAt[m.over]>=0&&game.pegAt[m.to]<0); playMove(m); });
+  await page.waitForFunction(()=>!game.evaluating&&!game.animating,{timeout:60000}); await sleep(300);
+  ok('Kein zweiter Warnblitz in schon verlorener Stellung',
+     !await page.evaluate(()=>document.getElementById('warnblitz').classList.contains('an')));
+  await sleep(1400);
+  const aus=await page.evaluate(()=>{ const e=document.getElementById('warnblitz'); e.classList.remove('an');
+    settings.alarm=false; warnblitz(); const a=e.classList.contains('an');
+    settings.alarm=true; return a; });
+  ok('Abgeschalteter Warnblitz bleibt aus', !aus, aus);
+  await sleep(1400);
+  await page.evaluate(()=>{ document.getElementById('warnblitz').classList.remove('an'); setStatus('Dieser Stein kann nicht springen.','bad'); }); await sleep(150);
+  ok('Rote Meldung ohne Bewertung loest keinen Warnblitz aus',
+     !await page.evaluate(()=>document.getElementById('warnblitz').classList.contains('an')));
+
+  // Stellung fuer die Fehlersuche neu aufbauen
+  await page.evaluate(()=>{ newGame('english');
+    for(let k=0;k<12;k++){ const l=currentLine(); applyMove(game.board.moves[l.path[0]],true); } render(); });
   await page.evaluate(i=>{ applyMove(game.board.moves[i],true); render(); },culprit);
   for(let k=0;k<2;k++){ await page.evaluate(()=>{ const m=game.board.moves.find(m=>game.pegAt[m.from]>=0&&game.pegAt[m.over]>=0&&game.pegAt[m.to]<0); applyMove(m,true); render(); }); }
   await page.evaluate(()=>{ game.evalRes=null; game.prevEval=null; evaluatePosition(); }); await page.waitForFunction(()=>!game.evaluating,{timeout:20000}); await sleep(100);

@@ -194,6 +194,14 @@ header .boardname:active{background:var(--panel2)}
 .card p{color:var(--muted);font-size:14px;line-height:1.45;margin:8px 0}
 .card .big{font-family:var(--serif);font-size:56px;line-height:1;color:var(--ink);margin:6px 0 2px}
 .card .big small{font-size:16px;color:var(--muted);font-family:var(--sans)}
+/* Warnblitz: Sobald ein Zug die Loesung kostet, zieht einmal ein rotes
+   Leuchten ueber den Bildschirm. Liegt ueber allem, faengt aber keine
+   Beruehrung ab. */
+#warnblitz{position:fixed;inset:0;z-index:45;pointer-events:none;opacity:0;
+  background:radial-gradient(circle at 50% 62%,rgba(224,87,74,.30) 0%,rgba(224,87,74,.55) 60%,rgba(224,87,74,.75) 100%)}
+#warnblitz.an{animation:warnblitz .62s ease-out 1}
+@keyframes warnblitz{0%{opacity:0}18%{opacity:1}55%{opacity:.22}100%{opacity:0}}
+@media (prefers-reduced-motion:reduce){#warnblitz.an{animation-duration:1.1s}}
 #toast{position:fixed;left:50%;bottom:calc(var(--sab) + 90px);transform:translateX(-50%) translateY(20px);background:#3a2f24;color:var(--ink);padding:10px 16px;border-radius:12px;font-size:14px;opacity:0;transition:.25s;z-index:40;pointer-events:none;max-width:90vw;text-align:center}
 #toast.on{opacity:1;transform:translateX(-50%) translateY(0)}
 @media (prefers-reduced-motion:reduce){
@@ -256,6 +264,7 @@ header .boardname:active{background:var(--panel2)}
     <div class="row"><div><div class="t">Auto-Sprung</div><div class="d">Antippen genügt, wenn nur ein Zug möglich ist. Bei mehreren: in Richtung wischen oder Zielfeld tippen.</div></div><button class="switch" id="swAuto" role="switch" aria-label="Auto-Sprung"></button></div>
     <div class="row"><div><div class="t">Zielfelder anzeigen</div><div class="d">Mögliche Ziele des gewählten Steins markieren.</div></div><button class="switch" id="swTargets" role="switch" aria-label="Zielfelder anzeigen"></button></div>
     <div class="row"><div><div class="t">Startloch frei wählen</div><div class="d">Beim Start alle Steine setzen und selbst einen herausnehmen.</div></div><button class="switch" id="swFree" role="switch" aria-label="Startloch frei wählen"></button></div>
+    <div class="row"><div><div class="t">Warnblitz</div><div class="d">Kostet ein Zug die Lösung, leuchtet der Bildschirm einmal kurz rot auf. Nur beim Übergang, nicht bei jedem weiteren Zug.</div></div><button class="switch" id="swAlarm" role="switch" aria-label="Warnblitz"></button></div>
     <div class="row"><div><div class="t">Ton</div><div class="d">Kurze Klicks beim Ziehen, Jingle am Ende.</div></div><button class="switch" id="swSound" role="switch" aria-label="Ton"></button></div>
     <h2>So geht's</h2>
     <p>Ein Stein springt waagerecht, senkrecht (auf dem Dreieck auch schräg) über einen direkten Nachbarn in ein leeres Loch dahinter. Der übersprungene Stein wird entfernt. Ziel: nur ein Stein bleibt übrig – auf den Kreuzbrettern idealerweise in der Mitte.</p>
@@ -290,6 +299,7 @@ header .boardname:active{background:var(--panel2)}
     <div class="btnrow"><button class="btn primary" id="detailClose">Fertig</button></div>
   </div>
 </div>
+<div id="warnblitz"></div>
 <div id="toast"></div>
 
 <script>
@@ -572,7 +582,7 @@ const Store={
   set(k,v){ try{ localStorage.setItem('solitaire.'+k,JSON.stringify(v)); }catch(e){} },
   del(k){ try{ localStorage.removeItem('solitaire.'+k); }catch(e){} }
 };
-const settings=Object.assign({board:'english',theme:'glas',boardLook:'holz',pegStyle:'glas',pegColor:'bunt',autoJump:true,showTargets:true,freeStart:false,sound:true,trainer:false,marks:false,strategy:false},Store.get('settings',{}));
+const settings=Object.assign({board:'english',theme:'glas',boardLook:'holz',pegStyle:'glas',pegColor:'bunt',autoJump:true,showTargets:true,freeStart:false,sound:true,trainer:false,marks:false,strategy:false,alarm:true},Store.get('settings',{}));
 function saveSettings(){ Store.set('settings',settings); }
 function currentLook(){ const t=THEMES[settings.theme]||THEMES.glas; return t.custom?{board:settings.boardLook,peg:settings.pegStyle,color:settings.pegColor}:{board:t.board,peg:t.peg,color:t.color}; }
 
@@ -905,6 +915,17 @@ let statusDetail=null;
 /* Solange gerechnet wird, dreht sich an der Stelle der Ampel ein Rad - der
    Text bleibt stehen, statt durch "pruefe..." ersetzt zu werden. */
 let rechnet=false;
+/* Einmal rot ueber den Bildschirm. Nur beim Uebergang von "1 Stein ist noch
+   erreichbar" zu "nicht mehr erreichbar" - nicht bei jedem weiteren Zug in
+   einer schon verlorenen Stellung, und nicht bei Meldungen wie "Dieser Stein
+   kann nicht springen", die ebenfalls rot sind. */
+let warnblitzTimer=0;
+function warnblitz(erzwingen){
+  if(!settings.alarm&&!erzwingen) return;
+  const e=$('warnblitz'); if(!e) return;
+  e.classList.remove('an'); void e.offsetWidth; e.classList.add('an');
+  clearTimeout(warnblitzTimer); warnblitzTimer=setTimeout(()=>e.classList.remove('an'),1300);
+}
 let blitzAusstehend=0;
 function zeigeRechnet(an){ if(rechnet===an) return; rechnet=an;
   const band=document.getElementById('rechenband'); if(band) band.classList.toggle('on',an);
@@ -1276,6 +1297,10 @@ function evaluatePosition(){
   zeigeRechnet(true);
   const finish=r=>{ if(id!==evalSeq) return; game.evaluating=false; zeigeRechnet(false); if(key!==stateKey()) return;
     game.evalRes={key,best:r.best,complete:r.complete&&!r.cancelled&&!r.timeout,path:r.path||[],nodes:r.nodes,lb,ms:Date.now()-t0,everEmpty:r.everEmpty||null,optFinal:r.optFinal||null,full};
+    /* Der Uebergang zaehlt: vorher war 1 Stein erreichbar, jetzt nicht mehr. */
+    const jetztVerloren=game.evalRes.complete&&game.evalRes.best>lb;
+    const vorherOffen=game.prevEval&&game.prevEval.complete&&game.prevEval.best<=lb;
+    if(jetztVerloren&&vorherOffen) warnblitz();
     showTrainer(); renderOverlay(); };
   const runMain=()=>{ let search; try{ search=CORE.createSearch(game.board,lo,hi,count,opts); }catch(e){ game.evaluating=false; return; }
     const tick=()=>{ if(id!==evalSeq) return; let r; try{ r=search.run(12000); }catch(e){ game.evaluating=false; return; }
@@ -1379,7 +1404,7 @@ function buildSheet(){
   $('versionLine').textContent='Solitaire v'+APP_VERSION;
   const ll2=$('lessonList'); ll2.innerHTML='';
   LESSONS.forEach(L=>{ const ch=document.createElement('button'); ch.className='chip'+(game.lesson&&game.lesson.id===L.id?' on':''); ch.textContent=L.title; ch.addEventListener('click',()=>{ closeSheet(); confirmDiscard(()=>startLesson(L.id)); }); ll2.appendChild(ch); });
-  ['swAuto:autoJump','swTargets:showTargets','swFree:freeStart','swSound:sound','swTrainer:trainer','swMarks:marks'].forEach(s=>{ const [id,k]=s.split(':'); const e=$(id); e.classList.toggle('on',!!settings[k]); e.setAttribute('aria-checked',String(!!settings[k])); });
+  ['swAuto:autoJump','swTargets:showTargets','swFree:freeStart','swSound:sound','swTrainer:trainer','swMarks:marks','swAlarm:alarm'].forEach(s=>{ const [id,k]=s.split(':'); const e=$(id); e.classList.toggle('on',!!settings[k]); e.setAttribute('aria-checked',String(!!settings[k])); });
 }
 function applyLook(){ buildBoardSvg(); render(); }
 function openSheet(){ buildSheet(); $('sheet').classList.add('on'); $('backdrop').classList.add('on'); }
@@ -1398,6 +1423,7 @@ $('swAuto').addEventListener('click',()=>{ settings.autoJump=!settings.autoJump;
 $('swTargets').addEventListener('click',()=>{ settings.showTargets=!settings.showTargets; saveSettings(); buildSheet(); renderOverlay(); });
 $('swTrainer').addEventListener('click',()=>{ settings.trainer=!settings.trainer; saveSettings(); buildSheet(); evaluatePosition(); });
 $('swMarks').addEventListener('click',()=>{ settings.marks=!settings.marks; saveSettings(); buildSheet(); evaluatePosition(); });
+$('swAlarm').addEventListener('click',()=>{ settings.alarm=!settings.alarm; saveSettings(); buildSheet(); if(settings.alarm) warnblitz(true); });
 $('swSound').addEventListener('click',()=>{ settings.sound=!settings.sound; saveSettings(); buildSheet(); if(settings.sound){ Sound.ensure(); Sound.select(); } });
 $('swFree').addEventListener('click',()=>{ settings.freeStart=!settings.freeStart; saveSettings(); buildSheet(); confirmDiscard(()=>newGame()); });
 $('btnUndo').addEventListener('click',undo); $('btnRedo').addEventListener('click',redo);
