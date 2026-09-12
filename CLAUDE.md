@@ -1,6 +1,6 @@
 # Solitaire – Steckbrett-Solitär als Spiel- und Lernapp (iPhone, GitHub Pages)
 
-Stand: v1.2.1 (12.09.2026). Eine einzige Datei `index.html`, kein Build, keine Abhängigkeiten.
+Stand: v1.17 (12.09.2026). Eine einzige Datei `index.html`, kein Build, keine Abhängigkeiten.
 Autor/Product Owner: Lutz („Neo"). Sprache im Chat und in der App: Deutsch, per Du.
 
 ## Was die App kann
@@ -30,7 +30,7 @@ Autor/Product Owner: Lutz („Neo"). Sprache im Chat und in der App: Deutsch, pe
 - **Markierung des letzten Zuges** (nur beim Spulen, `game.lastMove`) verschwindet, sobald man das Brett berührt (`game.markAus`, in `onTap`) – sie stand sonst beim Nachdenken im Weg. Beim nächsten Spulen erscheint sie wieder. Drei Prüfungen in `test_browser`.
 - **Warnblitz** (`settings.alarm`, Standard **an**, Menüzeile Warnblitz): Kostet ein Zug die Lösung, zieht einmal ein rotes Leuchten über den ganzen Bildschirm (`#warnblitz`, 0,62 s, `pointer-events:none`) und dazu `Sound.alarm()` – zwei fallende Sägezahntöne, bewusst anders als `Sound.bad()` (kurzer Stups bei einem unmöglichen Zug) und `Sound.lose()` (Ende der Partie). Ausgelöst nur beim **Übergang** – vorher war das Paritätsminimum erreichbar, jetzt nicht mehr; die Prüfung sitzt in `finish()` der Bewertung und vergleicht gegen `game.prevEval`, **nicht** in `setStatus` (rote Meldungen wie „Dieser Stein kann nicht springen“ dürfen nicht flackern). Kein zweiter Blitz in einer schon verlorenen Stellung. Vier Prüfungen in `test_browser`.
 - **Standardthema** ist `nussbaum` („Nussbaum & Glas“): dunkles Holz mit bunten Glasmurmeln – dieselbe Kombination, die das Startbild zeigt. Wer schon gespielt hat, behält sein gespeichertes Thema; der Standard greift nur bei einer frischen Installation.
-- **Versionszählung.** Dritte Stelle (1.2.x): Korrekturen, Texte, Feinschliff. Zweite Stelle (1.x): neue sichtbare Funktion oder umgebaute Bedienung. Erste Stelle (x.0): neue Substanz – ein Brett, das Lernsystem, Offline-Betrieb. `APP_VERSION` ist die einzige Quelle; sie steht im Startbild (`#splashVersion`, „Version 1.2“) **und** im Menü („Solitaire v1.2“), beide werden im Test gegen `APP_VERSION` geprüft.
+- **Versionszählung (Vorgabe von Lutz).** Die zweite Stelle zählt die **Auslieferungen**, die `index.html` verändert haben: v1.1 war der hochgeladene Stand, danach 16 weitere → v1.17. Reine Doku- oder Test-Commits zählen nicht mit (`git log --oneline <stand>..HEAD -- index.html | wc -l`). Die erste Stelle bleibt für neue Substanz reserviert – Lernsystem, Offline-Betrieb, ein weiteres Brett. `APP_VERSION` ist die einzige Quelle; sie steht im Startbild (`#splashVersion`) und im Menü, beide werden im Test dagegen geprüft.
 - **v1.2.1** (12.09.2026): Spul-Markierung verschwindet beim Berühren des Bretts, eigener Alarmton beim Verlust der Lösung, neues Standardthema „Nussbaum & Glas“.
 - **v1.2** (12.09.2026): Zeile unter dem Brett neu – Ampel mit drei Lichtern, feste Steinzahl, Kurzfassungen, Erklärung im Blatt; Meldungen verschwinden nicht mehr hinter der Fußleiste (Brett nutzt die volle Breite); Lauflicht und Band beim Rechnen; Warnblitz; Texte ohne Störungssprache. Dazu Werkzeug: Tests melden Fehler jetzt über den Exit-Code, neue Layout-Suite, Startskript für Cloud-Sitzungen.
 - Weitere Dateien durchnummeriert (`1-sw.js`, `2-icon.png`).

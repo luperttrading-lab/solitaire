@@ -307,7 +307,7 @@ header .boardname:active{background:var(--panel2)}
 
 <script>
 'use strict';
-const APP_VERSION='1.2.1';
+const APP_VERSION='1.17';
 /* =========================================================================
    Kern: Bretter, Züge, Symmetrien, Paritäts-Schranke, Solver
    (als Fabrik, damit derselbe Code im Web Worker läuft)
@@ -608,7 +608,7 @@ const Sound={ctx:null,
   /* Deutlich anders als bad() (kurzer Stups) und lose() (Ende der Partie):
      zwei fallende Saegezahn-Toene, wie ein Warnsignal. Laeuft zusammen mit
      dem roten Aufleuchten, wenn ein Zug die Loesung kostet. */
-  alarm(){ [0,0.19].forEach(d=>this.tone(208,150,0.26,'sawtooth',0.11,d)); }
+  alarm(){ [0.06,0.30].forEach(d=>this.tone(208,146,0.30,'sawtooth',0.17,d)); }
 };
 
 /* =========================================================================
@@ -929,9 +929,10 @@ let rechnet=false;
    einer schon verlorenen Stellung, und nicht bei Meldungen wie "Dieser Stein
    kann nicht springen", die ebenfalls rot sind. */
 let warnblitzTimer=0;
+let alarmZuletzt=0;
 function warnblitz(erzwingen){
   if(!settings.alarm&&!erzwingen) return;
-  Sound.alarm();
+  alarmZuletzt=Date.now(); Sound.alarm();
   const e=$('warnblitz'); if(!e) return;
   e.classList.remove('an'); void e.offsetWidth; e.classList.add('an');
   clearTimeout(warnblitzTimer); warnblitzTimer=setTimeout(()=>e.classList.remove('an'),1300);
@@ -1353,7 +1354,10 @@ function showTrainer(){
   const prev=game.prevEval;
   if(settings.strategy&&!game.hintOn){ const adv=strategyAdvice(prev,ev);
     if(adv){ setStatus('Strategischer Fehler – '+adv.cat+'. '+adv.why+' Besser: '+adv.betterTxt+'.','bad',[['Zurück & Zug zeigen',()=>{ game.showBetter={path:adv.path.slice()}; undo(); }]],'Jetzt bestenfalls '+adv.best+' Steine, vorher war 1 erreichbar.',KURZ_KLASSE[adv.cat]||'Dieser Zug kostet die Lösung');
-      Sound.bad(); return; }
+      /* Der Alarm beim Verlust der Loesung laeuft schon - der kurze Stups
+         wuerde ihn nur zudecken. */
+      if(Date.now()-alarmZuletzt>1200) Sound.bad();
+      return; }
     if(!settings.trainer){
       if(!ev.complete){ setStatus('Diese Stellung war in sechs Sekunden nicht zu Ende zu rechnen. Das kommt selten vor – spiel einen Zug weiter, dann geht es meist wieder.','warn',null,null,null,'Noch nicht bewertbar'); return; }
       if(ev.best===1){ setStatus('In Ordnung – 1 Stein ist weiterhin erreichbar.','ok',null,null,null,'1 Stein bleibt erreichbar'); return; }

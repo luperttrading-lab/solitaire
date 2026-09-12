@@ -274,6 +274,19 @@ let fails=0; const ok=(name,cond,extra)=>{ console.log((cond?'OK  ':'FAIL')+' '+
   ok('Zurueck-Markierung kommt beim naechsten Spulen wieder', markNachSpulen>0, markNachSpulen);
   ok('Eigener Alarmton fuer den Verlust der Loesung vorhanden',
      await page.evaluate(()=>typeof Sound.alarm==='function'&&Sound.alarm!==Sound.bad));
+  // Der Alarm darf nicht vom kurzen Fehlton zugedeckt werden, und er muss
+  // mindestens so laut sein wie der Sprungton - sonst ueberhoert man ihn.
+  const toene=await page.evaluate(()=>{ const ruf=[]; const ot=Sound.tone.bind(Sound);
+    Sound.tone=(f0,f1,d,t,g,w)=>{ ruf.push({typ:t,gain:g,ab:w||0}); return ot(f0,f1,d,t,g,w); };
+    Sound.jump(); const jump=ruf[0].gain; ruf.length=0;
+    warnblitz(true); const alarm=ruf.slice();
+    Sound.tone=ot; return {jump:jump,alarm:alarm};
+  });
+  console.log('INFO Toene: '+JSON.stringify(toene));
+  ok('Alarmton ist nicht leiser als der Sprungton',
+     toene.alarm.length>=2&&toene.alarm.every(t=>t.gain>=toene.jump*0.9),
+     JSON.stringify(toene.alarm.map(t=>t.gain))+' gegen '+toene.jump);
+  ok('Alarmton setzt erst nach dem Sprungton ein', toene.alarm[0].ab>0, toene.alarm[0].ab);
 
   // Stellung fuer die Fehlersuche neu aufbauen
   await page.evaluate(()=>{ newGame('english');
