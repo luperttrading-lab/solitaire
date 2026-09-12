@@ -77,6 +77,29 @@ const FAELLE=[
  },TXT,NOTE);
  console.log('INFO Brettbreiten im Wechsel kurz/lang/kurz/lang: '+JSON.stringify(stabil));
  ok('Brett springt beim Wechsel der Meldungen nicht',stabil.every(v=>v===stabil[0]),stabil.join(' / '));
+
+ // Die Steinzahl ist der feste Punkt, auf den der Blick faellt: sie darf beim
+ // Wechsel der Meldungen weder wandern noch darf Zeile 2 zweizeilig werden.
+ const ruhe=await p.evaluate((txt,note)=>{
+   const st=document.getElementById('status');
+   const mess=()=>({y:Math.round(st.querySelector('.anker').getBoundingClientRect().top),
+     zeilen:Math.round(st.querySelector('.kurz').getBoundingClientRect().height/19)});
+   const folge=[];
+   setStatus('28 Steine \u00fcbrig.'); folge.push(mess());
+   setStatus('In Ordnung \u2013 1 Stein ist weiterhin erreichbar.','ok',null,null,null,'1 Stein bleibt erreichbar'); folge.push(mess());
+   setStatus(txt,'bad',[['Zur\u00fcck & Zug zeigen',()=>{}]],note,'Fehler: Stein gestrandet'); folge.push(mess());
+   setStatus('28 Steine \u00fcbrig.'); zeigeRechnet(true); folge.push(mess());
+   const bandAn=document.getElementById('rechenband').classList.contains('on');
+   zeigeRechnet(false); folge.push(mess());
+   const bandAus=document.getElementById('rechenband').classList.contains('on');
+   return {folge:folge,bandAn:bandAn,bandAus:bandAus};
+ },TXT,NOTE);
+ ok('Steinzahl bleibt beim Wechsel der Meldungen an derselben Stelle',
+    ruhe.folge.every(f=>f.y===ruhe.folge[0].y), ruhe.folge.map(f=>f.y).join(' / '));
+ ok('Untere Zeile bleibt immer einzeilig',
+    ruhe.folge.every(f=>f.zeilen<=1), ruhe.folge.map(f=>f.zeilen).join(' / '));
+ ok('Laufband erscheint beim Rechnen und verschwindet danach',
+    ruhe.bandAn&&!ruhe.bandAus, ruhe.bandAn+' / '+ruhe.bandAus);
  await p.close();
  await browser.close();
  console.log(fails?`\n${fails} FEHLER`:'\nLAYOUT-TESTS OK'); process.exitCode=fails?1:0;

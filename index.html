@@ -54,11 +54,12 @@ header .boardname:active{background:var(--panel2)}
 #stage{flex:none;display:flex;align-items:center;justify-content:center;padding:8px 0}
 #board{touch-action:none;display:block}
 .toolbar{flex:none;margin-top:auto}
-#status,#statusProbe{min-height:52px;flex-shrink:0;padding:4px 8px;color:var(--muted);font-size:14px;line-height:1.35;display:flex;align-items:center;justify-content:center;gap:12px}
-#status .saeule,#statusProbe .saeule{display:flex;flex-direction:column;align-items:center;gap:2px;min-width:0;flex:1}
+#status,#statusProbe{min-height:68px;flex-shrink:0;padding:4px 8px;color:var(--muted);font-size:14px;line-height:1.35;display:flex;align-items:center;justify-content:center;gap:12px}
+#status .saeule,#statusProbe .saeule{display:flex;flex-direction:column;align-items:center;gap:2px;min-width:0;flex:1;overflow:hidden}
 #status .anker,#statusProbe .anker{color:var(--ink);font-size:15px;white-space:nowrap}
-#status .kurz,#statusProbe .kurz{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;text-align:center}
-#status .kurz:empty{display:none}
+#status .kurz,#statusProbe .kurz{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-align:center;max-width:100%}
+#status .kurz{min-height:19px}
+#status .kurz:empty::after{content:'\u00a0'}
 #status.tapbar{cursor:pointer}
 #status .dot{flex:none;width:22px;height:22px;border-radius:50%;background:var(--muted);box-shadow:inset 0 -2px 4px rgba(0,0,0,.35),0 1px 2px rgba(0,0,0,.4)}
 #status.ok .dot{background:#3fae6a}
@@ -67,9 +68,15 @@ header .boardname:active{background:var(--panel2)}
 #status.hint .dot{background:var(--brass2)}
 #status .mehr{flex:none;width:34px;height:34px;margin:-8px 0;border-radius:50%;border:1.5px solid var(--brass2);background:rgba(217,178,95,.12);color:var(--brass2);font-family:var(--serif);font-size:19px;line-height:31px;font-style:italic}
 #status.tapbar:active .mehr{background:rgba(217,178,95,.3)}
-#status .rad{flex:none;width:22px;height:22px;border-radius:50%;border:3px solid var(--line);border-top-color:var(--brass2);border-right-color:var(--brass2);animation:dreh .9s linear infinite}
+#status .rad{flex:none;width:26px;height:26px;margin:-2px;border-radius:50%;border:3px solid rgba(217,178,95,.22);border-top-color:var(--brass2);border-right-color:var(--brass2);animation:dreh .8s linear infinite}
+/* Zusaetzlich zum Rad laeuft ein Band unter der Zeile durch - ueber die
+   ganze Breite, damit auch ein kurzer Rechenschritt zu sehen ist. */
+#rechenband{flex:none;height:3px;margin:0 8px;border-radius:2px;background:var(--line);overflow:hidden;opacity:0;transition:opacity .15s}
+#rechenband.on{opacity:1}
+#rechenband i{display:block;height:100%;width:38%;border-radius:2px;background:linear-gradient(90deg,transparent,var(--brass2),transparent);transform:translateX(-100%);animation:wandern 1.1s ease-in-out infinite}
+@keyframes wandern{to{transform:translateX(360%)}}
+@media (prefers-reduced-motion:reduce){#status .rad{animation-duration:2.4s}#rechenband i{animation-duration:2.4s}}
 @keyframes dreh{to{transform:rotate(360deg)}}
-@media (prefers-reduced-motion:reduce){#status .rad{animation-duration:2.4s}}
 /* Volltext, Zusatzzeile und Aktionen stehen im Blatt; hier bleiben sie im
    Dokument, damit statusFullText() sie liefert, sind aber nicht zu sehen. */
 #status .voll,#status .note,#status .link{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
@@ -200,6 +207,7 @@ header .boardname:active{background:var(--panel2)}
   <div class="quick"><button id="btnStrategy" class="pill" aria-pressed="false">Strategie-Hinweise: aus</button></div>
   <div id="stage"><svg id="board" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Spielbrett"></svg></div>
   <div id="status"></div>
+  <div id="rechenband"><i></i></div>
   <div id="lessonBar" hidden><div class="lt" id="lessonTitle"></div><div class="lx" id="lessonText"></div><div class="lb"><button class="btn" id="lsDemo">Vormachen</button><button class="btn" id="lsRestart">Abschnitt neu</button><button class="btn ghost" id="lsQuit">Beenden</button></div></div>
   <div class="toolbar">
     <button id="btnUndo" aria-label="Rückgängig"><svg viewBox="0 0 24 24"><path d="M9 14L4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 0 12h-3"/></svg>Zurück</button>
@@ -805,7 +813,7 @@ function renderHud(){
    waren 74). Gemessen wird einmal je Breite, damit das Brett nicht bei jedem
    Zug seine Groesse aendert. */
 const STATUS_MAX_TEXT='Strategischer Fehler \u2013 Stein gestrandet im linken Arm und rechts\u2026';
-let statusReserveCache={w:-1,h:52};
+let statusReserveCache={w:-1,h:68};
 function statusReserve(){
   const w=Math.round(statusEl.getBoundingClientRect().width);
   if(w<=0) return statusReserveCache.h;
@@ -819,7 +827,7 @@ function statusReserve(){
   probe.appendChild(sa);
   const i=document.createElement('span'); i.className='mehr'; i.textContent='\u2139'; probe.appendChild(i);
   document.body.appendChild(probe);
-  const h=Math.max(52,Math.ceil(probe.getBoundingClientRect().height));
+  const h=Math.max(68,Math.ceil(probe.getBoundingClientRect().height));
   probe.remove(); statusReserveCache={w:w,h:h}; return h;
 }
 /* Sicherheitsnetz gegen alles, was sich nicht vorausberechnen laesst
@@ -859,10 +867,12 @@ setInterval(()=>{ if(game.startedAt&&!game.finished) $('hudTime').textContent=fm
 /* Die Zeile unter dem Brett zeigt eine Ampel und hoechstens zwei Zeilen.
    Begruendung, Zusatzzeile und Aktionen stehen im Blatt, das ein Tippen auf
    die Zeile oeffnet. So bleibt das Brett so gross wie der Bildschirm erlaubt. */
+/* Die untere Zeile soll einzeilig bleiben: erster Satz, hoechstens 40
+   Zeichen. Der volle Wortlaut steht im Blatt. */
 function kurzfassung(text){
   const m=text.match(/^[^.!?]*[.!?]/);
-  let k=(m?m[0]:text).trim();
-  if(k.length>72) k=k.slice(0,69).replace(/\s+\S*$/,'')+'\u2026';
+  let k=(m?m[0]:text).trim().replace(/\.$/,'');
+  if(k.length>40) k=k.slice(0,37).replace(/\s+\S*$/,'')+'\u2026';
   return k;
 }
 let statusDetail=null;
@@ -870,6 +880,7 @@ let statusDetail=null;
    Text bleibt stehen, statt durch "pruefe..." ersetzt zu werden. */
 let rechnet=false;
 function zeigeRechnet(an){ if(rechnet===an) return; rechnet=an;
+  const band=document.getElementById('rechenband'); if(band) band.classList.toggle('on',an);
   const alt=statusEl.querySelector(an?'.dot':'.rad'); if(!alt) return;
   const neu=document.createElement('span'); neu.className=an?'rad':'dot'; alt.replaceWith(neu); }
 function setStatus(text,cls,linkText,linkFn,note,kurz){
@@ -1264,21 +1275,21 @@ function showTrainer(){
   const ev=game.evalRes; if(!ev||ev.key!==stateKey()) return;
   const prev=game.prevEval;
   if(settings.strategy&&!game.hintOn){ const adv=strategyAdvice(prev,ev);
-    if(adv){ setStatus('Strategischer Fehler – '+adv.cat+'. '+adv.why+' Besser: '+adv.betterTxt+'.','bad',[['Zurück & Zug zeigen',()=>{ game.showBetter={path:adv.path.slice()}; undo(); }]],'Jetzt bestenfalls '+adv.best+' Steine, vorher war 1 erreichbar.');
+    if(adv){ setStatus('Strategischer Fehler – '+adv.cat+'. '+adv.why+' Besser: '+adv.betterTxt+'.','bad',[['Zurück & Zug zeigen',()=>{ game.showBetter={path:adv.path.slice()}; undo(); }]],'Jetzt bestenfalls '+adv.best+' Steine, vorher war 1 erreichbar.','Fehler: '+adv.cat);
       Sound.bad(); return; }
     if(!settings.trainer){
-      if(!ev.complete){ setStatus('Zug noch nicht bewertbar – zu viele Stellungen. Ab etwa 26 Steinen wird jeder Zug geprüft.','warn'); return; }
-      if(ev.best===1){ setStatus('In Ordnung – 1 Stein ist weiterhin erreichbar.','ok'); return; }
+      if(!ev.complete){ setStatus('Zug noch nicht bewertbar – zu viele Stellungen. Ab etwa 26 Steinen wird jeder Zug geprüft.','warn',null,null,null,'Noch nicht bewertbar'); return; }
+      if(ev.best===1){ setStatus('In Ordnung – 1 Stein ist weiterhin erreichbar.','ok',null,null,null,'1 Stein bleibt erreichbar'); return; }
       const nf=ev.optFinal?ev.optFinal.count:0;
-      setStatus('Bestenfalls '+ev.best+' Steine'+(nf>1?' ('+nf+' Endbilder)':'')+' – der entscheidende Fehler lag früher.','bad',[['Fehler suchen',()=>findMistake()]]); return; } }
+      setStatus('Bestenfalls '+ev.best+' Steine'+(nf>1?' ('+nf+' Endbilder)':'')+' – der entscheidende Fehler lag früher.','bad',[['Fehler suchen',()=>findMistake()]],null,'Bestenfalls '+ev.best+' Steine'); return; } }
   if(!settings.trainer||game.hintOn) return;
-  if(!ev.complete){ setStatus('Trainer: Stellung zu groß für eine schnelle Bewertung – ab etwa 26 Steinen wird bewertet.','warn'); return; }
+  if(!ev.complete){ setStatus('Trainer: Stellung zu groß für eine schnelle Bewertung – ab etwa 26 Steinen wird bewertet.','warn',null,null,null,'Noch nicht bewertbar'); return; }
   const note=game.lastMove?game.lastMove.text+' '+game.lastMove.count:'';
-  if(ev.best===1){ setStatus('Trainer: 1 Stein ist noch erreichbar.','ok',null,null,note); return; }
+  if(ev.best===1){ setStatus('Trainer: 1 Stein ist noch erreichbar.','ok',null,null,note,'1 Stein bleibt erreichbar'); return; }
   const lost=prev&&prev.complete&&prev.best<ev.best;
   const nf=ev.optFinal?ev.optFinal.count:0;
   const t='Trainer: ab hier bestenfalls '+ev.best+' Steine'+(nf>1?' ('+nf+' verschiedene Endbilder)':nf===1?' (ein einziges Endbild)':'')+'.'+(lost?' Der letzte Zug hat das gekostet.':'');
-  setStatus(t,'bad',lost?[['Zurück',()=>undo()]]:[['Fehler suchen',()=>findMistake()]],note);
+  setStatus(t,'bad',lost?[['Zurück',()=>undo()]]:[['Fehler suchen',()=>findMistake()]],note,'Bestenfalls '+ev.best+' Steine'+(lost?' – Zug hat es gekostet':''));
 }
 function describeHint(){
   const h=currentLine(); if(!h){ setStatus('Kein Zug gefunden.','bad'); return; }
