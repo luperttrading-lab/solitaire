@@ -22,6 +22,8 @@ Autor/Product Owner: Lutz („Neo"). Sprache im Chat und in der App: Deutsch, pe
 - „L-Purge" mit zurückkehrendem Hilfsstein existiert nicht (alle Varianten mit 1–2 Katalysatoren durchprobiert).
 - Zählung der Suche = verschiedene Stellungen (Spiegelungen/Drehungen zusammengefasst), nicht Besuche. iPhone: ≈0,4–0,5 Mio. Stellungen/s.
 - Erreichbare Stellungen zweier Beispielstellungen mit 27 Steinen: 5.717.512 und 5.965.349 (exakt, BFS = DFS).
+- Gelbe Ampel = die Bewertung war nach 6 s (`timeMs`) nicht vollständig. Gemessen über je drei Zufallsstellungen mit 23–32 Steinen: **alle** liefen durch, die längste in 5,0 s. Gelb ist also der Ausnahmefall, nicht der Eroeffnungszustand. Die früheren Nutzertexte „ab etwa 26 Steinen wird bewertet“ waren falsch und sind ersetzt.
+- Die Zahl **24** (`full = count<=24`) steuert etwas anderes: nur darunter werden zusätzlich `everEmpty`/`optFinal` berechnet, also die Daten für die Markierung. Sie hängt nicht an `settings.marks` – bekannt, bewusst so gelassen.
 
 ## Konventionen von Lutz
 - Eine ausgelieferte Datei: `index.html`. Version in `APP_VERSION` und im Menü; jeder Stand bekommt zusätzlich ein Git-Tag (`v1.1`). Keine versionierte Zweitkopie im Repo – Git hält die Stände.

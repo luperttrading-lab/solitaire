@@ -71,11 +71,13 @@ header .boardname:active{background:var(--panel2)}
 #status.ok .dot b.gr{color:#3fae6a}
 /* Waehrend gerechnet wird, laeuft das Licht von oben nach unten durch und
    bleibt danach auf der zutreffenden Farbe stehen. */
-#status.rechnet .dot b{animation:ampellauf 1.05s ease-in-out infinite}
+#status.rechnet .dot b{animation:ampellauf .96s linear infinite}
 #status.rechnet .dot b.r{animation-delay:0s}
-#status.rechnet .dot b.g{animation-delay:.18s}
-#status.rechnet .dot b.gr{animation-delay:.36s}
-@keyframes ampellauf{0%,55%,100%{opacity:.16}22%{opacity:1}}
+#status.rechnet .dot b.g{animation-delay:.32s}
+#status.rechnet .dot b.gr{animation-delay:.64s}
+/* Jedes Licht brennt ein Drittel des Zyklus, die drei loesen sich ohne
+   Luecke ab - es ist also immer eines an. */
+@keyframes ampellauf{0%{opacity:1}33%{opacity:1}40%{opacity:.16}100%{opacity:.16}}
 #status .mehr{flex:none;width:34px;height:34px;margin:0 0 -7px;border-radius:50%;border:1.5px solid var(--brass2);background:rgba(217,178,95,.12);display:flex;align-items:center;justify-content:center}
 #status .mehr svg{width:16px;height:16px;stroke:var(--brass2);fill:none;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
 #status.tapbar:active .mehr{background:rgba(217,178,95,.3)}
@@ -1275,7 +1277,7 @@ function evaluatePosition(){
       done=true; w.removeEventListener('message',handler); const r=e.data.r; if(r.cancelled) r.timeout=true; finish(r); };
     w.addEventListener('message',handler);
     try{ w.postMessage({id:'ev'+id,def:game.board.def,lo,hi,count,opts}); }catch(e){ if(!done){ done=true; w.removeEventListener('message',handler); runMain(); } }
-    setTimeout(()=>{ if(!done&&id===evalSeq){ done=true; w.removeEventListener('message',handler); try{ w.postMessage({cancel:'ev'+id}); }catch(x){} game.evaluating=false; zeigeRechnet(false); if(settings.trainer) setStatus('Trainer: Stellung zu groß für eine schnelle Bewertung.','warn'); } },opts.timeMs+2500);
+    setTimeout(()=>{ if(!done&&id===evalSeq){ done=true; w.removeEventListener('message',handler); try{ w.postMessage({cancel:'ev'+id}); }catch(x){} game.evaluating=false; zeigeRechnet(false); if(settings.trainer) setStatus('Trainer: Diese Stellung war nicht in sechs Sekunden zu Ende zu rechnen.','warn'); } },opts.timeMs+2500);
   } else runMain();
 }
 function dirWord(m){ const a=game.board.cells[m.from], b=game.board.cells[m.to]; const dr=b.r-a.r, dc=b.c-a.c; if(game.board.def.type==='tri') return dc>0&&dr===0?'nach rechts':dc<0&&dr===0?'nach links':dr>0?'nach unten':'nach oben'; return dr>0?'nach unten':dr<0?'nach oben':dc>0?'nach rechts':'nach links'; }
@@ -1305,12 +1307,12 @@ function showTrainer(){
     if(adv){ setStatus('Strategischer Fehler – '+adv.cat+'. '+adv.why+' Besser: '+adv.betterTxt+'.','bad',[['Zurück & Zug zeigen',()=>{ game.showBetter={path:adv.path.slice()}; undo(); }]],'Jetzt bestenfalls '+adv.best+' Steine, vorher war 1 erreichbar.',KURZ_KLASSE[adv.cat]||'Dieser Zug kostet die Lösung');
       Sound.bad(); return; }
     if(!settings.trainer){
-      if(!ev.complete){ setStatus('Zug noch nicht bewertbar – zu viele Stellungen. Ab etwa 26 Steinen wird jeder Zug geprüft.','warn',null,null,null,'Noch nicht bewertbar'); return; }
+      if(!ev.complete){ setStatus('Diese Stellung war in sechs Sekunden nicht zu Ende zu rechnen. Das kommt selten vor – spiel einen Zug weiter, dann geht es meist wieder.','warn',null,null,null,'Noch nicht bewertbar'); return; }
       if(ev.best===1){ setStatus('In Ordnung – 1 Stein ist weiterhin erreichbar.','ok',null,null,null,'1 Stein bleibt erreichbar'); return; }
       const nf=ev.optFinal?ev.optFinal.count:0;
       setStatus('Bestenfalls '+ev.best+' Steine'+(nf>1?' ('+nf+' Endbilder)':'')+' – der entscheidende Fehler lag früher.','bad',[['Fehler suchen',()=>findMistake()]],null,'Bestenfalls '+ev.best+' Steine'); return; } }
   if(!settings.trainer||game.hintOn) return;
-  if(!ev.complete){ setStatus('Trainer: Stellung zu groß für eine schnelle Bewertung – ab etwa 26 Steinen wird bewertet.','warn',null,null,null,'Noch nicht bewertbar'); return; }
+  if(!ev.complete){ setStatus('Trainer: Diese Stellung war in sechs Sekunden nicht zu Ende zu rechnen. Das kommt selten vor – spiel einen Zug weiter, dann geht es meist wieder.','warn',null,null,null,'Noch nicht bewertbar'); return; }
   const note=game.lastMove?game.lastMove.text+' '+game.lastMove.count:'';
   if(ev.best===1){ setStatus('Trainer: 1 Stein ist noch erreichbar.','ok',null,null,note,'1 Stein bleibt erreichbar'); return; }
   const lost=prev&&prev.complete&&prev.best<ev.best;
