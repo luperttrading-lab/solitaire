@@ -39,6 +39,9 @@ const FAELLE=[
       zeileVerdeckt:Math.round(Math.max(0,st.getBoundingClientRect().bottom-tr.top)),
       ampelDa:!!dot&&dot.getBoundingClientRect().width>0,
       ampelGross:dot?Math.round(dot.getBoundingClientRect().width):0,
+      ampelVersatz:(()=>{ if(!dot) return 99; const dr=dot.getBoundingClientRect(), m=dr.left+dr.width/2;
+        return Math.max(...[...dot.querySelectorAll('b')].map(x=>{const r=x.getBoundingClientRect();
+          return Math.abs((r.left+r.width/2)-m);})); })(),
       knopfGross:mehr?Math.round(Math.min(mehr.getBoundingClientRect().width,mehr.getBoundingClientRect().height)):0,
       ankerText:anker?anker.textContent:'',
       zeilenZahl:zeilen,
@@ -54,6 +57,7 @@ const FAELLE=[
   ok('Meldungszeile steht ueber der Fussleiste ('+name+')',r.zeileVerdeckt===0,r.zeileVerdeckt+' px');
   ok('Ampelpunkt ist sichtbar ('+name+')',r.ampelDa,r.ampelDa);
   ok('Ampelpunkt ist gross genug zum Erkennen ('+name+')',r.ampelGross>=20,r.ampelGross+' px');
+  ok('Ampellichter sitzen mittig im Gehaeuse ('+name+')',r.ampelVersatz<=1,r.ampelVersatz+' px Versatz');
   ok('Knopf fuer die Erklaerung ist gross genug zum Treffen ('+name+')',r.knopfGross>=30,r.knopfGross+' px');
   ok('Steinzahl steht fest in der oberen Zeile ('+name+')',/\d+ Steine? übrig/.test(r.ankerText),JSON.stringify(r.ankerText));
   ok('Zeile bleibt bei hoechstens zwei Zeilen ('+name+')',r.zeilenZahl<=2,r.zeilenZahl+' Zeilen');
