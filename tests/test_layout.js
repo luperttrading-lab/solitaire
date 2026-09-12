@@ -95,17 +95,36 @@ const FAELLE=[
    setStatus('In Ordnung \u2013 1 Stein ist weiterhin erreichbar.','ok',null,null,null,'1 Stein bleibt erreichbar'); folge.push(mess());
    setStatus(txt,'bad',[['Zur\u00fcck & Zug zeigen',()=>{}]],note,'Fehler: Stein gestrandet'); folge.push(mess());
    setStatus('28 Steine \u00fcbrig.'); zeigeRechnet(true); folge.push(mess());
-   const pendelAn=st.classList.contains('rechnet');
+   const band=document.getElementById('rechenband');
+   const laufAn=st.classList.contains('rechnet'), bandAn=band.classList.contains('on');
    zeigeRechnet(false); folge.push(mess());
-   const pendelAus=st.classList.contains('rechnet');
-   return {folge:folge,pendelAn:pendelAn,pendelAus:pendelAus};
+   const laufAus=st.classList.contains('rechnet'), bandAus=band.classList.contains('on');
+   // Gleicher Takt: Ampel und Band duerfen nicht gegeneinander driften
+   const dauerAmpel=getComputedStyle(st.querySelector('.dot b.r')).animationDuration;
+   st.classList.add('rechnet'); const dA=getComputedStyle(st.querySelector('.dot b.r')).animationDuration; st.classList.remove('rechnet');
+   const dB=getComputedStyle(band.querySelector('i')).animationDuration;
+   return {folge:folge,laufAn:laufAn,laufAus:laufAus,bandAn:bandAn,bandAus:bandAus,takt:[dA,dB]};
  },TXT,NOTE);
  ok('Steinzahl bleibt beim Wechsel der Meldungen an derselben Stelle',
     ruhe.folge.every(f=>f.y===ruhe.folge[0].y), ruhe.folge.map(f=>f.y).join(' / '));
  ok('Untere Zeile bleibt immer einzeilig',
     ruhe.folge.every(f=>f.zeilen<=1), ruhe.folge.map(f=>f.zeilen).join(' / '));
- ok('Ampel pendelt beim Rechnen und steht danach still',
-    ruhe.pendelAn&&!ruhe.pendelAus, ruhe.pendelAn+' / '+ruhe.pendelAus);
+ ok('Ampel laeuft beim Rechnen und steht danach still', ruhe.laufAn&&!ruhe.laufAus, ruhe.laufAn+' / '+ruhe.laufAus);
+ ok('Band laeuft beim Rechnen und verschwindet danach', ruhe.bandAn&&!ruhe.bandAus, ruhe.bandAn+' / '+ruhe.bandAus);
+ ok('Ampel und Band laufen im selben Takt', ruhe.takt[0]===ruhe.takt[1]&&ruhe.takt[0]!=='0s', ruhe.takt.join(' / '));
+
+ // Sobald das Ergebnis steht, blitzt das zutreffende Licht einmal auf - und
+ // nur einmal: danach ist die Klasse wieder weg.
+ const blitz=await p.evaluate(()=>{ setStatus('28 Steine \u00fcbrig.'); zeigeRechnet(true); zeigeRechnet(false);
+   setStatus('In Ordnung \u2013 1 Stein ist weiterhin erreichbar.','ok',null,null,null,'1 Stein bleibt erreichbar');
+   return document.getElementById('status').classList.contains('blitz'); });
+ await sleep(800);
+ const blitzWeg=await p.evaluate(()=>!document.getElementById('status').classList.contains('blitz'));
+ const ohneRechnen=await p.evaluate(()=>{ setStatus('In Ordnung \u2013 1 Stein ist weiterhin erreichbar.','ok',null,null,null,'1 Stein bleibt erreichbar');
+   return document.getElementById('status').classList.contains('blitz'); });
+ ok('Ergebnislicht blitzt nach dem Rechnen einmal auf', blitz, blitz);
+ ok('Der Blitz ist nach einem Durchgang wieder aus', blitzWeg, blitzWeg);
+ ok('Ohne vorheriges Rechnen blitzt nichts', !ohneRechnen, ohneRechnen);
 
  // Waehrend des Pendelns darf es nie ganz dunkel sein: ueber einen Zyklus
  // abtasten und den schwaechsten Moment festhalten.
@@ -116,7 +135,7 @@ const FAELLE=[
    if(m<schwaechster) schwaechster=m; await sleep(30);
  }
  await p.evaluate(()=>zeigeRechnet(false));
- ok('Beim Pendeln ist immer ein Licht deutlich an', schwaechster>=0.6, 'schwaechster Moment '+schwaechster.toFixed(2));
+ ok('Beim Durchlauf ist immer ein Licht deutlich an', schwaechster>=0.6, 'schwaechster Moment '+schwaechster.toFixed(2));
  await p.close();
  await browser.close();
  console.log(fails?`\n${fails} FEHLER`:'\nLAYOUT-TESTS OK'); process.exitCode=fails?1:0;

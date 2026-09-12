@@ -71,21 +71,27 @@ header .boardname:active{background:var(--panel2)}
 #status.ok .dot b.gr{color:#3fae6a}
 /* Waehrend gerechnet wird, laeuft das Licht von oben nach unten durch und
    bleibt danach auf der zutreffenden Farbe stehen. */
-/* Beim Rechnen pendelt das Licht: rot, gelb, gruen, gelb, rot ... Das
-   vorige Licht glimmt kurz nach, so folgt das Auge einer Bewegung statt
-   einem Blinken. Ein Zyklus = 1,2 s, vier Schritte; Gelb liegt in der
-   Mitte und leuchtet deshalb zweimal je Zyklus. Es ist nie alles dunkel. */
-#status.rechnet .dot b{animation-duration:1.2s;animation-timing-function:ease-in-out;animation-iteration-count:infinite}
-#status.rechnet .dot b.r{animation-name:pendelRot}
-#status.rechnet .dot b.g{animation-name:pendelGelb}
-#status.rechnet .dot b.gr{animation-name:pendelGruen}
-@keyframes pendelRot{0%{opacity:1}25%{opacity:.35}50%{opacity:.16}75%{opacity:.35}100%{opacity:1}}
-@keyframes pendelGelb{0%{opacity:.35}25%{opacity:1}50%{opacity:.35}75%{opacity:1}100%{opacity:.35}}
-@keyframes pendelGruen{0%{opacity:.16}25%{opacity:.35}50%{opacity:1}75%{opacity:.35}100%{opacity:.16}}
+/* Beim Rechnen laeuft das Licht von oben nach unten durch: rot, gelb, gruen,
+   rot ... Jedes Licht brennt ein Drittel des Zyklus, die drei loesen sich
+   ohne Luecke ab - es ist nie alles dunkel. Das Band unter der Zeile laeuft
+   im selben Takt (0,96 s), damit beide nicht gegeneinander driften. */
+#status.rechnet .dot b{animation:ampellauf .96s linear infinite}
+#status.rechnet .dot b.r{animation-delay:0s}
+#status.rechnet .dot b.g{animation-delay:.32s}
+#status.rechnet .dot b.gr{animation-delay:.64s}
+@keyframes ampellauf{0%{opacity:1}33%{opacity:1}40%{opacity:.16}100%{opacity:.16}}
+/* Sobald das Ergebnis steht, blitzt das zutreffende Licht einmal auf und
+   kommt dann zur Ruhe - so ist der Uebergang vom Rechnen zum Urteil zu sehen. */
+#status.blitz.bad .dot b.r,#status.blitz.warn .dot b.g,#status.blitz.ok .dot b.gr{animation:blitz .5s ease-out 1}
+@keyframes blitz{0%{transform:scale(1);box-shadow:0 0 0 0 currentColor}35%{transform:scale(1.45);box-shadow:0 0 14px 4px currentColor}100%{transform:scale(1);box-shadow:0 0 8px currentColor}}
+#rechenband{flex:none;height:3px;margin:0 8px;border-radius:2px;background:var(--line);overflow:hidden;opacity:0;transition:opacity .15s}
+#rechenband.on{opacity:1}
+#rechenband i{display:block;height:100%;width:38%;border-radius:2px;background:linear-gradient(90deg,transparent,var(--brass2),transparent);transform:translateX(-100%);animation:wandern .96s linear infinite}
+@keyframes wandern{to{transform:translateX(360%)}}
 #status .mehr{flex:none;width:34px;height:34px;margin:0 0 -7px;border-radius:50%;border:1.5px solid var(--brass2);background:rgba(217,178,95,.12);display:flex;align-items:center;justify-content:center}
 #status .mehr svg{width:16px;height:16px;stroke:var(--brass2);fill:none;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
 #status.tapbar:active .mehr{background:rgba(217,178,95,.3)}
-@media (prefers-reduced-motion:reduce){#status.rechnet .dot b{animation-duration:2.8s}}
+@media (prefers-reduced-motion:reduce){#status.rechnet .dot b{animation-duration:2.4s}#rechenband i{animation-duration:2.4s}}
 @keyframes dreh{to{transform:rotate(360deg)}}
 /* Volltext, Zusatzzeile und Aktionen stehen im Blatt; hier bleiben sie im
    Dokument, damit statusFullText() sie liefert, sind aber nicht zu sehen. */
@@ -217,6 +223,7 @@ header .boardname:active{background:var(--panel2)}
   <div class="quick"><button id="btnStrategy" class="pill" aria-pressed="false">Strategie-Hinweise: aus</button></div>
   <div id="stage"><svg id="board" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Spielbrett"></svg></div>
   <div id="status"></div>
+  <div id="rechenband"><i></i></div>
   <div id="lessonBar" hidden><div class="lt" id="lessonTitle"></div><div class="lx" id="lessonText"></div><div class="lb"><button class="btn" id="lsDemo">Vormachen</button><button class="btn" id="lsRestart">Abschnitt neu</button><button class="btn ghost" id="lsQuit">Beenden</button></div></div>
   <div class="toolbar">
     <button id="btnUndo" aria-label="Rückgängig"><svg viewBox="0 0 24 24"><path d="M9 14L4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 0 12h-3"/></svg>Zurück</button>
@@ -898,8 +905,13 @@ let statusDetail=null;
 /* Solange gerechnet wird, dreht sich an der Stelle der Ampel ein Rad - der
    Text bleibt stehen, statt durch "pruefe..." ersetzt zu werden. */
 let rechnet=false;
+let blitzAusstehend=0;
 function zeigeRechnet(an){ if(rechnet===an) return; rechnet=an;
-  statusEl.classList.toggle('rechnet',an); }
+  const band=document.getElementById('rechenband'); if(band) band.classList.toggle('on',an);
+  statusEl.classList.toggle('rechnet',an);
+  /* Das Ergebnis kommt gleich nach dem Abschalten per setStatus; die naechste
+     farbige Meldung darf einmal aufblitzen. Kommt keine, verfaellt das. */
+  if(!an){ blitzAusstehend=Date.now(); } }
 function setStatus(text,cls,linkText,linkFn,note,kurz){
   const isArr=Array.isArray(linkText);
   const links=isArr?linkText:(linkText?[[linkText,linkFn]]:[]);
@@ -918,6 +930,8 @@ function setStatus(text,cls,linkText,linkFn,note,kurz){
   dot.innerHTML='<b class="r"></b><b class="g"></b><b class="gr"></b>';
   statusEl.appendChild(dot);
   statusEl.classList.toggle('rechnet',rechnet);
+  if(blitzAusstehend&&/^(ok|bad|warn)$/.test(cls||'')&&Date.now()-blitzAusstehend<1500){
+    blitzAusstehend=0; statusEl.classList.add('blitz'); setTimeout(()=>statusEl.classList.remove('blitz'),600); }
   const saeule=document.createElement('span'); saeule.className='saeule';
   const anker=document.createElement('span'); anker.className='anker'; anker.textContent=ankerText(); saeule.appendChild(anker);
   const k=document.createElement('span'); k.className='kurz'; k.textContent=kurzT;
