@@ -95,17 +95,28 @@ const FAELLE=[
    setStatus('In Ordnung \u2013 1 Stein ist weiterhin erreichbar.','ok',null,null,null,'1 Stein bleibt erreichbar'); folge.push(mess());
    setStatus(txt,'bad',[['Zur\u00fcck & Zug zeigen',()=>{}]],note,'Fehler: Stein gestrandet'); folge.push(mess());
    setStatus('28 Steine \u00fcbrig.'); zeigeRechnet(true); folge.push(mess());
-   const bandAn=document.getElementById('rechenband').classList.contains('on');
+   const pendelAn=st.classList.contains('rechnet');
    zeigeRechnet(false); folge.push(mess());
-   const bandAus=document.getElementById('rechenband').classList.contains('on');
-   return {folge:folge,bandAn:bandAn,bandAus:bandAus};
+   const pendelAus=st.classList.contains('rechnet');
+   return {folge:folge,pendelAn:pendelAn,pendelAus:pendelAus};
  },TXT,NOTE);
  ok('Steinzahl bleibt beim Wechsel der Meldungen an derselben Stelle',
     ruhe.folge.every(f=>f.y===ruhe.folge[0].y), ruhe.folge.map(f=>f.y).join(' / '));
  ok('Untere Zeile bleibt immer einzeilig',
     ruhe.folge.every(f=>f.zeilen<=1), ruhe.folge.map(f=>f.zeilen).join(' / '));
- ok('Laufband erscheint beim Rechnen und verschwindet danach',
-    ruhe.bandAn&&!ruhe.bandAus, ruhe.bandAn+' / '+ruhe.bandAus);
+ ok('Ampel pendelt beim Rechnen und steht danach still',
+    ruhe.pendelAn&&!ruhe.pendelAus, ruhe.pendelAn+' / '+ruhe.pendelAus);
+
+ // Waehrend des Pendelns darf es nie ganz dunkel sein: ueber einen Zyklus
+ // abtasten und den schwaechsten Moment festhalten.
+ await p.evaluate(()=>{ setStatus('28 Steine \u00fcbrig.'); zeigeRechnet(true); });
+ let schwaechster=1;
+ for(let i=0;i<50;i++){
+   const m=await p.evaluate(()=>Math.max(...[...document.querySelectorAll('#status .dot b')].map(x=>parseFloat(getComputedStyle(x).opacity))));
+   if(m<schwaechster) schwaechster=m; await sleep(30);
+ }
+ await p.evaluate(()=>zeigeRechnet(false));
+ ok('Beim Pendeln ist immer ein Licht deutlich an', schwaechster>=0.6, 'schwaechster Moment '+schwaechster.toFixed(2));
  await p.close();
  await browser.close();
  console.log(fails?`\n${fails} FEHLER`:'\nLAYOUT-TESTS OK'); process.exitCode=fails?1:0;
