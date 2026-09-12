@@ -35,6 +35,8 @@ button:focus-visible,[tabindex]:focus-visible{outline:2px solid var(--brass2);ou
   text-shadow:0 2px 18px rgba(233,205,124,.18)}
 #splash p{margin:0 0 26px;color:var(--muted);font-size:16px;letter-spacing:.06em}
 #splash svg{width:min(78vw,340px);height:auto;filter:drop-shadow(0 22px 30px rgba(0,0,0,.55))}
+/* Versionsnummer im Startbild: da sichtbar, wo man sie sucht, aber leise. */
+#splash #splashVersion{margin:24px 0 0;color:var(--muted);opacity:.65;font-size:13px;letter-spacing:.08em}
 @keyframes glint{0%,100%{opacity:.55}50%{opacity:1}}
 #splash .glint{animation:glint 1.6s ease-in-out infinite}
 
@@ -215,6 +217,7 @@ header .boardname:active{background:var(--panel2)}
   <h1>Solitaire</h1>
   <p>Ein Stein soll bleiben.</p>
   <svg id="splashArt" viewBox="0 0 400 400" aria-hidden="true"></svg>
+  <p id="splashVersion"></p>
 </div>
 
 <div id="app" hidden>
@@ -304,7 +307,7 @@ header .boardname:active{background:var(--panel2)}
 
 <script>
 'use strict';
-const APP_VERSION='1.1';
+const APP_VERSION='1.2';
 /* =========================================================================
    Kern: Bretter, Züge, Symmetrien, Paritäts-Schranke, Solver
    (als Fabrik, damit derselbe Code im Web Worker läuft)
@@ -1437,6 +1440,7 @@ document.addEventListener('visibilitychange',()=>{ if(document.hidden&&game.star
 
 /* ---------- Startbild ---------- */
 function buildSplash(){
+  const v=$('splashVersion'); if(v) v.textContent='Version '+APP_VERSION;
   const svg=$('splashArt'); const b=boards.english; const lay=layoutBoard(b); const t=trayMarkup(b,lay,'holzdunkel','s_');
   let html=`<defs>${t.defs}`; pegDefsCache.clear();
   const pegs=[]; b.cells.forEach((c,i)=>{ if(i===b.startIdx) return; pegs.push(pegMarkup('glas',PALETTE_BUNT[i%PALETTE_BUNT.length],lay.pos[i].x,lay.pos[i].y,(i%5===0?'glint':''),'s')); });

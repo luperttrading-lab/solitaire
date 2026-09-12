@@ -10,6 +10,11 @@ let fails=0; const ok=(name,cond,extra)=>{ console.log((cond?'OK  ':'FAIL')+' '+
   await page.goto('file://'+path.resolve(__dirname,'..','index.html'),{waitUntil:'load'});
   await sleep(300); await page.screenshot({path:'shot_splash.png'});
   await sleep(2600); await page.screenshot({path:'shot_game.png'});
+  // Die Versionsnummer steht im Startbild und im Menue - und beide sagen dasselbe.
+  const ver=await page.evaluate(()=>({app:typeof APP_VERSION!=='undefined'?APP_VERSION:null,
+    splash:(document.getElementById('splashVersion')||{}).textContent||''}));
+  console.log('INFO Version: '+JSON.stringify(ver));
+  ok('Startbild nennt die Version', ver.splash==='Version '+ver.app, JSON.stringify(ver));
   ok('Splash ausgeblendet nach 2 s', await page.$eval('#splash',e=>e.hidden||getComputedStyle(e).opacity==='0'));
   ok('keine Seitenfehler beim Laden', errors.length===0, errors.join(' | '));
 
@@ -281,6 +286,9 @@ let fails=0; const ok=(name,cond,extra)=>{ console.log((cond?'OK  ':'FAIL')+' '+
   // Settings sheet
   await page.evaluate(()=>{ settings.theme='eigene'; }); await page.click('#btnMenu'); await sleep(500); await page.screenshot({path:'shot_sheet.png'});
   ok('Einstellungen geöffnet', await page.$eval('#sheet',e=>e.classList.contains('on')));
+  ok('Menue nennt dieselbe Version wie das Startbild',
+     await page.evaluate(()=>document.getElementById('versionLine').textContent==='Solitaire v'+APP_VERSION),
+     await page.$eval('#versionLine',e=>e.textContent));
   // free start
   await page.evaluate(()=>{ settings.freeStart=true; closeSheet(); newGame('english'); }); await sleep(300);
   s=await state(); ok('Freies Startloch: Brett voll (33)', s.left===33, JSON.stringify(s));
