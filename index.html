@@ -54,28 +54,38 @@ header .boardname:active{background:var(--panel2)}
 #stage{flex:none;display:flex;align-items:center;justify-content:center;padding:8px 0}
 #board{touch-action:none;display:block}
 .toolbar{flex:none;margin-top:auto}
-#status,#statusProbe{min-height:75px;flex-shrink:0;padding:4px 8px 11px;color:var(--muted);font-size:14px;line-height:1.35;display:flex;align-items:flex-end;justify-content:center;gap:12px}
+#status,#statusProbe{min-height:82px;flex-shrink:0;padding:4px 8px 11px;color:var(--muted);font-size:15px;line-height:1.35;display:flex;align-items:flex-end;justify-content:center;gap:12px}
 #status .saeule,#statusProbe .saeule{display:flex;flex-direction:column;align-items:center;gap:2px;min-width:0;flex:1;overflow:hidden}
-#status .anker,#statusProbe .anker{color:var(--ink);font-size:15px;white-space:nowrap}
+#status .anker,#statusProbe .anker{color:var(--ink);font-size:16px;white-space:nowrap}
 #status .kurz,#statusProbe .kurz{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-align:center;max-width:100%}
-#status .kurz{min-height:19px}
+#status .kurz{min-height:21px}
 #status.tapbar{cursor:pointer}
-#status .dot{flex:none;margin-bottom:-1px;width:22px;height:22px;border-radius:50%;background:var(--muted);box-shadow:inset 0 -2px 4px rgba(0,0,0,.35),0 1px 2px rgba(0,0,0,.4)}
-#status.ok .dot{background:#3fae6a}
-#status.warn .dot{background:#d9a72c}
-#status.bad .dot{background:#e0574a}
-#status.hint .dot{background:var(--brass2)}
+#status .dot{flex:none;align-self:center;width:24px;height:60px;display:flex;flex-direction:column;justify-content:space-between;gap:4px;padding:5px;border-radius:10px;background:rgba(0,0,0,.3);box-shadow:inset 0 1px 3px rgba(0,0,0,.55)}
+#status .dot b{flex:none;display:block;width:14px;height:14px;border-radius:50%;opacity:.16;transition:opacity .2s}
+#status .dot b.r{background:#e0574a}
+#status .dot b.g{background:#d9a72c}
+#status .dot b.gr{background:#3fae6a}
+#status.bad .dot b.r,#status.warn .dot b.g,#status.ok .dot b.gr{opacity:1;box-shadow:0 0 8px currentColor}
+#status.bad .dot b.r{color:#e0574a}
+#status.warn .dot b.g{color:#d9a72c}
+#status.ok .dot b.gr{color:#3fae6a}
+/* Waehrend gerechnet wird, laeuft das Licht von oben nach unten durch und
+   bleibt danach auf der zutreffenden Farbe stehen. */
+#status.rechnet .dot b{animation:ampellauf 1.05s ease-in-out infinite}
+#status.rechnet .dot b.r{animation-delay:0s}
+#status.rechnet .dot b.g{animation-delay:.18s}
+#status.rechnet .dot b.gr{animation-delay:.36s}
+@keyframes ampellauf{0%,55%,100%{opacity:.16}22%{opacity:1}}
 #status .mehr{flex:none;width:34px;height:34px;margin:0 0 -7px;border-radius:50%;border:1.5px solid var(--brass2);background:rgba(217,178,95,.12);display:flex;align-items:center;justify-content:center}
 #status .mehr svg{width:16px;height:16px;stroke:var(--brass2);fill:none;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
 #status.tapbar:active .mehr{background:rgba(217,178,95,.3)}
-#status .rad{flex:none;width:26px;height:26px;margin:0 -2px -3px;border-radius:50%;border:3px solid rgba(217,178,95,.22);border-top-color:var(--brass2);border-right-color:var(--brass2);animation:dreh .8s linear infinite}
 /* Zusaetzlich zum Rad laeuft ein Band unter der Zeile durch - ueber die
    ganze Breite, damit auch ein kurzer Rechenschritt zu sehen ist. */
 #rechenband{flex:none;height:3px;margin:0 8px;border-radius:2px;background:var(--line);overflow:hidden;opacity:0;transition:opacity .15s}
 #rechenband.on{opacity:1}
 #rechenband i{display:block;height:100%;width:38%;border-radius:2px;background:linear-gradient(90deg,transparent,var(--brass2),transparent);transform:translateX(-100%);animation:wandern 1.1s ease-in-out infinite}
 @keyframes wandern{to{transform:translateX(360%)}}
-@media (prefers-reduced-motion:reduce){#status .rad{animation-duration:2.4s}#rechenband i{animation-duration:2.4s}}
+@media (prefers-reduced-motion:reduce){#status.rechnet .dot b{animation-duration:2.4s}#rechenband i{animation-duration:2.4s}}
 @keyframes dreh{to{transform:rotate(360deg)}}
 /* Volltext, Zusatzzeile und Aktionen stehen im Blatt; hier bleiben sie im
    Dokument, damit statusFullText() sie liefert, sind aber nicht zu sehen. */
@@ -815,23 +825,29 @@ function renderHud(){
 /* Eigenes Zeichen statt eines Emojis: iOS faerbt \u2139 blau ein, egal was
    im CSS steht. Ein Winkel nach oben sagt ausserdem, was passiert - das
    Blatt kommt von unten. */
+/* Kurzfassung der vier Fehlerklassen. Kein Wort "Fehler" - das liest sich
+   sonst wie eine Stoerungsmeldung des Programms. */
+const KURZ_KLASSE={'Reihenfolge':'Zu früh – erst etwas anderes',
+  'Falsche Richtung':'Andere Richtung wäre richtig',
+  'Stein gestrandet':'Ein Stein strandet',
+  'Struktur':'Lücke an wichtiger Stelle'};
 const CHEVRON='<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 15l6-6 6 6"/></svg>';
 const STATUS_MAX_TEXT='Strategischer Fehler \u2013 Stein gestrandet im linken Arm und rechts\u2026';
-let statusReserveCache={w:-1,h:75};
+let statusReserveCache={w:-1,h:82};
 function statusReserve(){
   const w=Math.round(statusEl.getBoundingClientRect().width);
   if(w<=0) return statusReserveCache.h;
   if(statusReserveCache.w===w) return statusReserveCache.h;
   const probe=document.createElement('div'); probe.id='statusProbe'; probe.className='bad';
   probe.style.cssText='position:absolute;left:-10000px;top:0;width:'+w+'px';
-  const d=document.createElement('span'); d.className='dot'; probe.appendChild(d);
+  const d=document.createElement('span'); d.className='dot'; d.innerHTML='<b class="r"></b><b class="g"></b><b class="gr"></b>'; probe.appendChild(d);
   const sa=document.createElement('span'); sa.className='saeule';
   const an=document.createElement('span'); an.className='anker'; an.textContent='28 Steine übrig'; sa.appendChild(an);
   const k=document.createElement('span'); k.className='kurz'; k.textContent=STATUS_MAX_TEXT; sa.appendChild(k);
   probe.appendChild(sa);
   const i=document.createElement('span'); i.className='mehr'; i.innerHTML=CHEVRON; probe.appendChild(i);
   document.body.appendChild(probe);
-  const h=Math.max(75,Math.ceil(probe.getBoundingClientRect().height));
+  const h=Math.max(82,Math.ceil(probe.getBoundingClientRect().height));
   probe.remove(); statusReserveCache={w:w,h:h}; return h;
 }
 /* Sicherheitsnetz gegen alles, was sich nicht vorausberechnen laesst
@@ -871,12 +887,12 @@ setInterval(()=>{ if(game.startedAt&&!game.finished) $('hudTime').textContent=fm
 /* Die Zeile unter dem Brett zeigt eine Ampel und hoechstens zwei Zeilen.
    Begruendung, Zusatzzeile und Aktionen stehen im Blatt, das ein Tippen auf
    die Zeile oeffnet. So bleibt das Brett so gross wie der Bildschirm erlaubt. */
-/* Die untere Zeile soll einzeilig bleiben: erster Satz, hoechstens 40
+/* Die untere Zeile soll einzeilig bleiben: erster Satz, hoechstens 32
    Zeichen. Der volle Wortlaut steht im Blatt. */
 function kurzfassung(text){
   const m=text.match(/^[^.!?]*[.!?]/);
   let k=(m?m[0]:text).trim().replace(/\.$/,'');
-  if(k.length>40) k=k.slice(0,37).replace(/\s+\S*$/,'')+'\u2026';
+  if(k.length>32) k=k.slice(0,29).replace(/\s+\S*$/,'')+'\u2026';
   return k;
 }
 let statusDetail=null;
@@ -885,8 +901,7 @@ let statusDetail=null;
 let rechnet=false;
 function zeigeRechnet(an){ if(rechnet===an) return; rechnet=an;
   const band=document.getElementById('rechenband'); if(band) band.classList.toggle('on',an);
-  const alt=statusEl.querySelector(an?'.dot':'.rad'); if(!alt) return;
-  const neu=document.createElement('span'); neu.className=an?'rad':'dot'; alt.replaceWith(neu); }
+  statusEl.classList.toggle('rechnet',an); }
 function setStatus(text,cls,linkText,linkFn,note,kurz){
   const isArr=Array.isArray(linkText);
   const links=isArr?linkText:(linkText?[[linkText,linkFn]]:[]);
@@ -901,7 +916,10 @@ function setStatus(text,cls,linkText,linkFn,note,kurz){
   const mehr=links.length>0||!!noteText||(kurzT!==text&&!nurZahl);
   statusDetail=mehr?{text:text,cls:cls||'',note:noteText||'',links:links,kurz:kurzT||text}:null;
 
-  const dot=document.createElement('span'); dot.className=rechnet?'rad':'dot'; statusEl.appendChild(dot);
+  const dot=document.createElement('span'); dot.className='dot';
+  dot.innerHTML='<b class="r"></b><b class="g"></b><b class="gr"></b>';
+  statusEl.appendChild(dot);
+  statusEl.classList.toggle('rechnet',rechnet);
   const saeule=document.createElement('span'); saeule.className='saeule';
   const anker=document.createElement('span'); anker.className='anker'; anker.textContent=ankerText(); saeule.appendChild(anker);
   const k=document.createElement('span'); k.className='kurz'; k.textContent=kurzT;
@@ -1203,8 +1221,8 @@ function findMistake(){
     const report=(path)=>{ mistakeCancel=null; const culprit=game.board.moves[hist[k].mi]; const better=game.board.moves[path[0]];
       const later=path.slice(1).some(mi=>{ const m=game.board.moves[mi]; return m.from===culprit.from&&m.to===culprit.to; });
       let cat='Struktur'; if(later) cat='Reihenfolge'; else if(better.over===culprit.over||better.from===culprit.from) cat='Falsche Richtung';
-      const txt='Der entscheidende Fehler war Zug '+(k+1)+' von '+n+' ('+cat+'): '+moveWords(culprit,pegs[k])+'. Besser war: '+moveWords(better,pegs[k])+'.';
-      setStatus(txt,'bad',[['Dorthin zurück & Zug zeigen',()=>rewindTo(k,path)]],'Danach war 1 Stein nicht mehr erreichbar.'); };
+      const txt='Der entscheidende Zug war Zug '+(k+1)+' von '+n+' ('+cat+'): '+moveWords(culprit,pegs[k])+'. Besser war: '+moveWords(better,pegs[k])+'.';
+      setStatus(txt,'bad',[['Dorthin zurück & Zug zeigen',()=>rewindTo(k,path)]],'Danach war 1 Stein nicht mehr erreichbar.','Zug '+(k+1)+' war entscheidend'); };
     if(onBook){ report(book.slice(k)); return; }
     setStatus('Suche den Fehler… prüfe Zug '+(k+1)+' von '+n,'', 'Abbrechen',()=>{ stopped=true; if(mistakeCancel) mistakeCancel(); mistakeCancel=null; setStatus('Suche abgebrochen.'); });
     const [lo,hi]=CORE.fromArray(arr); const lb=CORE.parityLowerBound(game.board,arr);
@@ -1239,8 +1257,11 @@ function evaluatePosition(){
   const id=++evalSeq; evalCurrentId='ev'+id; const t0=Date.now(); game.evaluating=true;
   if(settings.trainer&&!game.hintOn){
     if(game.lastMove) setStatus(game.lastMove.text,'',null,null,game.lastMove.count);
-    else if(!statusEl.querySelector('.kurz')||!statusEl.querySelector('.kurz').textContent) setStatus(pegCount()+' Steine übrig.');
-    zeigeRechnet(true); }
+    else if(!statusEl.querySelector('.kurz')||!statusEl.querySelector('.kurz').textContent) setStatus(pegCount()+' Steine übrig.'); }
+  /* Gerechnet wird auch ohne Trainer - etwa nur mit Strategie-Hinweisen. Die
+     Anzeige haengt deshalb daran, dass gerechnet wird, nicht an der
+     Einstellung. */
+  zeigeRechnet(true);
   const finish=r=>{ if(id!==evalSeq) return; game.evaluating=false; zeigeRechnet(false); if(key!==stateKey()) return;
     game.evalRes={key,best:r.best,complete:r.complete&&!r.cancelled&&!r.timeout,path:r.path||[],nodes:r.nodes,lb,ms:Date.now()-t0,everEmpty:r.everEmpty||null,optFinal:r.optFinal||null,full};
     showTrainer(); renderOverlay(); };
@@ -1281,7 +1302,7 @@ function showTrainer(){
   const ev=game.evalRes; if(!ev||ev.key!==stateKey()) return;
   const prev=game.prevEval;
   if(settings.strategy&&!game.hintOn){ const adv=strategyAdvice(prev,ev);
-    if(adv){ setStatus('Strategischer Fehler – '+adv.cat+'. '+adv.why+' Besser: '+adv.betterTxt+'.','bad',[['Zurück & Zug zeigen',()=>{ game.showBetter={path:adv.path.slice()}; undo(); }]],'Jetzt bestenfalls '+adv.best+' Steine, vorher war 1 erreichbar.','Fehler: '+adv.cat);
+    if(adv){ setStatus('Strategischer Fehler – '+adv.cat+'. '+adv.why+' Besser: '+adv.betterTxt+'.','bad',[['Zurück & Zug zeigen',()=>{ game.showBetter={path:adv.path.slice()}; undo(); }]],'Jetzt bestenfalls '+adv.best+' Steine, vorher war 1 erreichbar.',KURZ_KLASSE[adv.cat]||'Dieser Zug kostet die Lösung');
       Sound.bad(); return; }
     if(!settings.trainer){
       if(!ev.complete){ setStatus('Zug noch nicht bewertbar – zu viele Stellungen. Ab etwa 26 Steinen wird jeder Zug geprüft.','warn',null,null,null,'Noch nicht bewertbar'); return; }

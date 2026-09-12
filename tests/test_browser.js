@@ -230,16 +230,19 @@ let fails=0; const ok=(name,cond,extra)=>{ console.log((cond?'OK  ':'FAIL')+' '+
   await page.evaluate(()=>{ [...statusEl.querySelectorAll('.link')].find(l=>/Fehler suchen/.test(l.textContent)).click(); });
   await page.waitForFunction(()=>/entscheidende Fehler|nicht mehr erreichbar|abgebrochen/.test(statusFullText()),{timeout:60000}); await sleep(100);
   s=await state(); console.log('INFO Fehlersuche: '+s.status);
-  ok('Fehlersuche nennt Zug 13 mit besserem Zug', /Fehler war Zug 13 von 15/.test(s.status)&&/Besser war/.test(s.status));
+  ok('Fehlersuche nennt Zug 13 mit besserem Zug', /Zug war Zug 13 von 15/.test(s.status)&&/Besser war/.test(s.status));
   await page.evaluate(()=>{ [...statusEl.querySelectorAll('.link')].find(l=>/Dorthin zurück/.test(l.textContent)).click(); }); await sleep(300);
   const rw=await page.evaluate(()=>({moves:game.history.length,hint:game.hintOn&&!!document.querySelector('#board .hint-arrow'),future:game.future.length}));
   ok('Zurückgespult auf Zug 12, besserer Zug markiert, Vor-Verlauf erhalten', rw.moves===12&&rw.hint&&rw.future===3, JSON.stringify(rw));
   await page.evaluate(()=>{ settings.strategy=false; renderStrategyBtn(); newGame('english'); });
   // Längste Farbnamen passen in eine Zeile
-  const fit=await page.evaluate(()=>{ const names=Object.values(HEX_NAMES).sort((a,b)=>b.length-a.length); const L=names[0]; const st=document.getElementById('status'); const w=st.clientWidth-16; const c=document.createElement('canvas').getContext('2d'); c.font=getComputedStyle(st).font;
-    const cases=['Vor: '+L+' springt über '+L+'.','Zurück: '+L+' zurück, '+L+' wieder da.','Zurück: Stein zurück, Geschlagener wieder da.']; return {w,widths:cases.map(x=>Math.round(c.measureText(x).width))}; });
-  console.log('INFO Zeilenbreite: '+JSON.stringify(fit));
-  ok('Spultexte passen mit längsten Farbnamen in eine Zeile', fit.widths.every(x=>x<fit.w));
+  const fit=await page.evaluate(()=>{ const names=Object.values(HEX_NAMES).sort((a,b)=>b.length-a.length); const L=names[0];
+    const st=document.getElementById('status');
+    const cases=['Vor: '+L+' springt über '+L+'.','Zurück: '+L+' zurück, '+L+' wieder da.','Zurück: Stein zurück, Geschlagener wieder da.'];
+    return cases.map(t=>{ setStatus(t); const k=st.querySelector('.kurz');
+      return {gezeigt:k.textContent, platz:Math.round(k.clientWidth), gebraucht:Math.round(k.scrollWidth)}; }); });
+  console.log('INFO Spultexte: '+JSON.stringify(fit));
+  ok('Spultexte passen mit längsten Farbnamen in die Meldungszeile', fit.every(x=>x.gebraucht<=x.platz+1), JSON.stringify(fit.map(x=>x.gebraucht+'/'+x.platz)));
   // Themes screenshots
   for(const th of ['holz','edel','messing','filz','neon','marmor']){ await page.evaluate(t=>{ settings.theme=t; newGame('english'); },th); await sleep(150); await page.screenshot({path:`shot_theme_${th}.png`}); }
   // Settings sheet
