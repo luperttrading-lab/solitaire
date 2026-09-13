@@ -1,6 +1,6 @@
 # Solitaire – Steckbrett-Solitär als Spiel- und Lernapp (iPhone, GitHub Pages)
 
-Stand: v1.19 (12.09.2026). Eine einzige Datei `index.html`, kein Build, keine Abhängigkeiten.
+Stand: v1.20 (13.09.2026). Eine einzige Datei `index.html`, kein Build, keine Abhängigkeiten.
 Autor/Product Owner: Lutz („Neo"). Sprache im Chat und in der App: Deutsch, per Du.
 
 ## Was die App kann
@@ -27,7 +27,9 @@ Autor/Product Owner: Lutz („Neo"). Sprache im Chat und in der App: Deutsch, pe
 
 ## Konventionen von Lutz
 - Eine ausgelieferte Datei: `index.html`. Version in `APP_VERSION` und im Menü; jeder Stand bekommt zusätzlich ein Git-Tag (`v1.1`). Keine versionierte Zweitkopie im Repo – Git hält die Stände.
-- **Markierung des letzten Zuges** (nur beim Spulen, `game.lastMove`) verschwindet, sobald man das Brett berührt (`game.markAus`, in `onTap`) – sie stand sonst beim Nachdenken im Weg. Beim nächsten Spulen erscheint sie wieder. Drei Prüfungen in `test_browser`.
+- **Trainer und Strategie-Hinweise sind standardmäßig an.** Vorher waren beide aus – wer die App frisch installierte, sah eine Ampel, die nie leuchtete, eine leere zweite Zeile und weder Lauflicht noch Warnblitz: Die Bewertung läuft nur, wenn Trainer, Strategie oder Markierung an ist. Gemessene Kosten: unter 1 s in der Eröffnung, meist unter 100 ms, im Hintergrund.
+- **Antworten auf eine Berührung** („Dieser Stein kann nicht springen“ u. ä.) laufen über `hinweis()` und haben 2,2 s Vorrang vor der Bewertung – sonst überschreibt die gleichzeitig fertig werdende Bewertung des vorigen Zuges sie, bevor man sie lesen kann. Ein Zug oder ein neues Spiel beendet den Vorrang sofort (`hinweisBis=0` in `afterMove` und `newGame`), sonst verzögert er die nächste Bewertungsanzeige.
+- **Markierung des letzten Zuges** (nur beim Spulen, `game.lastMove`) verschwindet, sobald man das Brett berührt (`game.markAus`, gesetzt in `onTap` **und** im `pointerdown` des Bretts, damit auch ein Tipp neben die Felder aufräumt) – sie stand sonst beim Nachdenken im Weg. Beim nächsten Spulen erscheint sie wieder. Fünf Prüfungen in `test_browser`.
 - **Warnblitz** (`settings.alarm`, Standard **an**, Menüzeile Warnblitz): Kostet ein Zug die Lösung, zieht einmal ein rotes Leuchten über den ganzen Bildschirm (`#warnblitz`, 0,62 s, `pointer-events:none`) und dazu `Sound.alarm()` – zwei fallende Sägezahntöne, bewusst anders als `Sound.bad()` (kurzer Stups bei einem unmöglichen Zug) und `Sound.lose()` (Ende der Partie). Ausgelöst nur beim **Übergang** – vorher war das Paritätsminimum erreichbar, jetzt nicht mehr; die Prüfung sitzt in `finish()` der Bewertung und vergleicht gegen `game.prevEval`, **nicht** in `setStatus` (rote Meldungen wie „Dieser Stein kann nicht springen“ dürfen nicht flackern). Kein zweiter Blitz in einer schon verlorenen Stellung. Vier Prüfungen in `test_browser`.
 - **Icon** (`2-icon.png` 180 px, `2-icon-1024.png` 1024 px): Foto eines Nussbaumbretts mit bunten Murmeln, von Lutz beigesteuert. Entscheidend war der Vergleich bei 58 px – der Größe auf dem Home-Bildschirm: Große, satte Murmeln mit Schatten ergeben dort noch ein erkennbares Kreuz, das früher gerenderte Brett zerfiel in Pixelrauschen. Nicht die Zahl der Elemente entscheidet, sondern ob sie zusammen eine Form ergeben. 16 px des Originals ringsum beschnitten (helle Ecken).
 - **Standardthema** bleibt `glas` („Samt & Glas“, blaues Brett). Die Nussbaum-Optik aus dem Startbild ist als Thema „Nussbaum & Glas“ wählbar und liefert zugleich das Motiv für das Home-Bildschirm-Icon (`2-icon.png`), aber nicht das Spielbrett.
@@ -41,7 +43,7 @@ Autor/Product Owner: Lutz („Neo"). Sprache im Chat und in der App: Deutsch, pe
 
 ## Tests (headless Chromium via Puppeteer, einmal `npm install`)
 - `npm test` – alle sieben Suiten nacheinander; jede meldet Fehler über den Exit-Code. Einzeln z. B. `npm run test:browser`.
-- `node tests/test_browser.js` – 86 Prüfungen (Spiel, Tipp, Trainer, Markierung, Strategie, Fehlersuche, Spulen, Textbreiten).
+- `node tests/test_browser.js` – 89 Prüfungen (Spiel, Tipp, Trainer, Markierung, Strategie, Fehlersuche, Spulen, Textbreiten).
 - `node tests/test_lessons.js`, `node tests/test_worker.js` (Worker-Ausfallszenarien), `node tests/test_full.js` (everEmpty gegen BFS), `node tests/test_table.js` (Exaktheit gegen Stellungszählung), `node tests/test_motion.js` (Animationsdauern: Zug 230 ms, Spulen 400 ms Vorlauf + 650 ms), `node tests/test_layout.js` (nichts verschwindet hinter der Fußleiste, über sechs Geräte- und Schriftgrößen; Brett springt nicht; Ampel ≥ 20 px und ihre Lichter mittig, Knopf ≥ 30 px, keine Zeichenreste im sichtbaren Text, Steinzahl steht fest und wandert beim Wechsel der Meldungen nicht, untere Zeile bleibt einzeilig, Ampel und Band laufen beim Rechnen im selben Takt und stehen danach still, dabei nie ganz dunkel; Ergebnislicht blitzt genau einmal).
 - Werkzeuge: `tools/gen_book2.js` (Eröffnungsbuch neu rechnen), `tools/purge_find.js`/`purge_find2.js`/`purge_plan2.js` (Purge-Muster und Partie-Plan), `tools/count_pos2.js` (Stellungen zählen), `tools/exp_parity.js` (Paritätsschranke prüfen). Ergebnisse liegen als `tools/patterns.json` (Purge-Muster) und `tools/plan.json` (Partie als Purge-Folge) daneben.
 

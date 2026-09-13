@@ -153,7 +153,7 @@ let fails=0; const ok=(name,cond,extra)=>{ console.log((cond?'OK  ':'FAIL')+' '+
   ok('Messwerte in eigener Zeile', await page.evaluate(()=>{ const n=statusEl.querySelector('.note'); return !!n&&/Stellungen/.test(n.textContent)&&!/Stellungen/.test(statusEl.firstChild.textContent); }));
   ok('HUD einzeilig: Übrig von N', await page.evaluate(()=>document.getElementById('hudLeftLabel').textContent==='Übrig von 32'&&!document.querySelector('.hud .sub')));
   // Trainer + Markierung
-  await page.evaluate(()=>{ settings.trainer=true; settings.marks=true; newGame('english'); });
+  await page.evaluate(()=>{ settings.trainer=true; settings.marks=true; settings.strategy=false; renderStrategyBtn(); newGame('english'); });
   // dem Buch 12 Züge folgen (bleibt lösbar), dann bewerten lassen
   await page.evaluate(()=>{ for(let k=0;k<12;k++){ const l=currentLine(); applyMove(game.board.moves[l.path[0]],true); } render(); evaluatePosition(); });
   await page.waitForFunction(()=>!game.evaluating,{timeout:20000}); await sleep(100);
@@ -271,6 +271,32 @@ let fails=0; const ok=(name,cond,extra)=>{ console.log((cond?'OK  ':'FAIL')+' '+
   const markNachSpulen=await markZaehlen();
   ok('Zurueck-Markierung erscheint beim Spulen', markNachZurueck>0, markNachZurueck);
   ok('Zurueck-Markierung verschwindet beim Tippen aufs Brett', markNachTipp===0, markNachTipp);
+  // Auch neben den Feldern: ein Tipp auf die freie Brettflaeche raeumt auf.
+  await page.evaluate(()=>{ const l=currentLine()||game.bookLine; if(l) applyMove(game.board.moves[l.path[0]],true); render(); undo(); });
+  await page.waitForFunction(()=>!game.animating,{timeout:20000}); await sleep(300);
+  const markVorFlaeche=await markZaehlen();
+  const stelle=await page.evaluate(()=>{ const r=document.getElementById('board').getBoundingClientRect();
+    const x=r.left+14, y=r.top+14; const e=document.elementFromPoint(x,y);
+    return {x:Math.round(x),y:Math.round(y),trifftFeld:!!(e&&e.closest&&e.closest('[data-idx]'))}; });
+  await page.mouse.click(stelle.x,stelle.y); await sleep(250);
+  const markNachFlaeche=await markZaehlen();
+  ok('Tippstelle liegt wirklich neben den Feldern', !stelle.trifftFeld, JSON.stringify(stelle));
+  ok('Zurueck-Markierung verschwindet auch beim Tippen neben die Felder',
+     markVorFlaeche>0&&markNachFlaeche===0, markVorFlaeche+' -> '+markNachFlaeche);
+  // Die Antwort auf eine Beruehrung darf nicht sofort von der Bewertung
+  // ueberschrieben werden - sonst liest man sie nie.
+  await page.evaluate(()=>{ settings.trainer=true; settings.strategy=true; newGame('english');
+    const l=currentLine()||game.bookLine; applyMove(game.board.moves[l.path[0]],true); render(); afterMove(true); });
+  await sleep(120);
+  const ohne=await page.evaluate(()=>{ const frei=game.board.moves.filter(m=>game.pegAt[m.from]>=0&&game.pegAt[m.over]>=0&&game.pegAt[m.to]<0).map(m=>m.from);
+    for(let i=0;i<game.pegAt.length;i++) if(game.pegAt[i]>=0&&!frei.includes(i)&&legalMovesFrom(i).length===0){ onTap(i); return true; } return false; });
+  await sleep(500);
+  const gleichNach=await page.evaluate(()=>statusFullText());
+  await page.waitForFunction(()=>!game.evaluating,{timeout:30000}); await sleep(400);
+  ok('Hinweis auf eine Beruehrung bleibt kurz stehen',
+     ohne&&/kann nicht springen/.test(gleichNach), JSON.stringify(gleichNach.slice(0,60)));
+  // Zustand wiederherstellen, wie ihn die folgenden Pruefungen erwarten
+  await page.evaluate(()=>{ settings.trainer=false; settings.marks=false; settings.strategy=true; renderStrategyBtn(); });
   ok('Zurueck-Markierung kommt beim naechsten Spulen wieder', markNachSpulen>0, markNachSpulen);
   ok('Eigener Alarmton fuer den Verlust der Loesung vorhanden',
      await page.evaluate(()=>typeof Sound.alarm==='function'&&Sound.alarm!==Sound.bad));

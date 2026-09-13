@@ -307,7 +307,7 @@ header .boardname:active{background:var(--panel2)}
 
 <script>
 'use strict';
-const APP_VERSION='1.19';
+const APP_VERSION='1.20';
 /* =========================================================================
    Kern: Bretter, Züge, Symmetrien, Paritäts-Schranke, Solver
    (als Fabrik, damit derselbe Code im Web Worker läuft)
@@ -588,7 +588,7 @@ const Store={
   set(k,v){ try{ localStorage.setItem('solitaire.'+k,JSON.stringify(v)); }catch(e){} },
   del(k){ try{ localStorage.removeItem('solitaire.'+k); }catch(e){} }
 };
-const settings=Object.assign({board:'english',theme:'glas',boardLook:'holz',pegStyle:'glas',pegColor:'bunt',autoJump:true,showTargets:true,freeStart:false,sound:true,trainer:false,marks:false,strategy:false,alarm:true},Store.get('settings',{}));
+const settings=Object.assign({board:'english',theme:'glas',boardLook:'holz',pegStyle:'glas',pegColor:'bunt',autoJump:true,showTargets:true,freeStart:false,sound:true,trainer:true,marks:false,strategy:true,alarm:true},Store.get('settings',{}));
 function saveSettings(){ Store.set('settings',settings); }
 function currentLook(){ const t=THEMES[settings.theme]||THEMES.glas; return t.custom?{board:settings.boardLook,peg:settings.pegStyle,color:settings.pegColor}:{board:t.board,peg:t.peg,color:t.color}; }
 
@@ -703,7 +703,7 @@ function stateKey(){ const [lo,hi]=CORE.fromArray(occ()); return CORE.key(lo,hi)
 // bekannte beste Fortsetzung für die aktuelle Stellung (aus Suche oder Eröffnungsbuch)
 function currentLine(){ const k=stateKey(); if(game.line&&game.line.key===k&&game.line.path.length) return game.line; if(game.bookLine&&game.bookLine.key===k&&game.bookLine.path.length) return game.bookLine; return null; }
 
-function newGame(boardId,keepPhase){
+function newGame(boardId,keepPhase){ hinweisBis=0;
   if(boardId) settings.board=boardId;
   const board=boards[settings.board]||boards.english; game.board=board; game.lay=layoutBoard(board);
   game.lastMove=null; if(!keepPhase) game.lesson=null;
@@ -938,6 +938,11 @@ function warnblitz(erzwingen){
   e.classList.remove('an'); void e.offsetWidth; e.classList.add('an');
   clearTimeout(warnblitzTimer); warnblitzTimer=setTimeout(()=>e.classList.remove('an'),1300);
 }
+let hinweisBis=0;
+/* Antwort auf eine Beruehrung ("Dieser Stein kann nicht springen"). Sie darf
+   nicht von der Bewertung des vorigen Zuges ueberschrieben werden, die
+   gleichzeitig fertig wird - sonst liest man sie nie. */
+function hinweis(text,kurz){ hinweisBis=Date.now()+2200; setStatus(text,'bad',null,null,null,kurz); }
 let blitzAusstehend=0;
 function zeigeRechnet(an){ if(rechnet===an) return; rechnet=an;
   const band=document.getElementById('rechenband'); if(band) band.classList.toggle('on',an);
@@ -1040,7 +1045,7 @@ function playMove(m){
   game.selected=-1; renderOverlay(); Sound.jump();
   animateMove(m,()=>{ applyMove(m,true); render(); afterMove(true); },false,game.demo?'slow':false);
 }
-function afterMove(fresh){
+function afterMove(fresh){ hinweisBis=0;
   if(game.lesson){ lessonAfterMove(); if(game.lesson.solved){ game.autoplay=false; game.finished=true; game.elapsedBefore=elapsedMs(); game.startedAt=0; renderHud(); return; } }
   if(anyLegalMove()){
     const ln=currentLine();
@@ -1071,7 +1076,11 @@ function afterMove(fresh){
 let ptr=null;
 boardSvg.addEventListener('pointerdown',e=>{
   if(game.animating||game.autoplay){ if(game.autoplay){ game.autoplay=false; game.demo=false; toast('Automatik gestoppt.'); } return; }
-  const cell=e.target.closest?e.target.closest('[data-idx]'):null; if(!cell) return;
+  const cell=e.target.closest?e.target.closest('[data-idx]'):null;
+  /* Auch ein Tipp neben die Felder - auf die freie Brettflaeche - raeumt die
+     Markierung des zurueckgenommenen Zuges weg. onTap allein greift nur,
+     wenn wirklich ein Feld getroffen wird. */
+  if(!cell){ if(game.lastMove&&!game.markAus){ game.markAus=true; renderOverlay(); } return; }
   Sound.ensure();
   ptr={idx:+cell.getAttribute('data-idx'),x:e.clientX,y:e.clientY,id:e.pointerId};
   try{ boardSvg.setPointerCapture(e.pointerId); }catch(err){}
@@ -1098,22 +1107,22 @@ function onTap(i){
     game.lastMove=null;
     if(game.selected===i){ game.selected=-1; renderOverlay(); return; }
     const mv=legalMovesFrom(i);
-    if(!mv.length){ Sound.bad(); shakeCell(i); setStatus('Dieser Stein kann nicht springen.','bad'); return; }
+    if(!mv.length){ Sound.bad(); shakeCell(i); hinweis('Dieser Stein kann nicht springen.','Kann nicht springen'); return; }
     if(settings.autoJump&&mv.length===1){ playMove(mv[0]); return; }
     game.selected=i; renderOverlay(); Sound.select();
     setStatus(mv.length===1?'Tippe das Zielfeld oder wische dorthin.':mv.length+' Züge möglich – wische in die Richtung oder tippe das Zielfeld.');
   } else {
-    if(game.selected>=0){ const m=legalMovesFrom(game.selected).find(m=>m.to===i); if(m){ playMove(m); return; } Sound.bad(); setStatus('Dorthin geht kein Sprung.','bad'); }
+    if(game.selected>=0){ const m=legalMovesFrom(game.selected).find(m=>m.to===i); if(m){ playMove(m); return; } Sound.bad(); hinweis('Dorthin geht kein Sprung.','Dorthin geht kein Sprung'); }
     game.selected=-1; renderOverlay();
   }
 }
 function onSwipe(i,dx,dy){
   if(game.finished||game.phase==='choose') return;
   let src=i; if(game.pegAt[i]<0&&game.selected>=0) src=game.selected; if(game.pegAt[src]<0) return;
-  const mv=legalMovesFrom(src); if(!mv.length){ Sound.bad(); shakeCell(src); setStatus('Dieser Stein kann nicht springen.','bad'); return; }
+  const mv=legalMovesFrom(src); if(!mv.length){ Sound.bad(); shakeCell(src); hinweis('Dieser Stein kann nicht springen.','Kann nicht springen'); return; }
   const L=Math.hypot(dx,dy); let best=null,bestCos=0.6; const lay=game.lay;
   mv.forEach(m=>{ const vx=lay.pos[m.to].x-lay.pos[m.from].x, vy=lay.pos[m.to].y-lay.pos[m.from].y; const cos=(vx*dx+vy*dy)/(Math.hypot(vx,vy)*L); if(cos>bestCos){bestCos=cos;best=m;} });
-  if(best) playMove(best); else { Sound.bad(); shakeCell(src); game.selected=src; renderOverlay(); setStatus('In diese Richtung geht kein Sprung.','bad'); }
+  if(best) playMove(best); else { Sound.bad(); shakeCell(src); game.selected=src; renderOverlay(); hinweis('In diese Richtung geht kein Sprung.','Dorthin geht kein Sprung'); }
 }
 
 /* ---------- Tipp / Solver (Web Worker, sonst Hauptthread) ---------- */
@@ -1352,6 +1361,7 @@ function strategyAdvice(prev,ev){
 }
 function showTrainer(){
   const ev=game.evalRes; if(!ev||ev.key!==stateKey()) return;
+  if(Date.now()<hinweisBis){ setTimeout(showTrainer,hinweisBis-Date.now()+30); return; }
   const prev=game.prevEval;
   if(settings.strategy&&!game.hintOn){ const adv=strategyAdvice(prev,ev);
     if(adv){ setStatus('Strategischer Fehler – '+adv.cat+'. '+adv.why+' Besser: '+adv.betterTxt+'.','bad',[['Zurück & Zug zeigen',()=>{ game.showBetter={path:adv.path.slice()}; undo(); }]],'Jetzt bestenfalls '+adv.best+' Steine, vorher war 1 erreichbar.',KURZ_KLASSE[adv.cat]||'Dieser Zug kostet die Lösung');
