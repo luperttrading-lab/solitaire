@@ -171,9 +171,15 @@ header .boardname:active{background:var(--panel2)}
      sichtbarem Inhalt. Deshalb basis auto. */
 #sheet .scroll,#detail .scroll{flex:1 1 auto;min-height:0;
   overflow-y:auto;-webkit-overflow-scrolling:touch;padding:4px 16px 12px}
+/* So schmal wie vertretbar: von den 83 px sind 34 der Schutzrand des
+   Geraets (Home-Leiste), die bleiben. Gespart wird an der Polsterung -
+   unten nur noch 2 px zusaetzlich, weil der Schutzrand schon Abstand
+   genug ist. Der Knopf selbst ist 40 statt 44 px hoch; bei voller Breite
+   (361 px auf dem iPhone 14 Pro) ist die Trefferflaeche trotzdem ein
+   Vielfaches dessen, was Apple als Mindestmass nennt. */
 #sheet .fuss,#detail .fuss{flex:none;border-top:1px solid var(--line);
-  background:var(--panel);padding:10px 16px calc(var(--sab) + 10px)}
-#sheet .fuss .btn,#detail .fuss .btn{width:100%}
+  background:var(--panel);padding:6px 16px calc(var(--sab) + 2px)}
+#sheet .fuss .btn,#detail .fuss .btn{width:100%;padding:11px}
 #sheet h2{font-family:var(--serif);font-weight:400;font-size:20px;margin:18px 0 10px;color:var(--brass2)}
 #sheet h2:first-child{margin-top:6px}
 #sheet p{color:var(--muted);font-size:14px;line-height:1.45;margin:6px 0}
@@ -337,7 +343,7 @@ header .boardname:active{background:var(--panel2)}
 
 <script>
 'use strict';
-const APP_VERSION='1.28';
+const APP_VERSION='1.29';
 /* =========================================================================
    Kern: Bretter, Züge, Symmetrien, Paritäts-Schranke, Solver
    (als Fabrik, damit derselbe Code im Web Worker läuft)

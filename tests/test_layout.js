@@ -120,6 +120,7 @@ const FAELLE=[
           und "scrollbar" auch stimmte. Deshalb wird jetzt die Hoehe selbst
           gemessen, gegen das, was das Blatt hoechstens einnehmen darf. */
        blatt: Math.round(bb.height),
+       sockel: Math.round(blatt.querySelector('.fuss').getBoundingClientRect().height),
        moeglich: Math.round(window.innerHeight-59-30),
        sichtbar: Math.round(sc.clientHeight),
        // Nach dem Scrollen ans Ende darf er nicht wandern
@@ -131,7 +132,16 @@ const FAELLE=[
      return ergebnis; });
    console.log('INFO Fertig-Knopf ('+name+'): '+JSON.stringify(r));
    ok('Fertig steht ohne Scrollen im Bild ('+name+')', r.imBild&&r.imBlatt, JSON.stringify(r));
-   ok('Fertig ist gross genug zum Treffen ('+name+')', r.hoehe>=40, r.hoehe+' px hoch');
+   /* Apples 44 pt gelten fuer die kleinste Kante eines freistehenden Ziels.
+      Hier geht der Knopf ueber die volle Breite - entscheidend ist die
+      Trefferflaeche, und die ist ein Vielfaches davon. Trotzdem eine
+      Untergrenze fuer die Hoehe, damit der Sockel nicht weiter schrumpft. */
+   ok('Fertig ist gross genug zum Treffen ('+name+')',
+      r.hoehe>=38&&r.hoehe*r.breite>=44*44, r.hoehe+' x '+r.breite+' px');
+   /* Der Sockel soll so wenig Platz nehmen wie moeglich. Was bleibt, ist
+      der Schutzrand des Geraets - der ist Vorgabe, nicht Gestaltung. */
+   ok('Der Sockel bleibt schmal ('+name+')',
+      r.sockel-34<=52, (r.sockel-34)+' px ueber dem Schutzrand (Sockel '+r.sockel+')');
    ok('Fertig bleibt beim Scrollen an derselben Stelle ('+name+')',
       r.vorScroll===r.nachScroll, r.vorScroll+' / '+r.nachScroll);
    ok('Der Inhalt darueber laesst sich weiter scrollen ('+name+')', r.scrollbar, r.scrollbar);
