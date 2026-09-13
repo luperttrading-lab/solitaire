@@ -99,6 +99,13 @@ const FAELLE=[
    await pf.evaluate(()=>{
      document.documentElement.style.setProperty('--sat','59px');
      document.documentElement.style.setProperty('--sab','34px');
+     /* Geraetelage nachstellen: auf dem iPhone ist screen.height gleich der
+        Viewport-Hoehe, wenn die App vom Home-Bildschirm laeuft. Ohne das
+        haelt sockelRandSetzen die Differenz zum Testmonitor faelschlich
+        fuer freien Platz. */
+     try{ Object.defineProperty(screen,'height',
+       {value:window.innerHeight,configurable:true}); }catch(e){}
+     sockelRandSetzen();
      openSheet(); });
    await sleep(450);
    const r=await pf.evaluate(()=>{
@@ -151,6 +158,38 @@ const FAELLE=[
       r.sichtbar>=r.blatt*0.7, r.sichtbar+' von '+r.blatt+' px ('
       +Math.round(100*r.sichtbar/r.blatt)+' %)');
    await pf.close();
+ }
+
+ /* Der Sockel legt nur den Schutzrand drauf, der nicht ohnehin schon unter
+    dem Viewport liegt. Geprueft in beiden Lagen: Viewport = Bildschirm
+    (Home-Bildschirm-App) und Viewport kuerzer (Safari mit Leiste). */
+ {
+   const pr=await browser.newPage(); await pr.setViewport({width:393,height:852});
+   await pr.goto(url,{waitUntil:'load'}); await sleep(2300);
+   const r=await pr.evaluate(()=>{
+     const w=document.documentElement;
+     w.style.setProperty('--sab','34px');
+     const lies=()=>parseFloat(getComputedStyle(w).getPropertyValue('--sockelrand'))||0;
+     // 1. Viewport so hoch wie der Bildschirm: voller Schutzrand noetig
+     const echteHoehe=window.innerHeight;
+     Object.defineProperty(screen,'height',{value:echteHoehe,configurable:true});
+     sockelRandSetzen(); const voll=lies();
+     // 2. Bildschirm 59 pt hoeher als der Viewport: der Streifen reicht schon
+     Object.defineProperty(screen,'height',{value:echteHoehe+59,configurable:true});
+     sockelRandSetzen(); const knapp=lies();
+     // 3. Bildschirm viel hoeher: trotzdem nie null
+     Object.defineProperty(screen,'height',{value:echteHoehe+300,configurable:true});
+     sockelRandSetzen(); const extrem=lies();
+     Object.defineProperty(screen,'height',{value:echteHoehe,configurable:true});
+     sockelRandSetzen();
+     return {voll,knapp,extrem}; });
+   console.log('INFO Sockelrand: '+JSON.stringify(r));
+   ok('Voller Schutzrand, wenn der Viewport den Bildschirm fuellt',
+      Math.abs(r.voll-34)<0.6, r.voll+' px');
+   ok('Weniger Schutzrand, wenn darunter ohnehin Platz ist',
+      Math.abs(r.knapp-2)<0.6, r.knapp+' px bei 59 px Luecke');
+   ok('Der Rand faellt nie auf null', r.extrem>=2, r.extrem+' px');
+   await pr.close();
  }
 
  /* Der Hinweis auf eine neuere Version schwebt ueber dem Inhalt. Wuerde er im
