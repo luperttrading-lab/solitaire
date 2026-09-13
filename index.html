@@ -162,8 +162,14 @@ header .boardname:active{background:var(--panel2)}
    ist laenger als der Bildschirm, und Lutz musste jedes Mal ans Ende
    scrollen, nur um es zu schliessen. flex:1 1 0 mit min-height:0 ist noetig,
    damit der Scrollbereich schrumpft statt den Fuss aus dem Blatt zu
-   druecken - ohne min-height:0 waechst ein Flex-Kind auf seine Inhaltshoehe. */
-#sheet .scroll,#detail .scroll{flex:1 1 0;min-height:0;
+   druecken. Zwei Fallstricke, beide erlebt:
+   - Ohne min-height:0 schrumpft ein Flex-Kind nicht unter seine
+     Inhaltshoehe und drueckt den Fuss aus dem Blatt.
+   - Mit flex-basis 0 (flex:1 1 0) passiert das Gegenteil: das Blatt hat nur
+     max-height, keine feste Hoehe, also bestimmt der Inhalt sie - und der
+     ist dann fast nichts. Das Menue schrumpfte auf 134 px mit 16 px
+     sichtbarem Inhalt. Deshalb basis auto. */
+#sheet .scroll,#detail .scroll{flex:1 1 auto;min-height:0;
   overflow-y:auto;-webkit-overflow-scrolling:touch;padding:4px 16px 12px}
 #sheet .fuss,#detail .fuss{flex:none;border-top:1px solid var(--line);
   background:var(--panel);padding:10px 16px calc(var(--sab) + 10px)}
@@ -331,7 +337,7 @@ header .boardname:active{background:var(--panel2)}
 
 <script>
 'use strict';
-const APP_VERSION='1.27';
+const APP_VERSION='1.28';
 /* =========================================================================
    Kern: Bretter, Züge, Symmetrien, Paritäts-Schranke, Solver
    (als Fabrik, damit derselbe Code im Web Worker läuft)

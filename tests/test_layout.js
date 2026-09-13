@@ -114,6 +114,14 @@ const FAELLE=[
        breite: Math.round(kb.width),
        ueberFussrand: Math.round(window.innerHeight-34-kb.bottom),
        scrollbar: sc.scrollHeight>sc.clientHeight+2,
+       /* Das Blatt darf durch die Fusszeile nicht zusammenschrumpfen. Mit
+          flex-basis 0 passierte genau das: Blatt 134 px, davon 16 px Inhalt -
+          und die alte Pruefung liess es durch, weil der Knopf ja im Bild lag
+          und "scrollbar" auch stimmte. Deshalb wird jetzt die Hoehe selbst
+          gemessen, gegen das, was das Blatt hoechstens einnehmen darf. */
+       blatt: Math.round(bb.height),
+       moeglich: Math.round(window.innerHeight-59-30),
+       sichtbar: Math.round(sc.clientHeight),
        // Nach dem Scrollen ans Ende darf er nicht wandern
        vorScroll: Math.round(kb.top)
      };
@@ -127,6 +135,11 @@ const FAELLE=[
    ok('Fertig bleibt beim Scrollen an derselben Stelle ('+name+')',
       r.vorScroll===r.nachScroll, r.vorScroll+' / '+r.nachScroll);
    ok('Der Inhalt darueber laesst sich weiter scrollen ('+name+')', r.scrollbar, r.scrollbar);
+   ok('Das Blatt nutzt die volle moegliche Hoehe ('+name+')',
+      r.blatt>=r.moeglich-2, r.blatt+' von '+r.moeglich+' px');
+   ok('Der Inhalt bekommt den Grossteil des Blattes ('+name+')',
+      r.sichtbar>=r.blatt*0.7, r.sichtbar+' von '+r.blatt+' px ('
+      +Math.round(100*r.sichtbar/r.blatt)+' %)');
    await pf.close();
  }
 
