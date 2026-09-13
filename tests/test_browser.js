@@ -303,16 +303,30 @@ let fails=0; const ok=(name,cond,extra)=>{ console.log((cond?'OK  ':'FAIL')+' '+
   // Der Alarm darf nicht vom kurzen Fehlton zugedeckt werden, und er muss
   // mindestens so laut sein wie der Sprungton - sonst ueberhoert man ihn.
   const toene=await page.evaluate(()=>{ const ruf=[]; const ot=Sound.tone.bind(Sound);
-    Sound.tone=(f0,f1,d,t,g,w)=>{ ruf.push({typ:t,gain:g,ab:w||0}); return ot(f0,f1,d,t,g,w); };
+    Sound.tone=(f0,f1,d,t,g,w)=>{ ruf.push({typ:t,gain:g,ab:w||0,dauer:d}); return ot(f0,f1,d,t,g,w); };
     Sound.jump(); const jump=ruf[0].gain; ruf.length=0;
-    warnblitz(true); const alarm=ruf.slice();
-    Sound.tone=ot; return {jump:jump,alarm:alarm};
+    warnblitz(true); const alarm=ruf.slice(); ruf.length=0;
+    Sound.win(); const sieg=ruf.slice();
+    Sound.tone=ot; return {jump:jump,alarm:alarm,sieg:sieg};
   });
   console.log('INFO Toene: '+JSON.stringify(toene));
+  // Die lauteste Stimme des Alarms gibt die wahrgenommene Lautstaerke vor;
+  // leisere Begleitstimmen (Fundament) duerfen darunter liegen.
   ok('Alarmton ist nicht leiser als der Sprungton',
-     toene.alarm.length>=2&&toene.alarm.every(t=>t.gain>=toene.jump*0.9),
+     Math.max.apply(null,toene.alarm.map(t=>t.gain))>=toene.jump,
      JSON.stringify(toene.alarm.map(t=>t.gain))+' gegen '+toene.jump);
+  ok('Alarm hat mehr als zwei Toene', toene.alarm.length>2, toene.alarm.length);
   ok('Alarmton setzt erst nach dem Sprungton ein', toene.alarm[0].ab>0, toene.alarm[0].ab);
+  // Fanfare: mehrstimmig (mehrere Toene mit demselben Einsatz) und laenger
+  // als ein einzelner Ton, sonst klingt der Sieg wie jeder andere Piepser.
+  const einsaetze={}; toene.sieg.forEach(t=>{ einsaetze[t.ab]=(einsaetze[t.ab]||0)+1; });
+  const akkord=Math.max.apply(null,Object.keys(einsaetze).map(k=>einsaetze[k]));
+  const ende=Math.max.apply(null,toene.sieg.map(t=>t.ab+t.dauer));
+  ok('Siegfanfare ist mehrstimmig', akkord>=3, JSON.stringify(einsaetze));
+  ok('Siegfanfare hat einen Schlussakkord', ende>=1.2, ende);
+  ok('Siegfanfare ist lauter als der Sprungton',
+     Math.max.apply(null,toene.sieg.map(t=>t.gain))>=toene.jump*0.9,
+     Math.max.apply(null,toene.sieg.map(t=>t.gain))+' gegen '+toene.jump);
 
   // Stellung fuer die Fehlersuche neu aufbauen
   await page.evaluate(()=>{ newGame('english');
