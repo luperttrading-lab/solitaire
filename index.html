@@ -46,21 +46,26 @@ header{display:flex;align-items:baseline;justify-content:space-between;gap:10px;
 header .wordmark{font-family:var(--serif);font-size:26px;color:var(--brass2);letter-spacing:.01em}
 header .boardname{color:var(--muted);font-size:15px;display:flex;align-items:center;gap:6px;padding:6px 8px;border-radius:10px}
 header .boardname:active{background:var(--panel2)}
-.hud{display:grid;grid-template-columns:repeat(3,1fr);align-items:start;padding:4px 6px 8px;border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
+/* Drei grosse Zahlen links, zwei kleine rechts: Tipps und Rettungen sind
+   Nebenzahlen und sollen den drei Hauptzahlen nicht die Wirkung nehmen.
+   Die schmalen Spalten nehmen nur, was ihre Beschriftung braucht (auto),
+   der Rest verteilt sich gleichmaessig auf die drei grossen. */
+.hud{display:grid;grid-template-columns:repeat(3,1fr) auto auto;align-items:start;
+  gap:0 8px;padding:4px 6px 8px;border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
 .hud>div{text-align:center}
 .hud b{display:block;font-family:var(--serif);font-size:30px;line-height:1;font-weight:400;color:var(--ink)}
 .hud span{font-size:12px;color:var(--muted)}
-/* Die beiden Zaehler sitzen links und rechts vom Strategie-Knopf, in der
-   Zeile, die es ohnehin gibt - eine eigene Zeile haette auf kleinen Geraeten
-   16 px Brettflaeche gekostet (auf dem iPhone 14 Pro nichts, dort begrenzt
-   die Breite). Feste Aussenbreiten, damit der Knopf beim Hochzaehlen nicht
-   verrutscht. */
-.quick{display:flex;align-items:center;gap:6px;padding:6px 6px 0}
-.quick .pill{flex:0 1 auto;min-width:0}
-.zaehler{flex:1 1 0;min-width:0;font-size:11px;line-height:1.2;color:var(--muted);
-  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-variant-numeric:tabular-nums}
-#zRueck{text-align:left}
-#zTipp{text-align:right}
+/* Die Nebenzahlen: kleiner, gedaempft, und bei null nur ein Strich statt
+   einer Null - eine Null liest sich wie ein Mangel, ein Strich wie "noch
+   nichts passiert". */
+.hud .neben b{font-size:19px;line-height:1.55;color:var(--muted)}
+.hud .neben span{font-size:11px}
+.hud .neben.da b{color:var(--brass2)}
+/* Auf schmalen Geraeten wird "Übrig von 32" sonst zweizeilig und schiebt
+   die Zeile auseinander. Kleinere Schrift statt kuerzerem Wort: die 32 ist
+   die einzige Stelle, an der die Ausgangszahl steht. */
+@media (max-width:386px){ .hud span{font-size:11px} .hud .neben span{font-size:10px} }
+.quick{display:flex;justify-content:center;padding:6px 0 0}
 .pill{border-radius:999px;padding:6px 14px;font-size:13px;background:var(--panel);color:var(--muted);border:1px solid var(--line)}
 .pill.on{background:linear-gradient(180deg,#d9b25f,#b88f36);color:#1f1608;border-color:transparent}
 #stage{flex:none;display:flex;align-items:center;justify-content:center;padding:8px 0}
@@ -273,12 +278,10 @@ header .boardname:active{background:var(--panel2)}
     <div><b id="hudMoves">0</b><span>Sprünge</span></div>
     <div><b id="hudLeft">32</b><span id="hudLeftLabel">Übrig von 32</span></div>
     <div><b id="hudTime">0:00</b><span>Zeit</span></div>
+    <div class="neben" id="hudTippBox"><b id="hudTipp">–</b><span>Tipps</span></div>
+    <div class="neben" id="hudRettBox"><b id="hudRett">–</b><span>Rettungen</span></div>
   </div>
-  <div class="quick">
-    <span class="zaehler" id="zRueck"></span>
-    <button id="btnStrategy" class="pill" aria-pressed="false">Strategie-Hinweise: aus</button>
-    <span class="zaehler" id="zTipp"></span>
-  </div>
+  <div class="quick"><button id="btnStrategy" class="pill" aria-pressed="false">Strategie-Hinweise: aus</button></div>
   <div id="stage"><svg id="board" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Spielbrett"></svg></div>
   <div id="status"></div>
   <div id="rechenband"><i></i></div>
@@ -357,7 +360,7 @@ header .boardname:active{background:var(--panel2)}
 
 <script>
 'use strict';
-const APP_VERSION='1.32';
+const APP_VERSION='1.33';
 /* =========================================================================
    Kern: Bretter, Züge, Symmetrien, Paritäts-Schranke, Solver
    (als Fabrik, damit derselbe Code im Web Worker läuft)
@@ -1013,23 +1016,21 @@ function renderOverlay(){
 function zaehlerZahlen(){
   return {r:game.rueckAlarm||0, t:game.tippKeys?game.tippKeys.size:0};
 }
-/* Kurz fuer die Zeile: zwischen Bildschirmrand und Strategie-Knopf bleiben
-   nur rund 65 px, "12 Ruecknahmen" lief dort ueber. Der volle Wortlaut
-   steht im Ergebnis, wo Platz ist. */
-function zaehlerText(){
-  const {r,t}=zaehlerZahlen();
-  return {rueck:r?r+'\u00d7 zurück':'', tipp:t?t+'\u00d7 Tipp':''};
-}
+/* Im Ergebnis stehen ganze Worte. "Rettung" statt "Rücknahme", weil das
+   der Zweck ist: der Knopf heisst Zurück, aber man drueckt ihn, um sich zu
+   retten (Wortwahl von Lutz). */
 function zaehlerLang(){
   const {r,t}=zaehlerZahlen();
-  return {rueck:r?r+(r===1?' Rücknahme':' Rücknahmen'):'',
+  return {rueck:r?r+(r===1?' Rettung':' Rettungen'):'',
           tipp:t?t+(t===1?' Tipp':' Tipps'):''};
 }
 function renderZaehler(){
-  const z=zaehlerText();
-  const a=$('zRueck'), b=$('zTipp');
-  if(a) a.textContent=z.rueck;
-  if(b) b.textContent=z.tipp;
+  const {r,t}=zaehlerZahlen();
+  const setz=(box,zahl,wert)=>{ const e=$(zahl), k=$(box); if(!e||!k) return;
+    e.textContent=wert?String(wert):'\u2013';
+    k.classList.toggle('da',wert>0); };
+  setz('hudTippBox','hudTipp',t);
+  setz('hudRettBox','hudRett',r);
 }
 function renderHud(){
   renderZaehler();
@@ -1288,7 +1289,7 @@ function afterMove(fresh){ hinweisBis=0;
      dafuer - das ist die Leistung, ueber die man sich freut. */
   const z=zaehlerLang();
   if(z.rueck||z.tipp) txt+=' Dabei '+[z.rueck,z.tipp].filter(Boolean).join(' und ')+'.';
-  else txt+=' Ohne Rücknahme und ohne Tipp.';
+  else txt+=' Ohne Rettung und ohne Tipp.';
   if(left===1&&inCenter) txt+=' Der letzte Stein steht genau in der Mitte.';
   if(better&&prev) txt+=' Neue Bestleistung.'; else if(prev) txt+=' Bestleistung auf diesem Brett: '+prev.left+(prev.left===1?' Stein':' Steine')+' in '+fmtTime(prev.time)+'.';
   $('resText').textContent=txt;

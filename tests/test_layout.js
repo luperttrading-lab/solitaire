@@ -160,40 +160,47 @@ const FAELLE=[
    await pf.close();
  }
 
- /* Die beiden Partie-Zaehler sitzen links und rechts vom Strategie-Knopf.
-    Der Knopf darf beim Hochzaehlen nicht verrutschen, und nichts darf aus
-    der Zeile laufen - sie ist nur 393 px breit und der Knopftext lang. */
+ /* Die Zaehlerzeile hat jetzt fuenf Spalten: drei grosse Zahlen links,
+    Tipps und Rettungen klein rechts. Die drei grossen duerfen dadurch nicht
+    zerquetscht werden, und nichts darf umbrechen oder ueberlaufen. */
  for(const [name,w,h] of [['iPhone 14 Pro',393,852],['iPhone SE',375,667],['sehr klein',360,600]]){
    const pz=await browser.newPage(); await pz.setViewport({width:w,height:h});
    await pz.goto(url,{waitUntil:'load'}); await sleep(2300);
    const r=await pz.evaluate(()=>{
-     const knopf=document.getElementById('btnStrategy');
-     const reihe=document.querySelector('.quick');
-     const mitte=()=>Math.round(knopf.getBoundingClientRect().left+knopf.getBoundingClientRect().width/2);
-     const mass=()=>{ const a=document.getElementById('zRueck'), b=document.getElementById('zTipp');
-       const rb=reihe.getBoundingClientRect();
-       return {mitte:mitte(),
-         linksDrin:a.getBoundingClientRect().left>=rb.left-0.5,
-         rechtsDrin:b.getBoundingClientRect().right<=rb.right+0.5,
-         knopfGanz:knopf.scrollWidth<=knopf.clientWidth+1,
-         ueberlauf:Math.max(a.scrollWidth-a.clientWidth,b.scrollWidth-b.clientWidth),
-         hoehe:Math.round(rb.height)}; };
+     const hud=document.querySelector('.hud');
      const brett=()=>Math.round(document.getElementById('board').getBoundingClientRect().width);
-     game.rueckAlarm=0; game.tippKeys=new Set(); renderHud();
+     const mass=()=>{ const felder=[...hud.children].map(d=>{
+         const b=d.querySelector('b'), s=d.querySelector('span');
+         return {zahl:b.textContent, wort:s.textContent,
+           breite:Math.round(d.getBoundingClientRect().width),
+           zahlUeber:b.scrollWidth-b.clientWidth,
+           wortUeber:s.scrollWidth-s.clientWidth,
+           /* Zeilenzahl aus der tatsaechlichen Zeilenhoehe, nicht aus einer
+              festen Zahl - die Schrift ist auf schmalen Geraeten kleiner. */
+           zeilen:Math.max(1,Math.round(s.getBoundingClientRect().height
+             /(parseFloat(getComputedStyle(s).lineHeight)||16)))};
+       });
+       return {felder, hoehe:Math.round(hud.getBoundingClientRect().height),
+         breite:Math.round(hud.getBoundingClientRect().width)}; };
+     game.rueckAlarm=0; game.tippKeys=new Set(); renderHud(); fitStage();
      const leer=mass(), brettLeer=brett();
-     game.rueckAlarm=12; game.tippKeys=new Set(['a','b','c','d','e','f','g','h','i','j','k','l']);
-     renderHud(); fitStage();
+     game.rueckAlarm=12; game.tippKeys=new Set('abcdefghijkl'.split('')); renderHud(); fitStage();
      const voll=mass(), brettVoll=brett();
      game.rueckAlarm=0; game.tippKeys=new Set(); renderHud(); fitStage();
      return {leer,voll,brettLeer,brettVoll}; });
-   console.log('INFO Partie-Zaehler ('+name+'): '+JSON.stringify(r));
-   ok('Der Strategie-Knopf verrutscht beim Zaehlen nicht ('+name+')',
-      Math.abs(r.leer.mitte-r.voll.mitte)<=1, r.leer.mitte+' / '+r.voll.mitte);
-   ok('Die Zaehler bleiben in der Zeile ('+name+')',
-      r.voll.linksDrin&&r.voll.rechtsDrin&&r.voll.ueberlauf<=0,
-      JSON.stringify(r.voll));
-   ok('Der Knopftext wird nicht abgeschnitten ('+name+')',
-      r.voll.knopfGanz, JSON.stringify(r.voll));
+   console.log('INFO Zaehlerzeile ('+name+'): '+JSON.stringify(r.voll.felder.map(f=>f.wort+' '+f.breite+'px')));
+   ok('Die Zeile hat fuenf Felder ('+name+')', r.voll.felder.length===5, r.voll.felder.length);
+   ok('Nichts laeuft ueber ('+name+')',
+      r.voll.felder.every(f=>f.zahlUeber<=0&&f.wortUeber<=0),
+      JSON.stringify(r.voll.felder.map(f=>f.wort+':'+f.zahlUeber+'/'+f.wortUeber)));
+   ok('Keine Beschriftung bricht um ('+name+')',
+      r.voll.felder.every(f=>f.zeilen<=1), JSON.stringify(r.voll.felder.map(f=>f.wort+':'+f.zeilen)));
+   ok('Die drei Hauptzahlen behalten den meisten Platz ('+name+')',
+      Math.min(r.voll.felder[0].breite,r.voll.felder[1].breite,r.voll.felder[2].breite)
+      > Math.max(r.voll.felder[3].breite,r.voll.felder[4].breite),
+      JSON.stringify(r.voll.felder.map(f=>f.breite)));
+   ok('Die Zeile waechst beim Zaehlen nicht ('+name+')',
+      r.leer.hoehe===r.voll.hoehe, r.leer.hoehe+' / '+r.voll.hoehe);
    ok('Die Zaehler kosten keine Brettflaeche ('+name+')',
       r.brettVoll===r.brettLeer, r.brettLeer+' / '+r.brettVoll);
    await pz.close();

@@ -667,19 +667,21 @@ function kurzfassungGleich(proben,voll,erwartet){
     const l3=currentLine()||{path:[0]}; applyMove(B.moves[l3.path[0]],true); render();
     requestHint(); erg.tipp3=game.tippKeys.size;
 
-    // Anzeige
+    // Anzeige in der Zaehlerzeile
     game.rueckAlarm=2; game.tippKeys=new Set(['a','b','c']); renderHud();
-    erg.zeigtRueck=document.getElementById('zRueck').textContent;
-    erg.zeigtTipp=document.getElementById('zTipp').textContent;
+    erg.zeigtRueck=document.getElementById('hudRett').textContent;
+    erg.zeigtTipp=document.getElementById('hudTipp').textContent;
+    erg.hervor=document.getElementById('hudRettBox').classList.contains('da');
     const lang=z=>[z.rueck,z.tipp].filter(Boolean).join(' und ');
     erg.langMehr=lang(zaehlerLang());
     game.rueckAlarm=1; game.tippKeys=new Set(['a']); renderHud();
-    erg.einzahlRueck=document.getElementById('zRueck').textContent;
-    erg.einzahlTipp=document.getElementById('zTipp').textContent;
     erg.langEins=lang(zaehlerLang());
     game.rueckAlarm=0; game.tippKeys=new Set(); renderHud();
-    erg.leerRueck=document.getElementById('zRueck').textContent;
-    erg.leerTipp=document.getElementById('zTipp').textContent;
+    erg.leerRueck=document.getElementById('hudRett').textContent;
+    erg.leerTipp=document.getElementById('hudTipp').textContent;
+    erg.leerHervor=document.getElementById('hudRettBox').classList.contains('da');
+    erg.labelTipp=document.querySelector('#hudTippBox span').textContent;
+    erg.labelRett=document.querySelector('#hudRettBox span').textContent;
     /* Ergebnis einer Partie ohne Huerden: eine Stellung ohne legale Zuege
        bauen und afterMove() den Schluss machen lassen - den Ergebnistext
        erzeugt nur dieser Weg. */
@@ -706,19 +708,27 @@ function kurzfassungGleich(proben,voll,erwartet){
      zaehler.tipp1===1&&zaehler.tipp2===1, zaehler.tipp1+' / '+zaehler.tipp2);
   ok('Ein Tipp in einer neuen Stellung zaehlt dazu',
      zaehler.tipp3===2, zaehler.tipp3);
-  /* In der Zeile kurz (der Platz reicht nicht fuer mehr), im Ergebnis in
-     ganzen Worten mit richtiger Einzahl und Mehrzahl. */
-  ok('Die Zeile zeigt die Zaehler kurz',
-     zaehler.zeigtRueck==='2× zurück'&&zaehler.zeigtTipp==='3× Tipp',
+  /* In der Zaehlerzeile stehen nur die Zahlen unter ihrer Beschriftung,
+     im Ergebnis ganze Worte mit richtiger Einzahl und Mehrzahl. */
+  ok('Die Zaehlerzeile zeigt die Zahlen',
+     zaehler.zeigtRueck==='2'&&zaehler.zeigtTipp==='3',
      JSON.stringify([zaehler.zeigtRueck,zaehler.zeigtTipp]));
+  ok('Die Beschriftungen heissen Tipps und Rettungen',
+     zaehler.labelTipp==='Tipps'&&zaehler.labelRett==='Rettungen',
+     JSON.stringify([zaehler.labelTipp,zaehler.labelRett]));
+  ok('Eine Zahl groesser null wird hervorgehoben',
+     zaehler.hervor===true&&zaehler.leerHervor===false,
+     JSON.stringify([zaehler.hervor,zaehler.leerHervor]));
   ok('Das Ergebnis nennt Einzahl und Mehrzahl richtig',
-     zaehler.langMehr==='2 Rücknahmen und 3 Tipps'
-     &&zaehler.langEins==='1 Rücknahme und 1 Tipp',
+     zaehler.langMehr==='2 Rettungen und 3 Tipps'
+     &&zaehler.langEins==='1 Rettung und 1 Tipp',
      JSON.stringify([zaehler.langMehr,zaehler.langEins]));
   ok('Ohne Hürden sagt das Ergebnis das ausdrücklich',
-     /Ohne Rücknahme und ohne Tipp/.test(zaehler.ergebnisSauber), zaehler.ergebnisSauber);
-  ok('Bei null bleibt die Stelle leer',
-     zaehler.leerRueck===''&&zaehler.leerTipp==='',
+     /Ohne Rettung und ohne Tipp/.test(zaehler.ergebnisSauber), zaehler.ergebnisSauber);
+  /* Bei null ein Strich statt einer Null: eine Null liest sich wie ein
+     Mangel, ein Strich wie "noch nichts passiert". */
+  ok('Bei null steht ein Strich, keine Null',
+     zaehler.leerRueck==='–'&&zaehler.leerTipp==='–',
      JSON.stringify([zaehler.leerRueck,zaehler.leerTipp]));
 
   /* Die untere Zeile ist hart einzeilig; was nicht passt, kuerzt
