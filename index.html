@@ -343,7 +343,7 @@ header .boardname:active{background:var(--panel2)}
 
 <script>
 'use strict';
-const APP_VERSION='1.30';
+const APP_VERSION='1.31';
 /* =========================================================================
    Kern: Bretter, Züge, Symmetrien, Paritäts-Schranke, Solver
    (als Fabrik, damit derselbe Code im Web Worker läuft)
@@ -1059,11 +1059,30 @@ setInterval(()=>{ if(game.startedAt&&!game.finished) $('hudTime').textContent=fm
    die Zeile oeffnet. So bleibt das Brett so gross wie der Bildschirm erlaubt. */
 /* Die untere Zeile soll einzeilig bleiben: erster Satz, hoechstens 32
    Zeichen. Der volle Wortlaut steht im Blatt. */
+/* Kurzfassung fuer die untere Zeile, hoechstens 32 Zeichen.
+   Gekuerzt wird in drei Stufen, weil ein Schnitt am Wortende allein zu
+   Bruchstuecken fuehrt: "Tippe einen Stein an - bei mehreren Zielen wische
+   in die Richtung." endete so bei "bei..." und sagte gar nichts mehr
+   (Lutz' Screenshot vom 13.09.2026, 21:03 Uhr).
+   1. Erster Satz - passt der, ist er die Kurzfassung.
+   2. Sonst an der letzten Sinnesgrenze davor trennen (Gedankenstrich,
+      Komma, Semikolon, Doppelpunkt). Was davor steht, ergibt fuer sich
+      einen Sinn, deshalb ohne Auslassungspunkte.
+   3. Erst wenn es keine gibt, am Wortende mit Auslassungspunkten - und
+      dann ohne ein Bindewort am Schluss: "Tippe das Zielfeld oder..."
+      laesst den Leser haengen, "Tippe das Zielfeld..." nicht. */
+const KURZ_MAX=32, KURZ_MIN=10;
+const KURZ_BINDE=/\s+(und|oder|aber|denn|sondern|als|wie|mit|von|für|bei|nach|über|unter|durch|dann|noch|auch|nur|schon|sowie|bzw)$/i;
 function kurzfassung(text){
   const m=text.match(/^[^.!?]*[.!?]/);
   let k=(m?m[0]:text).trim().replace(/\.$/,'');
-  if(k.length>32) k=k.slice(0,29).replace(/\s+\S*$/,'')+'\u2026';
-  return k;
+  if(k.length<=KURZ_MAX) return k;
+  const grenze=k.slice(0,KURZ_MAX+1).match(/^(.*?)\s*[\u2013\u2014,;:]/);
+  if(grenze&&grenze[1].trim().length>=KURZ_MIN) return grenze[1].trim();
+  let rest=k.slice(0,KURZ_MAX-3).replace(/\s+\S*$/,'');
+  /* Mehrfach, falls zwei Bindewoerter aufeinandertreffen ("und dann"). */
+  let vorher; do{ vorher=rest; rest=rest.replace(KURZ_BINDE,''); }while(rest!==vorher);
+  return rest+'\u2026';
 }
 let statusDetail=null;
 /* Solange gerechnet wird, dreht sich an der Stelle der Ampel ein Rad - der

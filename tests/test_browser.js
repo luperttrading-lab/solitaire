@@ -2,6 +2,10 @@ const puppeteer=require(process.env.PUPPETEER_PATH||'puppeteer');
 const path=require('path');
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 let fails=0; const ok=(name,cond,extra)=>{ console.log((cond?'OK  ':'FAIL')+' '+name+(extra!==undefined?' -> '+extra:'')); if(!cond) fails++; };
+/* Vergleicht die Kurzfassung einer Probe mit dem erwarteten Wortlaut. */
+function kurzfassungGleich(proben,voll,erwartet){
+  const x=proben.find(p=>p.voll===voll); return !!x&&x.kurz===erwartet;
+}
 (async()=>{
   const browser=await puppeteer.launch({headless:true,args:['--no-sandbox','--disable-setuid-sandbox','--allow-file-access-from-files']});
   const page=await browser.newPage();
@@ -632,6 +636,66 @@ let fails=0; const ok=(name,cond,extra)=>{ console.log((cond?'OK  ':'FAIL')+' '+
        const r=istGestrandet(game.board.index['4,6']); settings.marks=true; return !r; }));
   await page.evaluate(()=>{ settings.marks=false; settings.strategy=true; renderStrategyBtn();
     Store.del('markeErklaert'); newGame('english'); });
+
+  /* Die untere Zeile ist hart einzeilig; was nicht passt, kuerzt
+     kurzfassung(). Bis v1.30 schnitt sie nur am Wortende ab und liess den
+     Leser im Nebensatz haengen: aus "Tippe einen Stein an - bei mehreren
+     Zielen wische in die Richtung." wurde "Tippe einen Stein an - bei..."
+     (Lutz' Screenshot vom 13.09.2026, 21:03 Uhr). */
+  const kurzProben=await page.evaluate(()=>{
+    const proben=[
+      'Tippe einen Stein an – bei mehreren Zielen wische in die Richtung.',
+      'Tippe einen Stein an, dann das Zielfeld oder wische in die Richtung.',
+      'Tippe den Stein an, der zu Beginn herausgenommen wird.',
+      '3 Züge möglich – wische in die Richtung oder tippe das Zielfeld.',
+      'Tippe das Zielfeld oder wische dorthin.',
+      'Keine Züge mehr – 3 Steine übrig.',
+      'Gelöst – 1 Stein übrig.',
+      'Startloch gesetzt. Viel Erfolg.',
+      'Das war nicht das Muster – die Endstellung stimmt nicht.',
+      'Hintergrund-Rechner antwortet nicht – weiche aus.',
+      'Der bessere Zug ist markiert: Blau über Violett nach links.',
+      'Kein Zug gefunden, der die Lösung gekostet hat – die Stellung war nicht lösbar.',
+      'Diese Stellung war in sechs Sekunden nicht zu Ende zu rechnen.',
+      'Bis Zug 14 zurück geprüft: dort war 1 Stein schon nicht mehr erreichbar.',
+      'Abschnitt 2 von 5 geschafft.'];
+    return proben.map(v=>({voll:v,kurz:kurzfassung(v)})); });
+  console.log('INFO Kurzfassungen: '+JSON.stringify(kurzProben.map(x=>x.kurz)));
+  /* Ein echter Bruch ist nur eine Kuerzung mit Auslassungspunkten, die auf
+     einem Bindewort endet - "Tippe einen Stein an" ist ein ganzer Satz und
+     darf so stehen bleiben. */
+  const BINDE=/\s(und|oder|aber|denn|sondern|als|wie|mit|von|für|bei|nach|über|unter|durch|dann|noch|auch|nur|schon)…$/i;
+  ok('Keine Kurzfassung ist laenger als 32 Zeichen',
+     kurzProben.every(x=>x.kurz.length<=32),
+     JSON.stringify(kurzProben.filter(x=>x.kurz.length>32).map(x=>x.kurz)));
+  ok('Keine Kurzfassung endet mitten im Nebensatz',
+     kurzProben.every(x=>!BINDE.test(x.kurz)),
+     JSON.stringify(kurzProben.filter(x=>BINDE.test(x.kurz)).map(x=>x.kurz)));
+  ok('Kurze Meldungen bleiben unveraendert',
+     kurzfassungGleich(kurzProben,'Gelöst – 1 Stein übrig.','Gelöst – 1 Stein übrig'),
+     JSON.stringify(kurzProben.find(x=>/Gelöst/.test(x.voll))));
+  ok('An einer Sinnesgrenze wird ohne Auslassungspunkte getrennt',
+     kurzProben.filter(x=>/[–,;:]/.test(x.voll)&&x.voll.length>34)
+       .some(x=>!/…$/.test(x.kurz)&&x.kurz.length>=10),
+     JSON.stringify(kurzProben.map(x=>x.kurz).filter(k=>!/…$/.test(k))));
+
+  /* Und dieselbe Probe im Gerät: der sichtbare Text darf nicht abgeschnitten
+     werden - sonst nuetzt die beste Kurzfassung nichts. */
+  const imGeraet=await page.evaluate(async()=>{
+    const erg=[]; hinweisBis=0;
+    for(const t of ['Tippe einen Stein an – bei mehreren Zielen wische in die Richtung.',
+                    '3 Züge möglich – wische in die Richtung oder tippe das Zielfeld.',
+                    'Keine Züge mehr – 3 Steine übrig.']){
+      setStatus(t);
+      const k=document.querySelector('#status .kurz');
+      erg.push({text:k.textContent, platz:Math.round(k.clientWidth),
+        gebraucht:Math.round(k.scrollWidth)});
+    }
+    return erg; });
+  console.log('INFO Kurzfassung im Geraet: '+JSON.stringify(imGeraet));
+  ok('Die Kurzfassung passt in die Zeile, ohne abgeschnitten zu werden',
+     imGeraet.every(x=>x.gebraucht<=x.platz+1),
+     JSON.stringify(imGeraet.map(x=>x.gebraucht+'/'+x.platz)));
 
   /* Hinweis auf eine neuere Version. Der Vergleich muss stellenweise als Zahl
      laufen: als Text waere '1.9' groesser als '1.22', und genau dort steht die
