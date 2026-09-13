@@ -438,6 +438,16 @@ let fails=0; const ok=(name,cond,extra)=>{ console.log((cond?'OK  ':'FAIL')+' '+
        document.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true}));
        Sound.ensure=oe; return ruf>0; }));
 
+  /* Die Kopfzeile von CLAUDE.md stand zwei Auslieferungen lang auf einer alten
+     Version, weil das Nachziehen still fehlschlug. Nichts, was man ansieht -
+     also pruefen. */
+  const claude=require('fs').readFileSync(require('path').join(__dirname,'..','CLAUDE.md'),'utf8');
+  const stand=(claude.match(/^Stand: v([0-9.]+) /m)||[])[1];
+  const appV=await page.evaluate(()=>APP_VERSION);
+  ok('CLAUDE.md nennt dieselbe Version wie APP_VERSION', stand===appV, stand+' gegen '+appV);
+  ok('CLAUDE.md fuehrt diese Version in der Aenderungsliste',
+     new RegExp('\\*\\*v'+appV.replace(/\./g,'\\.')+'\\*\\*').test(claude), 'v'+appV);
+
   ok('keine Seitenfehler insgesamt', errors.length===0, errors.join(' | '));
   await browser.close();
   console.log(fails?`\n${fails} FEHLER`:'\nALLE BROWSER-TESTS OK'); process.exitCode=fails?1:0;

@@ -1,6 +1,6 @@
 # Solitaire – Steckbrett-Solitär als Spiel- und Lernapp (iPhone, GitHub Pages)
 
-Stand: v1.20 (13.09.2026). Eine einzige Datei `index.html`, kein Build, keine Abhängigkeiten.
+Stand: v1.22 (13.09.2026). Eine einzige Datei `index.html`, kein Build, keine Abhängigkeiten.
 Autor/Product Owner: Lutz („Neo"). Sprache im Chat und in der App: Deutsch, per Du.
 
 ## Was die App kann
@@ -27,7 +27,7 @@ Autor/Product Owner: Lutz („Neo"). Sprache im Chat und in der App: Deutsch, pe
 - Die Zahl **24** (`full = count<=24`) steuert etwas anderes: nur darunter werden zusätzlich `everEmpty`/`optFinal` berechnet, also die Daten für die Markierung. Sie hängt nicht an `settings.marks` – bekannt, bewusst so gelassen.
 
 ## Konventionen von Lutz
-- Eine ausgelieferte Datei: `index.html`. Version in `APP_VERSION` und im Menü; jeder Stand bekommt zusätzlich ein Git-Tag (`v1.1`). Keine versionierte Zweitkopie im Repo – Git hält die Stände.
+- Eine ausgelieferte Datei: `index.html`. Version in `APP_VERSION` und im Menü. Keine versionierte Zweitkopie im Repo – Git hält die Stände. **Keine Git-Tags** (Entscheidung von Lutz, 13.09.2026): Jede Auslieferung trägt die Versionsnummer schon in ihrer Commit-Meldung, damit ist jeder Stand wiederzufinden – ein Tag wäre ein zweites Etikett auf derselben Kiste. Dazu kommt, dass Cloud-Sitzungen Tag-Refs nicht schreiben dürfen (reproduzierbar HTTP 403, Branch-Push geht), die Regel also bei jeder Auslieferung eine Handarbeit für Lutz erzeugt hätte. Der einzige vorhandene Tag `v1.1` liegt nur lokal und ist nie auf GitHub angekommen.
 - **Trainer und Strategie-Hinweise sind standardmäßig an.** Vorher waren beide aus – wer die App frisch installierte, sah eine Ampel, die nie leuchtete, eine leere zweite Zeile und weder Lauflicht noch Warnblitz: Die Bewertung läuft nur, wenn Trainer, Strategie oder Markierung an ist. Gemessene Kosten: unter 1 s in der Eröffnung, meist unter 100 ms, im Hintergrund.
 - **Antworten auf eine Berührung** („Dieser Stein kann nicht springen“ u. ä.) laufen über `hinweis()` und haben 2,2 s Vorrang vor der Bewertung – sonst überschreibt die gleichzeitig fertig werdende Bewertung des vorigen Zuges sie, bevor man sie lesen kann. Ein Zug oder ein neues Spiel beendet den Vorrang sofort (`hinweisBis=0` in `afterMove` und `newGame`), sonst verzögert er die nächste Bewertungsanzeige.
 - **Markierung des letzten Zuges** (nur beim Spulen, `game.lastMove`) verschwindet, sobald man das Brett berührt (`game.markAus`, gesetzt in `onTap` **und** im `pointerdown` des Bretts, damit auch ein Tipp neben die Felder aufräumt) – sie stand sonst beim Nachdenken im Weg. Beim nächsten Spulen erscheint sie wieder. Fünf Prüfungen in `test_browser`.
