@@ -671,7 +671,7 @@ function kurzfassungGleich(proben,voll,erwartet){
     game.rueckAlarm=2; game.tippKeys=new Set(['a','b','c']); renderHud();
     erg.zeigtRueck=document.getElementById('hudRett').textContent;
     erg.zeigtTipp=document.getElementById('hudTipp').textContent;
-    erg.hervor=document.getElementById('hudRettBox').classList.contains('da');
+    erg.hervor=document.getElementById('hudRett').classList.contains('da');
     const lang=z=>[z.rueck,z.tipp].filter(Boolean).join(' und ');
     erg.langMehr=lang(zaehlerLang());
     game.rueckAlarm=1; game.tippKeys=new Set(['a']); renderHud();
@@ -679,9 +679,16 @@ function kurzfassungGleich(proben,voll,erwartet){
     game.rueckAlarm=0; game.tippKeys=new Set(); renderHud();
     erg.leerRueck=document.getElementById('hudRett').textContent;
     erg.leerTipp=document.getElementById('hudTipp').textContent;
-    erg.leerHervor=document.getElementById('hudRettBox').classList.contains('da');
-    erg.labelTipp=document.querySelector('#hudTippBox span').textContent;
-    erg.labelRett=document.querySelector('#hudRettBox span').textContent;
+    erg.leerHervor=document.getElementById('hudRett').classList.contains('da');
+    const dts=[...document.querySelectorAll('.hud .neben dt')].map(e=>e.textContent);
+    erg.labelTipp=dts[0]; erg.labelRett=dts[1];
+    /* Wort und Zahl muessen in derselben Zeile stehen - das ist der Kern
+       des 2x2-Rasters. */
+    const paar=(dt,dd)=>Math.abs(dt.getBoundingClientRect().top-dd.getBoundingClientRect().top)<6;
+    const alleDt=[...document.querySelectorAll('.hud .neben dt')];
+    const alleDd=[...document.querySelectorAll('.hud .neben dd')];
+    erg.nebeneinander=paar(alleDt[0],alleDd[0])&&paar(alleDt[1],alleDd[1]);
+    erg.untereinander=alleDt[1].getBoundingClientRect().top>alleDt[0].getBoundingClientRect().top+4;
     /* Ergebnis einer Partie ohne Huerden: eine Stellung ohne legale Zuege
        bauen und afterMove() den Schluss machen lassen - den Ergebnistext
        erzeugt nur dieser Weg. */
@@ -713,9 +720,11 @@ function kurzfassungGleich(proben,voll,erwartet){
   ok('Die Zaehlerzeile zeigt die Zahlen',
      zaehler.zeigtRueck==='2'&&zaehler.zeigtTipp==='3',
      JSON.stringify([zaehler.zeigtRueck,zaehler.zeigtTipp]));
-  ok('Die Beschriftungen heissen Tipps und Rettungen',
-     zaehler.labelTipp==='Tipps'&&zaehler.labelRett==='Rettungen',
+  ok('Die Beschriftungen heissen Tipps und Rettung',
+     zaehler.labelTipp==='Tipps'&&zaehler.labelRett==='Rettung',
      JSON.stringify([zaehler.labelTipp,zaehler.labelRett]));
+  ok('Wort und Zahl stehen nebeneinander', zaehler.nebeneinander===true);
+  ok('Die beiden Zeilen stehen untereinander', zaehler.untereinander===true);
   ok('Eine Zahl groesser null wird hervorgehoben',
      zaehler.hervor===true&&zaehler.leerHervor===false,
      JSON.stringify([zaehler.hervor,zaehler.leerHervor]));

@@ -50,21 +50,33 @@ header .boardname:active{background:var(--panel2)}
    Nebenzahlen und sollen den drei Hauptzahlen nicht die Wirkung nehmen.
    Die schmalen Spalten nehmen nur, was ihre Beschriftung braucht (auto),
    der Rest verteilt sich gleichmaessig auf die drei grossen. */
-.hud{display:grid;grid-template-columns:repeat(3,1fr) auto auto;align-items:start;
-  gap:0 8px;padding:4px 6px 8px;border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
+/* Drei grosse Zahlen links, rechts ein kleiner Block aus vier Zellen:
+   Wort und Zahl nebeneinander, zwei Zeilen untereinander (Lutz' Bild:
+   "zwei Zeilen, zwei Spalten"). Der Block nimmt nur, was er braucht (auto),
+   der Rest verteilt sich gleichmaessig auf die drei grossen. */
+.hud{display:grid;grid-template-columns:repeat(3,1fr) auto;align-items:center;
+  gap:0 10px;padding:4px 6px 8px;border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
 .hud>div{text-align:center}
 .hud b{display:block;font-family:var(--serif);font-size:30px;line-height:1;font-weight:400;color:var(--ink)}
 .hud span{font-size:12px;color:var(--muted)}
-/* Die Nebenzahlen: kleiner, gedaempft, und bei null nur ein Strich statt
-   einer Null - eine Null liest sich wie ein Mangel, ein Strich wie "noch
-   nichts passiert". */
-.hud .neben b{font-size:19px;line-height:1.55;color:var(--muted)}
-.hud .neben span{font-size:11px}
-.hud .neben.da b{color:var(--brass2)}
-/* Auf schmalen Geraeten wird "Übrig von 32" sonst zweizeilig und schiebt
-   die Zeile auseinander. Kleinere Schrift statt kuerzerem Wort: die 32 ist
-   die einzige Stelle, an der die Ausgangszahl steht. */
-@media (max-width:386px){ .hud span{font-size:11px} .hud .neben span{font-size:10px} }
+/* Das Raster: Wort linksbuendig, Zahl rechtsbuendig - wie in einer Tabelle,
+   damit die Zahlen untereinander stehen. Bei null ein Strich statt einer
+   Null: eine Null liest sich wie ein Mangel, ein Strich wie "noch nichts
+   passiert". */
+/* Die Zahlenspalte fest auf zwei Ziffern - mit auto richtet sie sich nach
+   dem Inhalt, und dann wird der Block breiter, sobald die Zahl zweistellig
+   wird, was die drei Hauptspalten verschiebt. */
+.hud .neben{display:grid;grid-template-columns:auto 2.1ch;gap:1px 6px;
+  text-align:left;align-content:center}
+/* "Rettung" im Einzahl-Sinn als Kategoriename (Wort von Lutz) - "Rettungen"
+   machte den Block breiter als eine der drei Hauptspalten, und dann zieht
+   er die Aufmerksamkeit auf sich, die den grossen Zahlen gehoert. */
+.hud .neben dt{font-size:12px;color:var(--muted);white-space:nowrap}
+.hud .neben dd{margin:0;font-size:13px;color:var(--muted);text-align:right;
+  font-variant-numeric:tabular-nums}
+.hud .neben dd.da{color:var(--brass2);font-weight:600}
+@media (max-width:386px){ .hud span{font-size:11px}
+  .hud .neben{gap:1px 5px} .hud .neben dt{font-size:11px} .hud .neben dd{font-size:12px} }
 .quick{display:flex;justify-content:center;padding:6px 0 0}
 .pill{border-radius:999px;padding:6px 14px;font-size:13px;background:var(--panel);color:var(--muted);border:1px solid var(--line)}
 .pill.on{background:linear-gradient(180deg,#d9b25f,#b88f36);color:#1f1608;border-color:transparent}
@@ -278,8 +290,10 @@ header .boardname:active{background:var(--panel2)}
     <div><b id="hudMoves">0</b><span>Sprünge</span></div>
     <div><b id="hudLeft">32</b><span id="hudLeftLabel">Übrig von 32</span></div>
     <div><b id="hudTime">0:00</b><span>Zeit</span></div>
-    <div class="neben" id="hudTippBox"><b id="hudTipp">–</b><span>Tipps</span></div>
-    <div class="neben" id="hudRettBox"><b id="hudRett">–</b><span>Rettungen</span></div>
+    <dl class="neben">
+      <dt>Tipps</dt><dd id="hudTipp">–</dd>
+      <dt>Rettung</dt><dd id="hudRett">–</dd>
+    </dl>
   </div>
   <div class="quick"><button id="btnStrategy" class="pill" aria-pressed="false">Strategie-Hinweise: aus</button></div>
   <div id="stage"><svg id="board" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Spielbrett"></svg></div>
@@ -360,7 +374,7 @@ header .boardname:active{background:var(--panel2)}
 
 <script>
 'use strict';
-const APP_VERSION='1.33';
+const APP_VERSION='1.34';
 /* =========================================================================
    Kern: Bretter, Züge, Symmetrien, Paritäts-Schranke, Solver
    (als Fabrik, damit derselbe Code im Web Worker läuft)
@@ -1026,11 +1040,9 @@ function zaehlerLang(){
 }
 function renderZaehler(){
   const {r,t}=zaehlerZahlen();
-  const setz=(box,zahl,wert)=>{ const e=$(zahl), k=$(box); if(!e||!k) return;
-    e.textContent=wert?String(wert):'\u2013';
-    k.classList.toggle('da',wert>0); };
-  setz('hudTippBox','hudTipp',t);
-  setz('hudRettBox','hudRett',r);
+  const setz=(id,wert)=>{ const e=$(id); if(!e) return;
+    e.textContent=wert?String(wert):'\u2013'; e.classList.toggle('da',wert>0); };
+  setz('hudTipp',t); setz('hudRett',r);
 }
 function renderHud(){
   renderZaehler();

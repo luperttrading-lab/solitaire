@@ -160,45 +160,46 @@ const FAELLE=[
    await pf.close();
  }
 
- /* Die Zaehlerzeile hat jetzt fuenf Spalten: drei grosse Zahlen links,
-    Tipps und Rettungen klein rechts. Die drei grossen duerfen dadurch nicht
-    zerquetscht werden, und nichts darf umbrechen oder ueberlaufen. */
+ /* Rechts in der Zaehlerzeile sitzt ein Block aus vier Zellen: Tipps und
+    Rettungen, je Wort und Zahl nebeneinander, zwei Zeilen untereinander.
+    Die drei grossen Zahlen duerfen dadurch nicht zerquetscht werden, und
+    der Block darf beim Hochzaehlen nicht breiter werden. */
  for(const [name,w,h] of [['iPhone 14 Pro',393,852],['iPhone SE',375,667],['sehr klein',360,600]]){
    const pz=await browser.newPage(); await pz.setViewport({width:w,height:h});
    await pz.goto(url,{waitUntil:'load'}); await sleep(2300);
    const r=await pz.evaluate(()=>{
-     const hud=document.querySelector('.hud');
+     const hud=document.querySelector('.hud'), block=hud.querySelector('.neben');
      const brett=()=>Math.round(document.getElementById('board').getBoundingClientRect().width);
-     const mass=()=>{ const felder=[...hud.children].map(d=>{
-         const b=d.querySelector('b'), s=d.querySelector('span');
-         return {zahl:b.textContent, wort:s.textContent,
-           breite:Math.round(d.getBoundingClientRect().width),
-           zahlUeber:b.scrollWidth-b.clientWidth,
-           wortUeber:s.scrollWidth-s.clientWidth,
-           /* Zeilenzahl aus der tatsaechlichen Zeilenhoehe, nicht aus einer
-              festen Zahl - die Schrift ist auf schmalen Geraeten kleiner. */
-           zeilen:Math.max(1,Math.round(s.getBoundingClientRect().height
-             /(parseFloat(getComputedStyle(s).lineHeight)||16)))};
-       });
-       return {felder, hoehe:Math.round(hud.getBoundingClientRect().height),
-         breite:Math.round(hud.getBoundingClientRect().width)}; };
+     const mass=()=>{
+       const gross=[...hud.children].filter(d=>d.tagName==='DIV');
+       const dt=[...block.querySelectorAll('dt')], dd=[...block.querySelectorAll('dd')];
+       const zeilen=x=>Math.max(1,Math.round(x.getBoundingClientRect().height
+         /(parseFloat(getComputedStyle(x).lineHeight)||16)));
+       return {blockBreite:Math.round(block.getBoundingClientRect().width),
+         grossBreiten:gross.map(d=>Math.round(d.getBoundingClientRect().width)),
+         labelZeilen:gross.map(d=>zeilen(d.querySelector('span'))),
+         paarGleicheHoehe:dt.every((e,i)=>Math.abs(e.getBoundingClientRect().top-dd[i].getBoundingClientRect().top)<6),
+         zweiZeilen:dt[1].getBoundingClientRect().top>dt[0].getBoundingClientRect().top+4,
+         drin:Math.round(block.getBoundingClientRect().right)<=Math.round(hud.getBoundingClientRect().right)+1,
+         hoehe:Math.round(hud.getBoundingClientRect().height)}; };
      game.rueckAlarm=0; game.tippKeys=new Set(); renderHud(); fitStage();
      const leer=mass(), brettLeer=brett();
      game.rueckAlarm=12; game.tippKeys=new Set('abcdefghijkl'.split('')); renderHud(); fitStage();
      const voll=mass(), brettVoll=brett();
      game.rueckAlarm=0; game.tippKeys=new Set(); renderHud(); fitStage();
      return {leer,voll,brettLeer,brettVoll}; });
-   console.log('INFO Zaehlerzeile ('+name+'): '+JSON.stringify(r.voll.felder.map(f=>f.wort+' '+f.breite+'px')));
-   ok('Die Zeile hat fuenf Felder ('+name+')', r.voll.felder.length===5, r.voll.felder.length);
-   ok('Nichts laeuft ueber ('+name+')',
-      r.voll.felder.every(f=>f.zahlUeber<=0&&f.wortUeber<=0),
-      JSON.stringify(r.voll.felder.map(f=>f.wort+':'+f.zahlUeber+'/'+f.wortUeber)));
+   console.log('INFO Zaehlerblock ('+name+'): Block '+r.voll.blockBreite
+     +' px, grosse Spalten '+JSON.stringify(r.voll.grossBreiten));
+   ok('Wort und Zahl stehen auf einer Hoehe ('+name+')', r.voll.paarGleicheHoehe);
+   ok('Tipps und Rettungen stehen untereinander ('+name+')', r.voll.zweiZeilen);
+   ok('Der Block bleibt in der Zeile ('+name+')', r.voll.drin);
    ok('Keine Beschriftung bricht um ('+name+')',
-      r.voll.felder.every(f=>f.zeilen<=1), JSON.stringify(r.voll.felder.map(f=>f.wort+':'+f.zeilen)));
+      r.voll.labelZeilen.every(z=>z<=1), JSON.stringify(r.voll.labelZeilen));
    ok('Die drei Hauptzahlen behalten den meisten Platz ('+name+')',
-      Math.min(r.voll.felder[0].breite,r.voll.felder[1].breite,r.voll.felder[2].breite)
-      > Math.max(r.voll.felder[3].breite,r.voll.felder[4].breite),
-      JSON.stringify(r.voll.felder.map(f=>f.breite)));
+      Math.min.apply(null,r.voll.grossBreiten)>r.voll.blockBreite,
+      JSON.stringify(r.voll.grossBreiten)+' gegen '+r.voll.blockBreite);
+   ok('Der Block wird beim Zaehlen nicht breiter ('+name+')',
+      r.leer.blockBreite===r.voll.blockBreite, r.leer.blockBreite+' / '+r.voll.blockBreite);
    ok('Die Zeile waechst beim Zaehlen nicht ('+name+')',
       r.leer.hoehe===r.voll.hoehe, r.leer.hoehe+' / '+r.voll.hoehe);
    ok('Die Zaehler kosten keine Brettflaeche ('+name+')',
