@@ -261,6 +261,95 @@ function kurzfassungGleich(proben,voll,erwartet){
   ok('Rote Meldung ohne Bewertung loest keinen Warnblitz aus',
      !await page.evaluate(()=>document.getElementById('warnblitz').classList.contains('an')));
 
+  /* Der Alarm darf nicht davon abhaengen, ob die Bewertung der vorigen
+     Stellung schon fertig ist - Lutz spielt zuegiger, als gerechnet wird.
+     Und er darf nicht gegen die Paritaetsschranke der NEUEN Stellung
+     pruefen: steigt die durch den Zug selbst mit, ist best===lb und der
+     Alarm blieb bis v1.34 aus, obwohl die Loesung gerade verloren ging
+     (gemessen: englisches Brett, best 1 -> 2, lb 2). */
+  const bau=async()=>{ await page.evaluate(()=>{ newGame('english'); cancelEval();
+    for(let k=0;k<12;k++){ const l=currentLine(); applyMove(game.board.moves[l.path[0]],true); } render(); }); };
+  const bestNach=(mi,n)=>page.evaluate((i,n)=>{ const arr=occ(); const m=game.board.moves[i];
+    const c=arr.slice(); c[m.from]=0; c[m.over]=0; c[m.to]=1; const [lo,hi]=CORE.fromArray(c);
+    return CORE.solveSmart(game.board,lo,hi,n,{maxNodes:0,timeMs:8000,target:1}).best; },mi,n);
+  const legaleZuege=()=>page.evaluate(()=>game.board.moves.map((m,i)=>({i,ok:game.pegAt[m.from]>=0&&game.pegAt[m.over]>=0&&game.pegAt[m.to]<0})).filter(x=>x.ok).map(x=>x.i));
+  /* Erst die Stellung herstellen, auf die sich legal3 bezieht - bestNach
+     misst die Stellung, die gerade im Browser steht. Ohne das Aufbauen
+     bewertete die Schleife ein voellig anderes Brett und hielt einen
+     Fehlzug fuer den guten. */
+  await bau();
+  let gutZug=-1;
+  for(const mi of legal3){ if(await bestNach(mi,19)===1){ gutZug=mi; break; } }
+  /* Der Fehlzug muss fuer die Stellung NACH dem guten Zug gesucht werden -
+     culprit ist dort nicht mehr legal. Genau daran scheiterte der erste
+     Anlauf dieser Pruefung. */
+  await bau(); await page.evaluate(i=>{ applyMove(game.board.moves[i],true); render(); },gutZug);
+  let culprit2=-1;
+  for(const mi of await legaleZuege()){ if(await bestNach(mi,18)>1){ culprit2=mi; break; } }
+  ok('Guter Zug und Folge-Fehlzug gefunden (Testaufbau)', gutZug>=0&&culprit2>=0, gutZug+'/'+culprit2);
+  /* warnblitz mitschreiben: sonst ist bei einem Fehlschlag nicht zu sehen,
+     zu welchem Zug der Blitz gehoerte. */
+  await page.evaluate(()=>{ window._alarme=[]; const orig=warnblitz;
+    window._origBlitz=orig;
+    window.warnblitz=function(e){ window._alarme.push({hist:game.history.length,erzwingen:!!e}); return orig.apply(this,arguments); }; });
+
+  // Erst der gute Zug, dann ohne Warten der Fehlzug - die Bewertung des
+  // guten Zuges laeuft dabei noch.
+  await bau();
+  await page.evaluate(()=>{ game.evalRes=null; game.prevEval=null; evaluatePosition(); });
+  await page.waitForFunction(()=>!game.evaluating,{timeout:60000}); await sleep(80);
+  await page.evaluate(()=>{ window._alarme=[]; document.getElementById('warnblitz').classList.remove('an'); });
+  await page.evaluate(i=>playMove(game.board.moves[i]),gutZug);
+  await page.waitForFunction(()=>!game.animating,{timeout:20000});
+  const nochAmRechnen=await page.evaluate(()=>game.evaluating&&!game.evalRes);
+  await page.evaluate(i=>playMove(game.board.moves[i]),culprit2);
+  await page.waitForFunction(()=>!game.evaluating&&!game.animating,{timeout:60000});
+  await page.waitForFunction(()=>!game.prevPos,{timeout:60000}); await sleep(300);
+  const zuegig=await page.evaluate(()=>({blitz:document.getElementById('warnblitz').classList.contains('an'),
+    alarme:window._alarme, hist:game.history.length, gemerkt:game.alarmZuege.has(game.history.length),
+    lbNeu:game.evalRes&&game.evalRes.lb, best:game.evalRes&&game.evalRes.best}));
+  console.log('INFO Alarm bei zuegigem Spiel: '+JSON.stringify(zuegig)+', vorige Bewertung lief noch: '+nochAmRechnen);
+  ok('Warnblitz auch, wenn die vorige Bewertung noch lief',
+     zuegig.blitz===true&&zuegig.gemerkt===true, JSON.stringify(zuegig));
+  ok('Der Blitz gehoert zum Fehlzug, nicht zu einem frueheren',
+     zuegig.alarme.length===1&&zuegig.alarme[0].hist===zuegig.hist, JSON.stringify(zuegig.alarme));
+  const rettungZuegig=await page.evaluate(()=>{ const v=game.rueckAlarm; game.animating=false; undo(); game.animating=false; return {vorher:v,nachher:game.rueckAlarm}; });
+  ok('Rettung zaehlt nach diesem Alarm',
+     rettungZuegig.nachher===rettungZuegig.vorher+1, JSON.stringify(rettungZuegig));
+  await sleep(1500);
+
+  /* Ohne Buchlinie und ohne zwischengespeicherte Bewertung bleibt nur, die
+     Vorgaengerstellung nachzurechnen. Genau dieser Fall ist der Normalfall
+     mitten in einer Partie. */
+  await bau();
+  await page.evaluate(()=>{ game.bookLine=null; game.line=null; evalCache.clear();
+    game.evalRes=null; game.prevEval=null; game.prevPos=null; window._alarme=[];
+    document.getElementById('warnblitz').classList.remove('an'); });
+  await page.evaluate(i=>playMove(game.board.moves[i]),culprit);
+  await page.waitForFunction(()=>!game.evaluating&&!game.animating,{timeout:60000});
+  await page.waitForFunction(()=>!game.prevPos,{timeout:60000}); await sleep(400);
+  const nachger=await page.evaluate(()=>({blitz:document.getElementById('warnblitz').classList.contains('an'),
+    alarme:window._alarme, hist:game.history.length, gemerkt:game.alarmZuege.has(game.history.length),
+    prevBest:game.prevEval&&game.prevEval.best}));
+  console.log('INFO Alarm nach Nachrechnen: '+JSON.stringify(nachger));
+  ok('Warnblitz auch ohne jede Vorbewertung (Nachrechnen)',
+     nachger.blitz===true&&nachger.gemerkt===true&&nachger.prevBest===1, JSON.stringify(nachger));
+  await sleep(1500);
+
+  /* Gegenprobe: ein guter Zug darf keinen Alarm ausloesen, auch nicht ueber
+     den Nachrechen-Pfad. */
+  await bau();
+  await page.evaluate(()=>{ game.bookLine=null; game.line=null; evalCache.clear();
+    game.evalRes=null; game.prevEval=null; game.prevPos=null; window._alarme=[];
+    document.getElementById('warnblitz').classList.remove('an'); });
+  await page.evaluate(i=>playMove(game.board.moves[i]),gutZug);
+  await page.waitForFunction(()=>!game.evaluating&&!game.animating,{timeout:60000}); await sleep(800);
+  const ohneBlitz=await page.evaluate(()=>({blitz:document.getElementById('warnblitz').classList.contains('an'),
+    alarme:window._alarme, best:game.evalRes&&game.evalRes.best}));
+  ok('Guter Zug loest keinen Warnblitz aus',
+     ohneBlitz.blitz===false&&ohneBlitz.alarme.length===0, JSON.stringify(ohneBlitz));
+  await page.evaluate(()=>{ if(window._origBlitz) window.warnblitz=window._origBlitz; });
+
   // Die Markierung des zurueckgenommenen Zuges soll beim Tippen aufs Brett
   // verschwinden - sie stoert sonst beim Nachdenken - und beim naechsten
   // Spulen wieder erscheinen.
@@ -889,6 +978,27 @@ function kurzfassungGleich(proben,voll,erwartet){
   ok('CLAUDE.md nennt dieselbe Version wie APP_VERSION', stand===appV, stand+' gegen '+appV);
   ok('CLAUDE.md fuehrt diese Version in der Aenderungsliste',
      new RegExp('\\*\\*v'+appV.replace(/\./g,'\\.')+'\\*\\*').test(claude), 'v'+appV);
+
+  /* Trainer und Strategie-Hinweise sind ab Werk an. Ein geaenderter Standard
+     allein reicht nicht: Object.assign zieht den gespeicherten Wert vor, und
+     Lutz trug strategy:false seit der ersten Installation mit sich. Deshalb
+     eine einmalige Umstellung - und zwar wirklich einmalig, ein spaeteres
+     Abschalten muss halten. */
+  const anAus=await (async()=>{
+    await page.evaluate(()=>{ localStorage.setItem('solitaire.settings',JSON.stringify({trainer:false,strategy:false,board:'english'})); });
+    await page.reload({waitUntil:'load'}); await sleep(2800);
+    const nachMigration=await page.evaluate(()=>({t:settings.trainer,s:settings.strategy,flag:settings.anGestellt}));
+    // Jetzt bewusst abschalten und neu laden - das muss bleiben
+    await page.evaluate(()=>{ settings.trainer=false; settings.strategy=false; saveSettings(); });
+    await page.reload({waitUntil:'load'}); await sleep(2800);
+    const nachAbschalten=await page.evaluate(()=>({t:settings.trainer,s:settings.strategy}));
+    await page.evaluate(()=>{ settings.trainer=true; settings.strategy=true; saveSettings(); });
+    return {nachMigration,nachAbschalten}; })();
+  console.log('INFO Trainer/Strategie: '+JSON.stringify(anAus));
+  ok('Alte Einstellung wird einmalig auf Trainer und Strategie an gestellt',
+     anAus.nachMigration.t===true&&anAus.nachMigration.s===true, JSON.stringify(anAus.nachMigration));
+  ok('Wer sie danach abschaltet, behaelt das',
+     anAus.nachAbschalten.t===false&&anAus.nachAbschalten.s===false, JSON.stringify(anAus.nachAbschalten));
 
   ok('keine Seitenfehler insgesamt', errors.length===0, errors.join(' | '));
   await browser.close();

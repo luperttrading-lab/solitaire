@@ -374,7 +374,7 @@ header .boardname:active{background:var(--panel2)}
 
 <script>
 'use strict';
-const APP_VERSION='1.34';
+const APP_VERSION='1.35';
 /* =========================================================================
    Kern: Bretter, Züge, Symmetrien, Paritäts-Schranke, Solver
    (als Fabrik, damit derselbe Code im Web Worker läuft)
@@ -657,6 +657,11 @@ const Store={
 };
 const settings=Object.assign({board:'english',theme:'glas',boardLook:'holz',pegStyle:'glas',pegColor:'bunt',autoJump:true,showTargets:true,freeStart:false,sound:true,trainer:true,marks:false,strategy:true,alarm:true,alarmTon:'gong'},Store.get('settings',{}));
 function saveSettings(){ Store.set('settings',settings); }
+/* Einmalige Umstellung: Trainer und Strategie-Hinweise sind ab Werk an. Wer
+   die App vorher installiert hatte, trug den alten Stand (strategy:false) in
+   seinen gespeicherten Einstellungen mit sich - ein geaenderter Standard
+   erreicht ihn nie, weil Object.assign den gespeicherten Wert vorzieht. */
+if(!settings.anGestellt){ settings.trainer=true; settings.strategy=true; settings.anGestellt=true; saveSettings(); }
 function currentLook(){ const t=THEMES[settings.theme]||THEMES.glas; return t.custom?{board:settings.boardLook,peg:settings.pegStyle,color:settings.pegColor}:{board:t.board,peg:t.peg,color:t.color}; }
 
 /* =========================================================================
@@ -854,7 +859,7 @@ const pegDefsCache=new Map();
    ========================================================================= */
 const boards={}; CORE.BOARD_DEFS.forEach(d=>boards[d.id]=CORE.buildBoard(d));
 const game={board:null,lay:null,pegAt:[],initial:[],history:[],future:[],selected:-1,phase:'play',startedAt:0,elapsedBefore:0,finished:false,
-  line:null,bookLine:null,hintOn:false,searching:false,animating:false,autoplay:false,startCount:0,evalRes:null,prevEval:null,evaluating:false,lastMove:null,lesson:null,demo:false,showBetter:null,markAus:false,
+  line:null,bookLine:null,hintOn:false,searching:false,animating:false,autoplay:false,startCount:0,evalRes:null,prevEval:null,prevPos:null,evaluating:false,lastMove:null,lesson:null,demo:false,showBetter:null,markAus:false,
   /* Zaehler fuer die Partie. rueckAlarm: wie oft ein Zug zurueckgenommen
      wurde, der die Loesung gekostet hatte - nicht jedes Zurueck, sondern
      nur die Reue nach dem Alarm. alarmZuege merkt sich dafuer die
@@ -885,21 +890,39 @@ function newGame(boardId,keepPhase){ hinweisBis=0;
   game.initial=game.pegAt.slice(); game.history=[]; game.future=[]; game.selected=-1; game.finished=false;
   game.startedAt=0; game.elapsedBefore=0; game.line=null; game.hintOn=false; game.autoplay=false; game.startCount=pegCount();
   game.rueckAlarm=0; game.alarmZuege=new Set(); game.tippKeys=new Set();
-  game.evalRes=null; game.prevEval=null; cancelEval();
+  game.evalRes=null; game.prevEval=null; game.prevPos=null; evalCache.clear(); cancelEval();
   game.bookLine=(!settings.freeStart&&OPENING_BOOK[board.def.id])?{key:stateKey(),path:OPENING_BOOK[board.def.id].slice(),best:1,complete:true,nodes:0,lb:1,book:true}:null;
   buildBoardSvg(); render(); saveSettings(); fitStage();
   $('boardNameText').textContent=board.def.name; if(!keepPhase) $('lessonBar').hidden=true;
   if(game.phase==='choose') setStatus('Tippe den Stein an, der zu Beginn herausgenommen wird.');
   else setStatus(settings.autoJump?'Tippe einen Stein an – bei mehreren Zielen wische in die Richtung.':'Tippe einen Stein an, dann das Zielfeld oder wische in die Richtung.');
 }
+/* Jede fertig gerechnete Bewertung bleibt unter ihrem Stellungsschluessel
+   liegen. Damit hat der naechste Zug einen Vergleichswert, auch wenn die
+   Bewertung erst nach dem Zug fertig geworden ist. Wird beim neuen Spiel
+   geleert; eine Partie hat hoechstens einige hundert Eintraege. */
+const evalCache=new Map();
+let nachCancel=null;
 function applyMove(m,record){
-  const a=game.pegAt; const jumped=a[m.over]; a[m.to]=a[m.from]; a[m.from]=-1; a[m.over]=-1;
+  const a=game.pegAt;
+  /* Belegung und Paritaetsschranke VOR dem Zug. Beides wird gebraucht, um
+     spaeter zu entscheiden, ob dieser Zug die Loesung gekostet hat - die
+     Schranke der neuen Stellung taugt dafuer nicht (siehe pruefeVerlust). */
+  const vorherArr=occ(), vorherKey=stateKey(), vorherLb=CORE.parityLowerBound(game.board,vorherArr);
+  const jumped=a[m.over]; a[m.to]=a[m.from]; a[m.from]=-1; a[m.over]=-1;
   if(record!==false){ game.history.push({mi:game.board.moves.indexOf(m),jumped}); game.future=[]; }
   if(!game.startedAt){ game.startedAt=Date.now(); }
   const mi=game.board.moves.indexOf(m); const ln=game.line; game.hintOn=false;
   const known=(ln&&ln.path.length&&ln.complete)?ln:((game.bookLine&&game.bookLine.path.length)?game.bookLine:null);
-  if(game.evalRes){ game.prevEval={best:game.evalRes.best,complete:game.evalRes.complete,path:(game.evalRes.path||[]).slice(),optFinal:game.evalRes.optFinal||null,played:mi}; }
-  else if(known){ game.prevEval={best:known.best,complete:true,path:known.path.slice(),optFinal:null,played:mi}; } else game.prevEval=null;
+  const zwi=evalCache.get(vorherKey);
+  if(game.evalRes&&game.evalRes.key===vorherKey){ game.prevEval={best:game.evalRes.best,complete:game.evalRes.complete,path:(game.evalRes.path||[]).slice(),optFinal:game.evalRes.optFinal||null,lb:vorherLb,played:mi}; }
+  else if(zwi){ game.prevEval={best:zwi.best,complete:zwi.complete,path:zwi.path.slice(),optFinal:zwi.optFinal,lb:vorherLb,played:mi}; }
+  else if(known){ game.prevEval={best:known.best,complete:true,path:known.path.slice(),optFinal:null,lb:vorherLb,played:mi}; } else game.prevEval=null;
+  /* Reicht keine fertige Bewertung, bleibt wenigstens die Stellung selbst
+     gemerkt: pruefeVerlust() rechnet sie nach, sobald sich zeigt, dass
+     ueberhaupt etwas verloren gegangen sein kann. Ohne das bliebe der Alarm
+     immer dann aus, wenn Lutz zuegiger spielt als die Bewertung rechnet. */
+  game.prevPos=(game.prevEval&&game.prevEval.complete)?null:{arr:vorherArr,key:vorherKey,lb:vorherLb,count:vorherArr.reduce((x,v)=>x+v,0),played:mi};
   game.evalRes=null; cancelEval();
   if(ln&&ln.path.length&&ln.path[0]===mi){ ln.path.shift(); ln.key=stateKey(); } else game.line=null;
   const bl=game.bookLine; if(bl&&bl.path.length&&bl.path[0]===mi){ bl.path.shift(); bl.key=stateKey(); } else game.bookLine=null;
@@ -916,7 +939,7 @@ function undo(){
   game.selected=-1; game.line=null; game.hintOn=false; hideModal('resultModal');
   const nJ=pegName(game.pegAt[m.to]), nO=pegName(h.jumped);
   game.markAus=false; game.lastMove={mi:h.mi,dir:'undo',text:'Zurück: '+(nJ?nJ:'Stein')+' zurück, '+(nO?nO:'Geschlagener')+' wieder da.',count:'Zug '+(game.history.length+1)+' von '+(game.history.length+game.future.length+1)};
-  game.evalRes=null; game.prevEval=null; cancelEval(); renderOverlay(); setStatus(game.lastMove.text,'',null,null,game.lastMove.count);
+  game.evalRes=null; game.prevEval=null; game.prevPos=null; cancelEval(); renderOverlay(); setStatus(game.lastMove.text,'',null,null,game.lastMove.count);
   animateMove(m,()=>{
     const a=game.pegAt; a[m.from]=a[m.to]; a[m.to]=-1; a[m.over]=h.jumped;
     game.future.push(h);
@@ -1553,7 +1576,7 @@ function findMistake(){
 function rewindTo(k,path){
   if(game.animating) finishAnimation(); cancelEval();
   while(game.history.length>k){ const h=game.history.pop(); const m=game.board.moves[h.mi]; const a=game.pegAt; a[m.from]=a[m.to]; a[m.to]=-1; a[m.over]=h.jumped; game.future.unshift(h); }
-  game.finished=false; game.selected=-1; game.lastMove=null; game.evalRes=null; game.prevEval=null; hideModal('resultModal');
+  game.finished=false; game.selected=-1; game.lastMove=null; game.evalRes=null; game.prevEval=null; game.prevPos=null; hideModal('resultModal');
   const m0=game.board.moves[path[0]];
   if(m0&&game.pegAt[m0.from]>=0&&game.pegAt[m0.over]>=0&&game.pegAt[m0.to]<0){ game.line={key:stateKey(),path:path.slice(),best:1,complete:true,nodes:0,lb:1}; game.hintOn=true; }
   render(); setStatus('Zurück auf Zug '+k+'. Der bessere Zug ist markiert: '+moveWords(m0,game.pegAt)+'.','hint');
@@ -1561,7 +1584,40 @@ function rewindTo(k,path){
 
 /* ---------- Trainer: stille Bewertung nach jedem Zug ---------- */
 let evalSeq=0, evalCurrentId=null;
-function cancelEval(){ if(evalCurrentId!==null&&worker){ try{ worker.postMessage({cancel:evalCurrentId}); }catch(e){} } evalCurrentId=null; evalSeq++; game.evaluating=false; zeigeRechnet(false); }
+/* Der Alarm gilt genau einem Uebergang: vorher war das Paritaetsminimum
+   erreichbar, jetzt nicht mehr.
+   Bis v1.34 verglich die Bedingung "best > lb" gegen die Schranke der NEUEN
+   Stellung. Steigt lb durch den Zug selbst - beim Solitaer der Normalfall,
+   wenn ein Feld der knappen Farbe geraeumt wird -, dann ist best===lb und
+   der Alarm bleibt aus, obwohl die Loesung gerade verloren ging. Gemessen am
+   13.09.2026: englisches Brett, 14 Zuege, best 1 -> 2, lb der neuen Stellung
+   ebenfalls 2, kein Blitz und keine gezaehlte Rettung.
+   Verglichen wird deshalb gegen die Bewertung UND die Schranke der
+   Vorgaengerstellung; beides steht in prevEval. */
+function pruefeVerlust(){
+  const ev=game.evalRes; if(!ev||!ev.complete) return;
+  const prev=game.prevEval;
+  if(prev&&prev.complete){ if(prev.best<=prev.lb&&ev.best>prev.best) warnblitz(); return; }
+  const pp=game.prevPos; if(!pp) return;
+  /* Nachrechnen lohnt nur, wenn ueberhaupt etwas verloren gegangen sein
+     kann: der Alarm verlangt prev.best===pp.lb und ev.best>prev.best, also
+     ev.best>pp.lb. Sonst bleibt es bei einer Suche pro Zug. */
+  if(ev.best<=pp.lb) return;
+  if(nachCancel){ nachCancel(); nachCancel=null; }
+  const [lo,hi]=CORE.fromArray(pp.arr); const jetzt=stateKey();
+  nachCancel=runSearch(lo,hi,pp.count,{target:pp.lb,maxNodes:0,timeMs:6000,seed:(Date.now()%100000)+11,full:false},null,r=>{
+    nachCancel=null; if(stateKey()!==jetzt) return;
+    const fertig=r.complete&&!r.cancelled&&!r.timeout;
+    /* Ohne Beweis zaehlt nur ein tatsaechlich gefundener besserer Weg - der
+       belegt fuer sich, dass es besser ging. */
+    if(!fertig&&!(r.best<ev.best)) return;
+    game.prevEval={best:r.best,complete:true,path:(r.path||[]).slice(),optFinal:null,lb:pp.lb,played:pp.played};
+    game.prevPos=null; evalCache.set(pp.key,{best:r.best,complete:true,path:(r.path||[]).slice(),optFinal:null});
+    if(r.best<=pp.lb&&ev.best>r.best){ warnblitz(); showTrainer(); }
+  });
+}
+function cancelEval(){ if(nachCancel){ nachCancel(); nachCancel=null; }
+  if(evalCurrentId!==null&&worker){ try{ worker.postMessage({cancel:evalCurrentId}); }catch(e){} } evalCurrentId=null; evalSeq++; game.evaluating=false; zeigeRechnet(false); }
 function evaluatePosition(){
   if(game.lesson) return; if(mistakeCancel){ mistakeCancel(); mistakeCancel=null; }
   if(!(settings.trainer||settings.marks||settings.strategy)){ game.evalRes=null; renderOverlay(); return; }
@@ -1581,10 +1637,8 @@ function evaluatePosition(){
   zeigeRechnet(true);
   const finish=r=>{ if(id!==evalSeq) return; game.evaluating=false; zeigeRechnet(false); if(key!==stateKey()) return;
     game.evalRes={key,best:r.best,complete:r.complete&&!r.cancelled&&!r.timeout,path:r.path||[],nodes:r.nodes,lb,ms:Date.now()-t0,everEmpty:r.everEmpty||null,optFinal:r.optFinal||null,full};
-    /* Der Uebergang zaehlt: vorher war 1 Stein erreichbar, jetzt nicht mehr. */
-    const jetztVerloren=game.evalRes.complete&&game.evalRes.best>lb;
-    const vorherOffen=game.prevEval&&game.prevEval.complete&&game.prevEval.best<=lb;
-    if(jetztVerloren&&vorherOffen) warnblitz();
+    if(game.evalRes.complete) evalCache.set(key,{best:r.best,complete:true,path:(r.path||[]).slice(),optFinal:game.evalRes.optFinal});
+    pruefeVerlust();
     showTrainer(); renderOverlay(); };
   const runMain=()=>{ let search; try{ search=CORE.createSearch(game.board,lo,hi,count,opts); }catch(e){ game.evaluating=false; return; }
     const tick=()=>{ if(id!==evalSeq) return; let r; try{ r=search.run(12000); }catch(e){ game.evaluating=false; return; }
