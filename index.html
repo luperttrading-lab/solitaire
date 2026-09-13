@@ -50,7 +50,17 @@ header .boardname:active{background:var(--panel2)}
 .hud>div{text-align:center}
 .hud b{display:block;font-family:var(--serif);font-size:30px;line-height:1;font-weight:400;color:var(--ink)}
 .hud span{font-size:12px;color:var(--muted)}
-.quick{display:flex;justify-content:center;padding:6px 0 0}
+/* Die beiden Zaehler sitzen links und rechts vom Strategie-Knopf, in der
+   Zeile, die es ohnehin gibt - eine eigene Zeile haette auf kleinen Geraeten
+   16 px Brettflaeche gekostet (auf dem iPhone 14 Pro nichts, dort begrenzt
+   die Breite). Feste Aussenbreiten, damit der Knopf beim Hochzaehlen nicht
+   verrutscht. */
+.quick{display:flex;align-items:center;gap:6px;padding:6px 6px 0}
+.quick .pill{flex:0 1 auto;min-width:0}
+.zaehler{flex:1 1 0;min-width:0;font-size:11px;line-height:1.2;color:var(--muted);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-variant-numeric:tabular-nums}
+#zRueck{text-align:left}
+#zTipp{text-align:right}
 .pill{border-radius:999px;padding:6px 14px;font-size:13px;background:var(--panel);color:var(--muted);border:1px solid var(--line)}
 .pill.on{background:linear-gradient(180deg,#d9b25f,#b88f36);color:#1f1608;border-color:transparent}
 #stage{flex:none;display:flex;align-items:center;justify-content:center;padding:8px 0}
@@ -264,7 +274,11 @@ header .boardname:active{background:var(--panel2)}
     <div><b id="hudLeft">32</b><span id="hudLeftLabel">Übrig von 32</span></div>
     <div><b id="hudTime">0:00</b><span>Zeit</span></div>
   </div>
-  <div class="quick"><button id="btnStrategy" class="pill" aria-pressed="false">Strategie-Hinweise: aus</button></div>
+  <div class="quick">
+    <span class="zaehler" id="zRueck"></span>
+    <button id="btnStrategy" class="pill" aria-pressed="false">Strategie-Hinweise: aus</button>
+    <span class="zaehler" id="zTipp"></span>
+  </div>
   <div id="stage"><svg id="board" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Spielbrett"></svg></div>
   <div id="status"></div>
   <div id="rechenband"><i></i></div>
@@ -343,7 +357,7 @@ header .boardname:active{background:var(--panel2)}
 
 <script>
 'use strict';
-const APP_VERSION='1.31';
+const APP_VERSION='1.32';
 /* =========================================================================
    Kern: Bretter, Züge, Symmetrien, Paritäts-Schranke, Solver
    (als Fabrik, damit derselbe Code im Web Worker läuft)
@@ -823,7 +837,14 @@ const pegDefsCache=new Map();
    ========================================================================= */
 const boards={}; CORE.BOARD_DEFS.forEach(d=>boards[d.id]=CORE.buildBoard(d));
 const game={board:null,lay:null,pegAt:[],initial:[],history:[],future:[],selected:-1,phase:'play',startedAt:0,elapsedBefore:0,finished:false,
-  line:null,bookLine:null,hintOn:false,searching:false,animating:false,autoplay:false,startCount:0,evalRes:null,prevEval:null,evaluating:false,lastMove:null,lesson:null,demo:false,showBetter:null,markAus:false};
+  line:null,bookLine:null,hintOn:false,searching:false,animating:false,autoplay:false,startCount:0,evalRes:null,prevEval:null,evaluating:false,lastMove:null,lesson:null,demo:false,showBetter:null,markAus:false,
+  /* Zaehler fuer die Partie. rueckAlarm: wie oft ein Zug zurueckgenommen
+     wurde, der die Loesung gekostet hatte - nicht jedes Zurueck, sondern
+     nur die Reue nach dem Alarm. alarmZuege merkt sich dafuer die
+     Zuglaengen, bei denen ein Alarm kam. tippKeys sammelt die Stellungen,
+     in denen ein Tipp abgerufen wurde: derselbe Tipp zweimal angesehen
+     ist ein Tipp, nicht zwei. */
+  rueckAlarm:0,alarmZuege:null,tippKeys:null};
 
 const $=id=>document.getElementById(id);
 const boardSvg=$('board'), statusEl=$('status');
@@ -846,6 +867,7 @@ function newGame(boardId,keepPhase){ hinweisBis=0;
   if(!settings.freeStart) game.pegAt[board.startIdx]=-1;
   game.initial=game.pegAt.slice(); game.history=[]; game.future=[]; game.selected=-1; game.finished=false;
   game.startedAt=0; game.elapsedBefore=0; game.line=null; game.hintOn=false; game.autoplay=false; game.startCount=pegCount();
+  game.rueckAlarm=0; game.alarmZuege=new Set(); game.tippKeys=new Set();
   game.evalRes=null; game.prevEval=null; cancelEval();
   game.bookLine=(!settings.freeStart&&OPENING_BOOK[board.def.id])?{key:stateKey(),path:OPENING_BOOK[board.def.id].slice(),best:1,complete:true,nodes:0,lb:1,book:true}:null;
   buildBoardSvg(); render(); saveSettings(); fitStage();
@@ -868,6 +890,11 @@ function applyMove(m,record){
 function undo(){
   if(!game.history.length) return;
   if(game.animating) finishAnimation();
+  /* Zaehlt nur, wenn genau der Zug zurueckgeht, der die Loesung gekostet
+     hat. Danach ist die Zuglaenge aus der Liste gestrichen - wer den Zug
+     wiederholt und nochmal zurueckgeht, zaehlt nicht doppelt. */
+  if(game.alarmZuege&&game.alarmZuege.has(game.history.length)){
+    game.alarmZuege.delete(game.history.length); game.rueckAlarm++; }
   const h=game.history.pop(); const m=game.board.moves[h.mi];
   game.selected=-1; game.line=null; game.hintOn=false; hideModal('resultModal');
   const nJ=pegName(game.pegAt[m.to]), nO=pegName(h.jumped);
@@ -980,7 +1007,32 @@ function renderOverlay(){
     overlayLayer.appendChild(el('circle',{class:'hint-dot',cx:c.x,cy:c.y,r:11}));
   }
 }
+/* Klein und nur, wenn es etwas zu zeigen gibt - bei null steht die Stelle
+   leer, statt eine Null anzustarren. Der Platz bleibt reserviert, damit der
+   Strategie-Knopf beim Hochzaehlen nicht verrutscht. */
+function zaehlerZahlen(){
+  return {r:game.rueckAlarm||0, t:game.tippKeys?game.tippKeys.size:0};
+}
+/* Kurz fuer die Zeile: zwischen Bildschirmrand und Strategie-Knopf bleiben
+   nur rund 65 px, "12 Ruecknahmen" lief dort ueber. Der volle Wortlaut
+   steht im Ergebnis, wo Platz ist. */
+function zaehlerText(){
+  const {r,t}=zaehlerZahlen();
+  return {rueck:r?r+'\u00d7 zurück':'', tipp:t?t+'\u00d7 Tipp':''};
+}
+function zaehlerLang(){
+  const {r,t}=zaehlerZahlen();
+  return {rueck:r?r+(r===1?' Rücknahme':' Rücknahmen'):'',
+          tipp:t?t+(t===1?' Tipp':' Tipps'):''};
+}
+function renderZaehler(){
+  const z=zaehlerText();
+  const a=$('zRueck'), b=$('zTipp');
+  if(a) a.textContent=z.rueck;
+  if(b) b.textContent=z.tipp;
+}
 function renderHud(){
+  renderZaehler();
   $('hudMoves').textContent=game.history.length; $('hudLeft').textContent=pegCount(); $('hudLeftLabel').textContent='Übrig von '+game.startCount; $('hudTime').textContent=fmtTime(elapsedMs());
   $('btnUndo').disabled=!game.history.length||game.animating; $('btnRedo').disabled=!game.future.length||game.animating;
   $('btnHint').disabled=game.phase==='choose'||game.finished||game.searching||game.animating||!!game.lesson;
@@ -1095,6 +1147,10 @@ let rechnet=false;
 let warnblitzTimer=0;
 let alarmZuletzt=0;
 function warnblitz(erzwingen){
+  /* Die Zuglaenge wird auch dann gemerkt, wenn der Warnblitz abgeschaltet
+     ist - gezaehlt wird der verlorene Zug, nicht das Aufleuchten. Nur die
+     Probe aus dem Menue (erzwingen) zaehlt nicht mit. */
+  if(!erzwingen&&game.alarmZuege) game.alarmZuege.add(game.history.length);
   if(!settings.alarm&&!erzwingen) return;
   alarmZuletzt=Date.now(); Sound.alarm();
   const e=$('warnblitz'); if(!e) return;
@@ -1227,6 +1283,12 @@ function afterMove(fresh){ hinweisBis=0;
   $('resStars').textContent=left===1?'★★★':left===2?'★★☆':left===3?'★☆☆':'☆☆☆';
   $('resBig').innerHTML=left+' <small>'+(left===1?'Stein übrig':'Steine übrig')+'</small>';
   let txt=game.history.length+' Sprünge in '+fmtTime(t)+'.';
+  /* Die beiden Zaehler kommen direkt nach den Spruengen, weil sie dasselbe
+     beschreiben: wie die Partie zustande kam. Ohne Huerden steht ein Satz
+     dafuer - das ist die Leistung, ueber die man sich freut. */
+  const z=zaehlerLang();
+  if(z.rueck||z.tipp) txt+=' Dabei '+[z.rueck,z.tipp].filter(Boolean).join(' und ')+'.';
+  else txt+=' Ohne Rücknahme und ohne Tipp.';
   if(left===1&&inCenter) txt+=' Der letzte Stein steht genau in der Mitte.';
   if(better&&prev) txt+=' Neue Bestleistung.'; else if(prev) txt+=' Bestleistung auf diesem Brett: '+prev.left+(prev.left===1?' Stein':' Steine')+' in '+fmtTime(prev.time)+'.';
   $('resText').textContent=txt;
@@ -1331,6 +1393,8 @@ let hintSeq=0, cancelHint=null, lastSearchWhere='';
 function fmtNum(n){ return n<1000000?n.toLocaleString('de-DE'):(n/1e6).toFixed(1).replace('.',',')+' Mio.'; }
 function requestHint(again){
   if(game.searching||game.finished||game.phase==='choose'||game.animating) return;
+  /* Ein Tipp je Stellung. Denselben Tipp nochmal ansehen ist kein zweiter. */
+  if(game.tippKeys) game.tippKeys.add(stateKey());
   const ev=game.evalRes; if(!again&&!currentLine()&&ev&&ev.key===stateKey()&&ev.complete&&ev.path.length){ game.line={key:ev.key,best:ev.best,path:ev.path.slice(),complete:true,nodes:ev.nodes,lb:ev.lb,ms:ev.ms}; }
   if(!again&&currentLine()){ game.hintOn=true; describeHint(); renderOverlay(); return; }
   const arr=occ(); const count=pegCount(); const lb=CORE.parityLowerBound(game.board,arr);

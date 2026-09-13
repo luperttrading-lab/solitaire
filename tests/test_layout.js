@@ -160,6 +160,45 @@ const FAELLE=[
    await pf.close();
  }
 
+ /* Die beiden Partie-Zaehler sitzen links und rechts vom Strategie-Knopf.
+    Der Knopf darf beim Hochzaehlen nicht verrutschen, und nichts darf aus
+    der Zeile laufen - sie ist nur 393 px breit und der Knopftext lang. */
+ for(const [name,w,h] of [['iPhone 14 Pro',393,852],['iPhone SE',375,667],['sehr klein',360,600]]){
+   const pz=await browser.newPage(); await pz.setViewport({width:w,height:h});
+   await pz.goto(url,{waitUntil:'load'}); await sleep(2300);
+   const r=await pz.evaluate(()=>{
+     const knopf=document.getElementById('btnStrategy');
+     const reihe=document.querySelector('.quick');
+     const mitte=()=>Math.round(knopf.getBoundingClientRect().left+knopf.getBoundingClientRect().width/2);
+     const mass=()=>{ const a=document.getElementById('zRueck'), b=document.getElementById('zTipp');
+       const rb=reihe.getBoundingClientRect();
+       return {mitte:mitte(),
+         linksDrin:a.getBoundingClientRect().left>=rb.left-0.5,
+         rechtsDrin:b.getBoundingClientRect().right<=rb.right+0.5,
+         knopfGanz:knopf.scrollWidth<=knopf.clientWidth+1,
+         ueberlauf:Math.max(a.scrollWidth-a.clientWidth,b.scrollWidth-b.clientWidth),
+         hoehe:Math.round(rb.height)}; };
+     const brett=()=>Math.round(document.getElementById('board').getBoundingClientRect().width);
+     game.rueckAlarm=0; game.tippKeys=new Set(); renderHud();
+     const leer=mass(), brettLeer=brett();
+     game.rueckAlarm=12; game.tippKeys=new Set(['a','b','c','d','e','f','g','h','i','j','k','l']);
+     renderHud(); fitStage();
+     const voll=mass(), brettVoll=brett();
+     game.rueckAlarm=0; game.tippKeys=new Set(); renderHud(); fitStage();
+     return {leer,voll,brettLeer,brettVoll}; });
+   console.log('INFO Partie-Zaehler ('+name+'): '+JSON.stringify(r));
+   ok('Der Strategie-Knopf verrutscht beim Zaehlen nicht ('+name+')',
+      Math.abs(r.leer.mitte-r.voll.mitte)<=1, r.leer.mitte+' / '+r.voll.mitte);
+   ok('Die Zaehler bleiben in der Zeile ('+name+')',
+      r.voll.linksDrin&&r.voll.rechtsDrin&&r.voll.ueberlauf<=0,
+      JSON.stringify(r.voll));
+   ok('Der Knopftext wird nicht abgeschnitten ('+name+')',
+      r.voll.knopfGanz, JSON.stringify(r.voll));
+   ok('Die Zaehler kosten keine Brettflaeche ('+name+')',
+      r.brettVoll===r.brettLeer, r.brettLeer+' / '+r.brettVoll);
+   await pz.close();
+ }
+
  /* Der Sockel legt nur den Schutzrand drauf, der nicht ohnehin schon unter
     dem Viewport liegt. Geprueft in beiden Lagen: Viewport = Bildschirm
     (Home-Bildschirm-App) und Viewport kuerzer (Safari mit Leiste). */

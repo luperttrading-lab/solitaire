@@ -637,6 +637,90 @@ function kurzfassungGleich(proben,voll,erwartet){
   await page.evaluate(()=>{ settings.marks=false; settings.strategy=true; renderStrategyBtn();
     Store.del('markeErklaert'); newGame('english'); });
 
+  /* Zwei Zaehler fuer die Partie: Ruecknahmen nach einem Verlustzug und
+     verbrauchte Tipps. Gezaehlt wird nicht jedes Zurueck, sondern nur das
+     Zuruecknehmen genau des Zuges, der die Loesung gekostet hat. */
+  const zaehler=await page.evaluate(async()=>{
+    newGame('english'); settings.trainer=true; settings.alarm=true;
+    const B=game.board, erg={};
+    erg.startRueck=game.rueckAlarm; erg.startTipp=game.tippKeys.size;
+
+    // Ein Zug, der die Loesung kostet - der Alarm merkt sich die Zuglaenge
+    const l=currentLine(); applyMove(B.moves[l.path[0]],true); render();
+    warnblitz();                       // wie aus finish(), also ohne erzwingen
+    erg.gemerkt=game.alarmZuege.has(game.history.length);
+    // Ein anderer Zug oben drauf: ein Zurueck von dort zaehlt nicht
+    const l2=currentLine(); if(l2&&l2.path.length) applyMove(B.moves[l2.path[0]],true);
+    game.animating=false; undo(); game.animating=false;
+    erg.nachFremdemZurueck=game.rueckAlarm;
+    // Jetzt der Alarm-Zug selbst
+    undo(); game.animating=false;
+    erg.nachAlarmZurueck=game.rueckAlarm;
+    // Nochmal vor und zurueck: derselbe Zug zaehlt kein zweites Mal
+    redo(); game.animating=false; undo(); game.animating=false;
+    erg.nachWiederholung=game.rueckAlarm;
+
+    // Tipps: derselbe Tipp zweimal ist einer, eine neue Stellung ist zwei
+    newGame('english');
+    requestHint(); erg.tipp1=game.tippKeys.size;
+    requestHint(); erg.tipp2=game.tippKeys.size;
+    const l3=currentLine()||{path:[0]}; applyMove(B.moves[l3.path[0]],true); render();
+    requestHint(); erg.tipp3=game.tippKeys.size;
+
+    // Anzeige
+    game.rueckAlarm=2; game.tippKeys=new Set(['a','b','c']); renderHud();
+    erg.zeigtRueck=document.getElementById('zRueck').textContent;
+    erg.zeigtTipp=document.getElementById('zTipp').textContent;
+    const lang=z=>[z.rueck,z.tipp].filter(Boolean).join(' und ');
+    erg.langMehr=lang(zaehlerLang());
+    game.rueckAlarm=1; game.tippKeys=new Set(['a']); renderHud();
+    erg.einzahlRueck=document.getElementById('zRueck').textContent;
+    erg.einzahlTipp=document.getElementById('zTipp').textContent;
+    erg.langEins=lang(zaehlerLang());
+    game.rueckAlarm=0; game.tippKeys=new Set(); renderHud();
+    erg.leerRueck=document.getElementById('zRueck').textContent;
+    erg.leerTipp=document.getElementById('zTipp').textContent;
+    /* Ergebnis einer Partie ohne Huerden: eine Stellung ohne legale Zuege
+       bauen und afterMove() den Schluss machen lassen - den Ergebnistext
+       erzeugt nur dieser Weg. */
+    newGame('english');
+    for(let i=0;i<B.n;i++) game.pegAt[i]=-1;
+    ['0,2','4,0','6,4'].forEach((k,j)=>game.pegAt[B.index[k]]=j);
+    game.finished=false; game.startedAt=Date.now()-61000; game.elapsedBefore=0;
+    game.history=[{mi:0,jumped:0}]; game.rueckAlarm=0; game.tippKeys=new Set();
+    afterMove(true);
+    erg.ergebnisSauber=document.getElementById('resText').textContent;
+    hideModal('resultModal'); newGame('english');
+    return erg; });
+  console.log('INFO Zaehler: '+JSON.stringify(zaehler));
+  ok('Die Zaehler starten bei null',
+     zaehler.startRueck===0&&zaehler.startTipp===0, JSON.stringify(zaehler));
+  ok('Der Alarm merkt sich den verlorenen Zug', zaehler.gemerkt===true);
+  ok('Ein Zurueck auf einem anderen Zug zaehlt nicht',
+     zaehler.nachFremdemZurueck===0, zaehler.nachFremdemZurueck);
+  ok('Das Zuruecknehmen des verlorenen Zuges zaehlt',
+     zaehler.nachAlarmZurueck===1, zaehler.nachAlarmZurueck);
+  ok('Derselbe Zug zaehlt kein zweites Mal',
+     zaehler.nachWiederholung===1, zaehler.nachWiederholung);
+  ok('Derselbe Tipp zweimal angesehen ist ein Tipp',
+     zaehler.tipp1===1&&zaehler.tipp2===1, zaehler.tipp1+' / '+zaehler.tipp2);
+  ok('Ein Tipp in einer neuen Stellung zaehlt dazu',
+     zaehler.tipp3===2, zaehler.tipp3);
+  /* In der Zeile kurz (der Platz reicht nicht fuer mehr), im Ergebnis in
+     ganzen Worten mit richtiger Einzahl und Mehrzahl. */
+  ok('Die Zeile zeigt die Zaehler kurz',
+     zaehler.zeigtRueck==='2× zurück'&&zaehler.zeigtTipp==='3× Tipp',
+     JSON.stringify([zaehler.zeigtRueck,zaehler.zeigtTipp]));
+  ok('Das Ergebnis nennt Einzahl und Mehrzahl richtig',
+     zaehler.langMehr==='2 Rücknahmen und 3 Tipps'
+     &&zaehler.langEins==='1 Rücknahme und 1 Tipp',
+     JSON.stringify([zaehler.langMehr,zaehler.langEins]));
+  ok('Ohne Hürden sagt das Ergebnis das ausdrücklich',
+     /Ohne Rücknahme und ohne Tipp/.test(zaehler.ergebnisSauber), zaehler.ergebnisSauber);
+  ok('Bei null bleibt die Stelle leer',
+     zaehler.leerRueck===''&&zaehler.leerTipp==='',
+     JSON.stringify([zaehler.leerRueck,zaehler.leerTipp]));
+
   /* Die untere Zeile ist hart einzeilig; was nicht passt, kuerzt
      kurzfassung(). Bis v1.30 schnitt sie nur am Wortende ab und liess den
      Leser im Nebensatz haengen: aus "Tippe einen Stein an - bei mehreren
