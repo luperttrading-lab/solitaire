@@ -274,7 +274,7 @@ header .boardname:active{background:var(--panel2)}
     <p>Lektionen: kurze Aufgaben mit vorbereiteten Stellungen.</p>
     <div class="chips" id="lessonList"></div>
     <div class="row"><div><div class="t">Trainer</div><div class="d">Bewertet nach jedem Zug, ob 1 Stein noch erreichbar ist, und nennt den Zug, der es gekostet hat.</div></div><button class="switch" id="swTrainer" role="switch" aria-label="Trainer"></button></div>
-    <div class="row"><div><div class="t">Gestrandete Steine markieren</div><div class="d">Steine, die in jeder bestmöglichen Fortsetzung stehen bleiben, bekommen ein Zeichen. Ab etwa 24 Steinen abwärts.</div></div><button class="switch" id="swMarks" role="switch" aria-label="Gestrandete Steine markieren"></button></div>
+    <div class="row"><div><div class="t">Gestrandete Steine markieren</div><div class="d">Felder, die in jeder bestmöglichen Fortsetzung besetzt bleiben, bekommen ein Zeichen – dort wird ein Stein übrig bleiben. Ein Tipp auf so einen Stein sagt es noch einmal. Ab 24 Steinen abwärts.</div></div><button class="switch" id="swMarks" role="switch" aria-label="Gestrandete Steine markieren"></button></div>
     <h2>Steuerung</h2>
     <div class="row"><div><div class="t">Auto-Sprung</div><div class="d">Antippen genügt, wenn nur ein Zug möglich ist. Bei mehreren: in Richtung wischen oder Zielfeld tippen.</div></div><button class="switch" id="swAuto" role="switch" aria-label="Auto-Sprung"></button></div>
     <div class="row"><div><div class="t">Zielfelder anzeigen</div><div class="d">Mögliche Ziele des gewählten Steins markieren.</div></div><button class="switch" id="swTargets" role="switch" aria-label="Zielfelder anzeigen"></button></div>
@@ -321,7 +321,7 @@ header .boardname:active{background:var(--panel2)}
 
 <script>
 'use strict';
-const APP_VERSION='1.24';
+const APP_VERSION='1.25';
 /* =========================================================================
    Kern: Bretter, Züge, Symmetrien, Paritäts-Schranke, Solver
    (als Fabrik, damit derselbe Code im Web Worker läuft)
@@ -878,9 +878,19 @@ function renderOverlay(){
   overlayLayer.innerHTML=''; const lay=game.lay;
   if(game.phase==='choose'){ return; }
   const ev=game.evalRes; if(settings.marks&&ev&&ev.key===stateKey()&&ev.optFinal&&ev.best>1){
-    const om=ev.optFinal.mask;
+    const om=ev.optFinal.mask; let gab=false;
     for(let i=0;i<game.board.n;i++){ if(game.pegAt[i]<0) continue; const stays= i<32?!!((om[0]>>>i)&1):!!((om[1]>>>(i-32))&1);
-      if(stays){ const p=lay.pos[i]; overlayLayer.appendChild(el('circle',{cx:p.x+24,cy:p.y+24,r:11,fill:'#1a1512',stroke:'#e2a95c','stroke-width':'2'})); overlayLayer.appendChild(el('path',{d:`M${p.x+19} ${p.y+19}l10 10M${p.x+29} ${p.y+19}l-10 10`,stroke:'#e2a95c','stroke-width':'2.5','stroke-linecap':'round'})); } } }
+      if(stays){ gab=true; const p=lay.pos[i]; overlayLayer.appendChild(el('circle',{cx:p.x+24,cy:p.y+24,r:11,fill:'#1a1512',stroke:'#e2a95c','stroke-width':'2'})); overlayLayer.appendChild(el('path',{d:`M${p.x+19} ${p.y+19}l10 10M${p.x+29} ${p.y+19}l-10 10`,stroke:'#e2a95c','stroke-width':'2.5','stroke-linecap':'round'})); } }
+    /* Das Zeichen taucht ohne Vorwarnung am Brett auf. Einmal im Leben wird
+       gesagt, was es heisst - danach nie wieder, weil ein Tipp auf den Stein
+       die Erklaerung jederzeit wiederholt. Einmal je Partie waere bei zwanzig
+       Partien am Abend zwanzigmal zu viel. */
+    /* Als schwebende Meldung, nicht in der Statuszeile: die haette ueber
+       hinweis() 2,2 s Vorrang und wuerde die gerade fertige Bewertung
+       verdraengen - fuer eine Nebenbemerkung zu viel. Der lange Wortlaut
+       steht beim Tipp auf den Stein. */
+    if(gab&&!Store.get('markeErklaert',false)){ Store.set('markeErklaert',true);
+      toast('Das Zeichen heißt: hier bleibt ein Stein stehen. Ein Tipp darauf sagt mehr.',4200); } }
   if(game.lesson&&!game.lesson.solved){ const {L,ph}=lessonPhase();
     if(ph&&ph.pkg){ ph.pkg.forEach(k=>{ const i=game.board.index[k]; if(game.pegAt[i]>=0){ const p=lay.pos[i]; overlayLayer.appendChild(el('circle',{class:'pkg-ring',cx:p.x,cy:p.y,r:R_PEG+6})); } });
       const ci=game.board.index[ph.cat]; if(ci!==undefined){ const p=lay.pos[ci]; overlayLayer.appendChild(el('circle',{class:'cat-ring',cx:p.x,cy:p.y,r:R_PEG+7})); } }
@@ -1093,7 +1103,7 @@ function openDetail(){
 }
 function closeDetail(){ $('detail').classList.remove('on'); $('backdrop').classList.remove('on'); }
 let toastTimer=0;
-function toast(t){ const e=$('toast'); e.textContent=t; e.classList.add('on'); clearTimeout(toastTimer); toastTimer=setTimeout(()=>e.classList.remove('on'),1800); }
+function toast(t,ms){ const e=$('toast'); e.textContent=t; e.classList.add('on'); clearTimeout(toastTimer); toastTimer=setTimeout(()=>e.classList.remove('on'),ms||1800); }
 function showModal(id){ $(id).classList.add('on'); }
 function hideModal(id){ $(id).classList.remove('on'); }
 
@@ -1170,6 +1180,19 @@ boardSvg.addEventListener('pointerup',e=>{
   if(dist>=18) onSwipe(p.idx,dx,dy); else onTap(p.idx);
 });
 boardSvg.addEventListener('pointercancel',()=>{ ptr=null; });
+/* Ist dieses Feld in der Markierung? Die Maske aus optFinal sagt: dieses
+   Feld ist in JEDEM bestmoeglichen Endbild besetzt. Genau genommen bleibt
+   also das Feld besetzt, nicht zwingend derselbe Stein - die Texte sagen
+   das deshalb auch so. */
+function istGestrandet(i){
+  const ev=game.evalRes;
+  if(!settings.marks||!ev||ev.key!==stateKey()||!ev.optFinal||!(ev.best>1)) return false;
+  if(game.pegAt[i]<0) return false;
+  const m=ev.optFinal.mask;
+  return i<32?!!((m[0]>>>i)&1):!!((m[1]>>>(i-32))&1);
+}
+const MARKE_TEXT='Dieses Feld bleibt in jeder bestmöglichen Fortsetzung besetzt – hier wird ein Stein übrig bleiben.';
+const MARKE_KURZ='Hier bleibt ein Stein stehen';
 function shakeCell(i){ const e=pegsLayer.querySelector(`[data-idx="${i}"] .body`); if(!e) return; e.classList.add('shake'); setTimeout(()=>e.classList.remove('shake'),600); }
 function onTap(i){
   if(game.finished){ showModal('resultModal'); return; }
@@ -1185,9 +1208,16 @@ function onTap(i){
     game.lastMove=null;
     if(game.selected===i){ game.selected=-1; renderOverlay(); return; }
     const mv=legalMovesFrom(i);
-    if(!mv.length){ Sound.bad(); shakeCell(i); hinweis('Dieser Stein kann nicht springen.','Kann nicht springen'); return; }
+    /* Das Zeichen am Stein erklaert sich sonst nirgends - wer es antippt,
+       will wissen, was es bedeutet. Nur wenn kein Zug ausgeloest wird: wer
+       den Stein bewegt, braucht keine Erklaerung. */
+    const markiert=istGestrandet(i);
+    if(!mv.length){ Sound.bad(); shakeCell(i);
+      hinweis(markiert?MARKE_TEXT:'Dieser Stein kann nicht springen.',
+              markiert?MARKE_KURZ:'Kann nicht springen'); return; }
     if(settings.autoJump&&mv.length===1){ playMove(mv[0]); return; }
     game.selected=i; renderOverlay(); Sound.select();
+    if(markiert){ hinweis(MARKE_TEXT,MARKE_KURZ); return; }
     setStatus(mv.length===1?'Tippe das Zielfeld oder wische dorthin.':mv.length+' Züge möglich – wische in die Richtung oder tippe das Zielfeld.');
   } else {
     if(game.selected>=0){ const m=legalMovesFrom(game.selected).find(m=>m.to===i); if(m){ playMove(m); return; } Sound.bad(); hinweis('Dorthin geht kein Sprung.','Dorthin geht kein Sprung'); }

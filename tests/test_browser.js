@@ -489,6 +489,79 @@ let fails=0; const ok=(name,cond,extra)=>{ console.log((cond?'OK  ':'FAIL')+' '+
        document.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true}));
        Sound.ensure=oe; return ruf>0; }));
 
+  /* Das Zeichen am gestrandeten Stein erklaert sich sonst nirgends. Geprueft
+     an Lutz' Stellung vom 13.09.2026, 13:57 Uhr (14 Steine, bestenfalls 2,
+     zwei Endbilder): unabhaengig nachgerechnet bleibt genau (4,6) in beiden
+     Endbildern besetzt - genau der Stein mit dem Zeichen im Screenshot. */
+  const marke=await page.evaluate(async()=>{
+    settings.marks=true; settings.trainer=true; settings.strategy=false; renderStrategyBtn();
+    Store.del('markeErklaert');
+    newGame('english'); const B=game.board;
+    const bild=['  zpp  ','  zpz  ','zzzzppp','zzzzzpp','zzpzzzp','  zpp  ','  zpp  '];
+    for(let i=0;i<B.n;i++) game.pegAt[i]=-1; let id=0;
+    for(let r=0;r<7;r++) for(let c=0;c<7;c++){ const i=B.index[r+','+c];
+      if(i!==undefined&&bild[r][c]==='p') game.pegAt[i]=id++; }
+    game.phase='play'; game.history=[]; game.future=[]; game.finished=false;
+    game.evalRes=null; game.prevEval=null; game.lastMove=null; hinweisBis=0;
+    document.getElementById('toast').classList.remove('on');
+    render(); evaluatePosition();
+    return {steine:pegCount()}; });
+  await page.waitForFunction(()=>game.evalRes&&!game.evaluating&&game.evalRes.key===stateKey(),{timeout:30000});
+  await sleep(200);
+  const m1=await page.evaluate(()=>{ const B=game.board;
+    const treffer=[]; for(let i=0;i<B.n;i++) if(istGestrandet(i)) treffer.push(B.cells[i].r+','+B.cells[i].c);
+    return {steine:pegCount(),best:game.evalRes.best,endbilder:game.evalRes.optFinal?game.evalRes.optFinal.count:0,
+      treffer, ersteMeldung:document.getElementById('toast').textContent,
+      schwebt:document.getElementById('toast').classList.contains('on'),
+      statuszeile:statusFullText(), gemerkt:Store.get('markeErklaert',false)}; });
+  console.log('INFO Markierung: '+JSON.stringify(m1));
+  ok('Markierung trifft genau das nachgerechnete Feld (4,6)',
+     m1.steine===14&&m1.best===2&&m1.endbilder===2&&m1.treffer.length===1&&m1.treffer[0]==='4,6',
+     JSON.stringify(m1.treffer)+' bei '+m1.steine+' Steinen, bestenfalls '+m1.best);
+  ok('Beim ersten Auftauchen wird das Zeichen von selbst erklaert',
+     m1.schwebt&&/hier bleibt ein Stein stehen/.test(m1.ersteMeldung)&&m1.gemerkt===true,
+     m1.ersteMeldung.slice(0,90));
+  /* Die Erklaerung darf die gerade fertige Bewertung nicht verdraengen -
+     deshalb schwebt sie, statt die Statuszeile zu belegen. */
+  ok('Die Erklaerung verdraengt die Bewertung nicht',
+     !/hier bleibt ein Stein stehen/.test(m1.statuszeile), m1.statuszeile.slice(0,70));
+
+  const m2=await page.evaluate(async()=>{
+    /* Zweites Auftauchen: kein Hinweis mehr von selbst. */
+    document.getElementById('toast').classList.remove('on');
+    document.getElementById('toast').textContent='';
+    hinweisBis=0; setStatus('Nichts Besonderes.'); renderOverlay();
+    const vorher=document.getElementById('toast').textContent;
+    const i=game.board.index['4,6'];
+    hinweisBis=0; onTap(i); const nachTipp=statusFullText();
+    return {ohneZweiteMeldung:vorher,nachTipp,
+      kurz:document.querySelector('#status .kurz').textContent}; });
+  console.log('INFO Markierung, Tipp: '+JSON.stringify(m2));
+  ok('Kein zweites Mal von selbst', m2.ohneZweiteMeldung==='',
+     JSON.stringify(m2.ohneZweiteMeldung));
+  ok('Tippen auf den markierten Stein erklaert das Zeichen erneut',
+     /bestmöglichen Fortsetzung besetzt/.test(m2.nachTipp), m2.nachTipp.slice(0,90));
+  ok('Kurzfassung der Erklaerung bleibt bei hoechstens 32 Zeichen',
+     m2.kurz.length<=32, m2.kurz+' ('+m2.kurz.length+')');
+  const gegen=await page.evaluate(()=>{ hinweisBis=0; game.selected=-1;
+    /* Ein Stein ohne Zuege und ohne Markierung: sonst loest der Tipp einen
+       Auto-Sprung aus und die Statuszeile ist noch die alte. */
+    let i=-1; for(let c=0;c<game.board.n;c++)
+      if(game.pegAt[c]>=0&&!istGestrandet(c)&&!legalMovesFrom(c).length){ i=c; break; }
+    if(i<0) return {gefunden:false};
+    onTap(i);
+    return {gefunden:true,feld:game.board.cells[i].r+','+game.board.cells[i].c,
+      text:statusFullText()}; });
+  console.log('INFO Gegenprobe: '+JSON.stringify(gegen));
+  ok('Ein nicht markierter Stein bekommt die Erklaerung nicht',
+     gegen.gefunden&&!/bestmöglichen Fortsetzung besetzt/.test(gegen.text)
+     &&/kann nicht springen/.test(gegen.text), JSON.stringify(gegen));
+  ok('Ohne die Einstellung gibt es keine Markierung',
+     await page.evaluate(()=>{ settings.marks=false;
+       const r=istGestrandet(game.board.index['4,6']); settings.marks=true; return !r; }));
+  await page.evaluate(()=>{ settings.marks=false; settings.strategy=true; renderStrategyBtn();
+    Store.del('markeErklaert'); newGame('english'); });
+
   /* Hinweis auf eine neuere Version. Der Vergleich muss stellenweise als Zahl
      laufen: als Text waere '1.9' groesser als '1.22', und genau dort steht die
      Zaehlung gerade. */

@@ -101,6 +101,26 @@ const FAELLE=[
  ok('Update-Hinweis kostet keine Brettflaeche',
     mitUpdate.mit===mitUpdate.ohne&&mitUpdate.danach===mitUpdate.ohne,
     mitUpdate.ohne+' / '+mitUpdate.mit+' / '+mitUpdate.danach);
+ /* Die einmalige Erklaerung zum Markierungszeichen steht 4,2 s als
+    schwebende Meldung. Sie darf weder Brettflaeche kosten noch aus dem Bild
+    laufen - der Satz ist laenger als die ueblichen Meldungen. */
+ const mitToast=await p.evaluate(()=>{ const br=()=>Math.round(document.getElementById('board').getBoundingClientRect().width);
+   const ohne=br();
+   toast('Das Zeichen heißt: hier bleibt ein Stein stehen. Ein Tipp darauf sagt mehr.',4200);
+   fitStage(); const mit=br();
+   const t=document.getElementById('toast'), r=t.getBoundingClientRect();
+   const leiste=document.querySelector('footer,#bar,.bar');
+   t.classList.remove('on');
+   return {ohne,mit,links:Math.round(r.left),rechts:Math.round(r.right),unten:Math.round(r.bottom),
+     fenster:Math.round(window.innerWidth),hoehe:Math.round(window.innerHeight),
+     leisteOben:leiste?Math.round(leiste.getBoundingClientRect().top):null}; });
+ console.log('INFO Langer Toast: '+JSON.stringify(mitToast));
+ ok('Lange schwebende Meldung kostet keine Brettflaeche',
+    mitToast.mit===mitToast.ohne, mitToast.ohne+' / '+mitToast.mit);
+ ok('Lange schwebende Meldung bleibt im Bild',
+    mitToast.links>=0&&mitToast.rechts<=mitToast.fenster&&mitToast.unten<=mitToast.hoehe,
+    JSON.stringify(mitToast));
+
  ok('Update-Hinweis bleibt im sichtbaren Bereich',
     mitUpdate.oben>=0&&mitUpdate.rechts<=mitUpdate.fenster,
     'oben '+mitUpdate.oben+', rechts '+mitUpdate.rechts+' von '+mitUpdate.fenster);
