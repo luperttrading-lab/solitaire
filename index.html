@@ -204,6 +204,18 @@ header .boardname:active{background:var(--panel2)}
 #warnblitz.an{animation:warnblitz .62s ease-out 1}
 @keyframes warnblitz{0%{opacity:0}18%{opacity:1}55%{opacity:.22}100%{opacity:0}}
 @media (prefers-reduced-motion:reduce){#warnblitz.an{animation-duration:1.1s}}
+/* Hinweis auf eine neuere Version. Schwebt ueber dem Inhalt (position:fixed),
+   damit er das Brett nicht verkleinert - eine Leiste im Fluss wuerde ueber
+   fitStage/ensureStatusFits Platz kosten. */
+#update{position:fixed;left:12px;right:12px;top:calc(var(--sat) + 8px);z-index:44;
+  display:none;align-items:center;gap:10px;padding:11px 12px;border-radius:14px;
+  background:#3d3324;border:1px solid var(--brass2);box-shadow:0 10px 24px rgba(0,0,0,.45);
+  color:var(--ink);font-size:15px;text-align:left;cursor:pointer}
+#update.on{display:flex;animation:updatean .35s ease-out}
+@keyframes updatean{from{opacity:0;transform:translateY(-10px)}to{opacity:1;transform:none}}
+#update .txt{flex:1;min-width:0}
+#update .zu{flex:0 0 auto;width:32px;height:32px;border:0;border-radius:10px;background:transparent;
+  color:var(--muted);font-size:20px;line-height:1;cursor:pointer}
 #toast{position:fixed;left:50%;bottom:calc(var(--sab) + 90px);transform:translateX(-50%) translateY(20px);background:#3a2f24;color:var(--ink);padding:10px 16px;border-radius:12px;font-size:14px;opacity:0;transition:.25s;z-index:40;pointer-events:none;max-width:90vw;text-align:center}
 #toast.on{opacity:1;transform:translateX(-50%) translateY(0)}
 @media (prefers-reduced-motion:reduce){
@@ -302,12 +314,13 @@ header .boardname:active{background:var(--panel2)}
     <div class="btnrow"><button class="btn primary" id="detailClose">Fertig</button></div>
   </div>
 </div>
+<div id="update" role="status"><span class="txt"></span><button class="zu" type="button" aria-label="Hinweis schließen">×</button></div>
 <div id="warnblitz"></div>
 <div id="toast"></div>
 
 <script>
 'use strict';
-const APP_VERSION='1.22';
+const APP_VERSION='1.23';
 /* =========================================================================
    Kern: Bretter, Züge, Symmetrien, Paritäts-Schranke, Solver
    (als Fabrik, damit derselbe Code im Web Worker läuft)
@@ -1532,12 +1545,54 @@ function buildSplash(){
   svg.innerHTML=html; pegDefsCache.clear();
 }
 
+/* ---------- Neuere Version auf dem Server? ----------
+   Am 13.09.2026 lief Lutz eine halbe Stunde auf v1.21, weil GitHub Pages
+   einen Build ausgelassen hatte - gemerkt hat er es nur an der Nummer im
+   Startbild. Dieselbe Falle stellt der Zwischenspeicher des iPhones: Die
+   Datei auf dem Server ist neu, das Geraet zeigt die alte.
+
+   Geladen wird nur der Anfang der Datei (Bereichsanfrage), weil APP_VERSION
+   weit oben steht - statt 126 kB reichen 48. Ignoriert der Server die
+   Anfrage, kommt die ganze Datei und es funktioniert trotzdem. Schlaegt das
+   Laden fehl (offline, data:-Kontext), passiert schlicht nichts. */
+const UPDATE_FENSTER=49152;            // erste 48 kB; Test wacht ueber die Lage von APP_VERSION
+function versionNeuer(a,b){            // ist a neuer als b? Stellenweise als Zahl,
+  const A=String(a).split('.').map(Number), B=String(b).split('.').map(Number);
+  for(let i=0;i<Math.max(A.length,B.length);i++){   // sonst waere '1.9' groesser als '1.22'
+    const x=A[i]||0, y=B[i]||0; if(isNaN(x)||isNaN(y)) return false; if(x!==y) return x>y; }
+  return false; }
+let updateGeprueft=0;
+function zeigeUpdate(v){
+  const e=$('update'); if(!e) return;
+  e.querySelector('.txt').textContent='Version '+v+' ist da – tippen zum Laden.';
+  e.classList.add('on');
+  e.onclick=ev=>{ if(ev.target.closest('.zu')) return;
+    /* Der angehaengte Wert umgeht den Zwischenspeicher; ohne ihn liefert das
+       iPhone unter Umstaenden wieder die alte Datei aus. */
+    const u=location.pathname+'?v='+encodeURIComponent(v); location.replace(u); };
+  e.querySelector('.zu').onclick=()=>{ e.classList.remove('on'); };
+}
+async function pruefeUpdate(){
+  if(Date.now()-updateGeprueft<25*60*1000) return;    // nicht bei jedem Wechsel neu laden
+  updateGeprueft=Date.now();
+  try{
+    const r=await fetch(location.pathname+'?stand='+Date.now(),
+      {cache:'no-store',headers:{'Range':'bytes=0-'+(UPDATE_FENSTER-1)}});
+    if(!r.ok) return;
+    const m=(await r.text()).match(/APP_VERSION\s*=\s*'([0-9][0-9.]*)'/);
+    if(m&&versionNeuer(m[1],APP_VERSION)) zeigeUpdate(m[1]);
+  }catch(e){ /* offline oder kein Server - dann eben nicht */ }
+}
+
 /* ---------- Start ---------- */
 buildSplash();
 newGame();
 $('app').hidden=false;
 fitStage(); setTimeout(fitStage,50);
 setTimeout(()=>{ $('splash').classList.add('out'); setTimeout(()=>{ $('splash').hidden=true; },700); },2000);
+/* Erst nach dem Startbild, damit die Anfrage den Aufbau nicht ausbremst. */
+setTimeout(pruefeUpdate,2600);
+document.addEventListener('visibilitychange',()=>{ if(!document.hidden) pruefeUpdate(); });
 </script>
 </body>
 </html>

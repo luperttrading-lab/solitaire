@@ -88,6 +88,23 @@ const FAELLE=[
  console.log('INFO Brettbreiten im Wechsel kurz/lang/kurz/lang: '+JSON.stringify(stabil));
  ok('Brett springt beim Wechsel der Meldungen nicht',stabil.every(v=>v===stabil[0]),stabil.join(' / '));
 
+ /* Der Hinweis auf eine neuere Version schwebt ueber dem Inhalt. Wuerde er im
+    Fluss stehen, naehme er ueber fitStage Brettflaeche weg - genau das, was
+    unten bei den Meldungen schon einmal schiefging. */
+ const mitUpdate=await p.evaluate(()=>{ const br=()=>Math.round(document.getElementById('board').getBoundingClientRect().width);
+   const ohne=br(); zeigeUpdate('9.9'); fitStage(); const mit=br();
+   const e=document.getElementById('update'); const r=e.getBoundingClientRect();
+   e.querySelector('.zu').click(); fitStage();
+   return {ohne,mit,danach:br(),oben:Math.round(r.top),rechts:Math.round(r.right),
+     fenster:Math.round(window.innerWidth)}; });
+ console.log('INFO Brett mit Update-Hinweis: '+JSON.stringify(mitUpdate));
+ ok('Update-Hinweis kostet keine Brettflaeche',
+    mitUpdate.mit===mitUpdate.ohne&&mitUpdate.danach===mitUpdate.ohne,
+    mitUpdate.ohne+' / '+mitUpdate.mit+' / '+mitUpdate.danach);
+ ok('Update-Hinweis bleibt im sichtbaren Bereich',
+    mitUpdate.oben>=0&&mitUpdate.rechts<=mitUpdate.fenster,
+    'oben '+mitUpdate.oben+', rechts '+mitUpdate.rechts+' von '+mitUpdate.fenster);
+
  // Die Steinzahl ist der feste Punkt, auf den der Blick faellt: sie darf beim
  // Wechsel der Meldungen weder wandern noch darf Zeile 2 zweizeilig werden.
  const ruhe=await p.evaluate((txt,note)=>{

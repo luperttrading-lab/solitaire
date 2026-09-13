@@ -438,6 +438,86 @@ let fails=0; const ok=(name,cond,extra)=>{ console.log((cond?'OK  ':'FAIL')+' '+
        document.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true}));
        Sound.ensure=oe; return ruf>0; }));
 
+  /* Hinweis auf eine neuere Version. Der Vergleich muss stellenweise als Zahl
+     laufen: als Text waere '1.9' groesser als '1.22', und genau dort steht die
+     Zaehlung gerade. */
+  const vgl=await page.evaluate(()=>[
+    ['1.23','1.22',true],['1.22','1.22',false],['1.21','1.22',false],
+    ['1.22','1.9',true],['1.9','1.22',false],
+    ['1.3','1.2.1',true],['1.2.1','1.3',false],['1.2.1','1.2',true],
+    ['2.0','1.99',true],['x','1.22',false]
+  ].map(([a,b,soll])=>({a,b,soll,ist:versionNeuer(a,b)})));
+  console.log('INFO Versionsvergleich: '+JSON.stringify(vgl.map(x=>x.a+'>'+x.b+'='+x.ist)));
+  ok('Versionsvergleich rechnet stellenweise, nicht alphabetisch',
+     vgl.every(x=>x.ist===x.soll), JSON.stringify(vgl.filter(x=>x.ist!==x.soll)));
+
+  /* Geladen wird nur der Anfang der Datei - APP_VERSION muss also im Fenster
+     liegen, und zwar mit Luft. Rutscht sie hinaus, findet die Pruefung nichts
+     mehr und meldet still nie ein Update. */
+  const lage=await page.evaluate(()=>{
+    const roh=document.documentElement.outerHTML; const i=roh.indexOf("APP_VERSION='");
+    return {pos:i,fenster:UPDATE_FENSTER}; });
+  const quelle=require('fs').readFileSync(require('path').join(__dirname,'..','index.html'));
+  const bytePos=quelle.indexOf(Buffer.from("const APP_VERSION='"));
+  console.log('INFO APP_VERSION bei Byte '+bytePos+' von '+quelle.length+', Fenster '+lage.fenster);
+  ok('APP_VERSION liegt im geladenen Fenster, mit Luft',
+     bytePos>0&&bytePos<lage.fenster*0.8, bytePos+' von '+lage.fenster);
+
+  const upd=await page.evaluate(()=>{ zeigeUpdate('9.9');
+    const e=document.getElementById('update');
+    const r=e.getBoundingClientRect();
+    return {sichtbar:e.classList.contains('on'),text:e.querySelector('.txt').textContent,
+      schwebt:getComputedStyle(e).position,breite:Math.round(r.width),
+      zuGross:Math.round(e.querySelector('.zu').getBoundingClientRect().width)}; });
+  console.log('INFO Update-Hinweis: '+JSON.stringify(upd));
+  ok('Update-Hinweis erscheint und nennt die Nummer',
+     upd.sichtbar&&/9\.9/.test(upd.text), upd.text);
+  ok('Update-Hinweis schwebt, kostet also keine Brettflaeche', upd.schwebt==='fixed', upd.schwebt);
+  ok('Schliessknopf ist gross genug zum Treffen', upd.zuGross>=30, upd.zuGross+' px');
+  ok('Update-Hinweis laesst sich wegtippen', await page.evaluate(()=>{
+       const e=document.getElementById('update'); e.querySelector('.zu').click();
+       return !e.classList.contains('on'); }));
+
+  /* Der ganze Weg: Anfrage stellen, Nummer aus der Antwort lesen, Hinweis
+     zeigen - oder eben nicht. Die Antwort wird gefaelscht, weil hier kein
+     Server steht. */
+  const weg=await page.evaluate(async()=>{
+    const e=document.getElementById('update'); const echt=window.fetch;
+    const lauf=async antwort=>{ e.classList.remove('on'); updateGeprueft=0;
+      let anfrage=null;
+      window.fetch=(u,o)=>{ anfrage={u:String(u),o}; return Promise.resolve({ok:true,text:async()=>antwort}); };
+      await pruefeUpdate();
+      return {gezeigt:e.classList.contains('on'),text:e.querySelector('.txt').textContent,anfrage}; };
+    const neuer=await lauf("x\nconst APP_VERSION='9.9';\ny");
+    const gleich=await lauf("const APP_VERSION='"+APP_VERSION+"';");
+    const aelter=await lauf("const APP_VERSION='0.1';");
+    const muell=await lauf('<html>nichts davon</html>');
+    e.classList.remove('on'); updateGeprueft=0;
+    let kaputt=false;
+    window.fetch=()=>Promise.reject(new Error('offline'));
+    try{ await pruefeUpdate(); }catch(x){ kaputt=true; }
+    const offline={gezeigt:e.classList.contains('on'),kaputt};
+    window.fetch=echt; e.classList.remove('on');
+    return {neuer,gleich,aelter,muell,offline}; });
+  console.log('INFO Update-Weg: '+JSON.stringify(weg));
+  ok('Neuere Version auf dem Server wird gemeldet',
+     weg.neuer.gezeigt&&/9\.9/.test(weg.neuer.text), JSON.stringify(weg.neuer.text));
+  ok('Gleiche Version meldet nichts', !weg.gleich.gezeigt);
+  ok('Aeltere Version meldet nichts', !weg.aelter.gezeigt);
+  ok('Unlesbare Antwort meldet nichts', !weg.muell.gezeigt);
+  ok('Offline meldet nichts und wirft nicht', !weg.offline.gezeigt&&!weg.offline.kaputt,
+     JSON.stringify(weg.offline));
+  ok('Es wird nur der Anfang der Datei geholt',
+     /bytes=0-/.test((weg.neuer.anfrage.o.headers||{}).Range||''),
+     JSON.stringify(weg.neuer.anfrage.o.headers));
+  ok('Die Anfrage umgeht den Zwischenspeicher',
+     weg.neuer.anfrage.o.cache==='no-store', weg.neuer.anfrage.o.cache);
+  ok('Zweite Pruefung kurz danach laedt nicht noch einmal',
+     await page.evaluate(async()=>{ let n=0; const echt=window.fetch;
+       window.fetch=()=>{ n++; return Promise.resolve({ok:true,text:async()=>''}); };
+       updateGeprueft=Date.now(); await pruefeUpdate(); await pruefeUpdate();
+       window.fetch=echt; return n===0; }));
+
   /* Die Kopfzeile von CLAUDE.md stand zwei Auslieferungen lang auf einer alten
      Version, weil das Nachziehen still fehlschlug. Nichts, was man ansieht -
      also pruefen. */
