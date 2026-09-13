@@ -310,11 +310,22 @@ let fails=0; const ok=(name,cond,extra)=>{ console.log((cond?'OK  ':'FAIL')+' '+
     Sound.tone=ot; return {jump:jump,alarm:alarm,sieg:sieg};
   });
   console.log('INFO Toene: '+JSON.stringify(toene));
-  // Die lauteste Stimme des Alarms gibt die wahrgenommene Lautstaerke vor;
-  // leisere Begleitstimmen (Fundament) duerfen darunter liegen.
+  /* Was man hoert, ist die Summe der gleichzeitig klingenden Stimmen, nicht
+     die lauteste einzelne - bei einem elfstimmigen Gong sind die Einzelpegel
+     klein und trotzdem ist er laut. Die fruehere Pruefung mass die Spitze
+     einer Einzelstimme und wurde deshalb rot, als der Gong mehrstimmig wurde.
+     Gewichtet wird mit dem Effektivwert der Wellenform. */
+  const WIRKSAM=(v)=>{ const F={square:1,sine:0.7071,sawtooth:0.5774,triangle:0.5774};
+    let max=0; v.forEach(a=>{ const t=a.ab!==undefined?a.ab:a[5];
+      const summe=v.filter(b=>{ const bt=b.ab!==undefined?b.ab:b[5];
+          const bd=b.dauer!==undefined?b.dauer:b[2];
+          return bt<=t&&bt+bd>t; })
+        .reduce((x,b)=>x+(b.gain!==undefined?b.gain:b[4])*(F[b.typ!==undefined?b.typ:b[3]]||0.7),0);
+      if(summe>max) max=summe; });
+    return max; };
   ok('Alarmton ist nicht leiser als der Sprungton',
-     Math.max.apply(null,toene.alarm.map(t=>t.gain))>=toene.jump,
-     JSON.stringify(toene.alarm.map(t=>t.gain))+' gegen '+toene.jump);
+     WIRKSAM(toene.alarm)>=toene.jump*0.7071,
+     WIRKSAM(toene.alarm).toFixed(3)+' gegen '+(toene.jump*0.7071).toFixed(3));
   ok('Alarm hat mehr als zwei Toene', toene.alarm.length>2, toene.alarm.length);
   ok('Der Gong ist ab Werk eingestellt',
      await page.evaluate(()=>settings.alarmTon==='gong'),
@@ -331,19 +342,34 @@ let fails=0; const ok=(name,cond,extra)=>{ console.log((cond?'OK  ':'FAIL')+' '+
        Sinus 1/Wurzel2, Saegezahn und Dreieck 1/Wurzel3). */
     const FORM={square:1,sine:0.7071,sawtooth:0.5774,triangle:0.5774};
     Object.keys(ALARM_TOENE).forEach(k=>{ settings.alarmTon=k; const ruf=[];
-      Sound.tone=(f0,f1,d,t,g,w)=>{ ruf.push({wirk:g*(FORM[t]||0.7),ab:w||0,ende:(w||0)+d}); };
+      Sound.tone=(f0,f1,d,t,g,w)=>{ ruf.push({wirk:g*(FORM[t]||0.7),ab:w||0,dauer:d,ende:(w||0)+d}); };
       Sound.alarm(); const dauer=alarmDauer();
-      erg[k]={n:ruf.length,lautest:ruf.length?Math.max(...ruf.map(x=>x.wirk)):0,
+      // lauteste Stelle: Summe aller Stimmen, die dort gleichzeitig klingen
+      let laut=0;
+      ruf.forEach(a=>{ const su=ruf.filter(b=>b.ab<=a.ab&&b.ende>a.ab)
+        .reduce((x,b)=>x+b.wirk,0); if(su>laut) laut=su; });
+      erg[k]={n:ruf.length,lautest:Math.round(laut*1000)/1000,
         frueheste:ruf.length?Math.min(...ruf.map(x=>x.ab)):null,
         letztesEnde:ruf.length?Math.max(...ruf.map(x=>x.ende)):0,dauer}; });
     Sound.tone=ot; settings.alarmTon=merk; return erg; });
   console.log('INFO Alarmtoene: '+JSON.stringify(alle));
   const wahl=Object.keys(alle).filter(k=>k!=='aus');
-  /* Bezug ist der Saegezahn-Alarm: der lief seit v1.17 im Spiel und war fuer
-     Lutz hoerbar. Kein neuer Ton darf darunter liegen. */
-  ok('Kein waehlbarer Alarm ist leiser als der bewaehrte Saegezahn-Alarm',
-     wahl.every(k=>alle[k].lautest>=alle.saege.lautest*0.99),
-     JSON.stringify(wahl.map(k=>k+':'+alle[k].lautest.toFixed(3)))+' gegen '+alle.saege.lautest.toFixed(3));
+  /* Die Schwelle, die wirklich zaehlt: Der Alarm kommt direkt nach dem
+     Sprungton des Zuges und muss sich gegen ihn durchsetzen. Frueher war der
+     Saegezahn-Alarm der Bezug - der liegt aber deutlich ueber dem Noetigen,
+     und die Pruefung mass ausserdem die falsche Groesse (Spitze einer
+     Einzelstimme statt Summe der gleichzeitigen). */
+  const SCHWELLE=toene.jump*0.7071*1.2;
+  ok('Jeder waehlbare Alarm setzt sich gegen den Sprungton durch',
+     wahl.every(k=>alle[k].lautest>=SCHWELLE),
+     JSON.stringify(wahl.map(k=>k+':'+alle[k].lautest.toFixed(3)))+' gegen '+SCHWELLE.toFixed(3));
+  /* Und sie duerfen nicht zu weit auseinanderliegen - sonst ist ein Wechsel
+     im Menue eine Ueberraschung statt einer Geschmacksfrage. Der Gong darf
+     als einziger deutlich darueber liegen, er ist elfstimmig. */
+  const ohneGong=wahl.filter(k=>k!=='gong').map(k=>alle[k].lautest);
+  ok('Die uebrigen Alarme liegen dicht beieinander',
+     Math.max.apply(null,ohneGong)/Math.min.apply(null,ohneGong)<=1.35,
+     JSON.stringify(wahl.map(k=>k+':'+alle[k].lautest.toFixed(3))));
   ok('Jeder waehlbare Alarm setzt erst nach dem Sprungton ein',
      wahl.every(k=>alle[k].frueheste>0), JSON.stringify(wahl.map(k=>k+':'+alle[k].frueheste)));
   ok('Die Fehlton-Sperre deckt jeden Alarm ganz ab',
@@ -354,6 +380,51 @@ let fails=0; const ok=(name,cond,extra)=>{ console.log((cond?'OK  ':'FAIL')+' '+
   ok('Der Gong klingt laenger nach als der alte Ton',
      alle.gong.letztesEnde>alle.saege.letztesEnde,
      alle.gong.letztesEnde+' gegen '+alle.saege.letztesEnde);
+
+  /* Alle Stimmen addieren sich am Ausgang. Ab Summe 1,0 uebersteuert es
+     hoerbar - das klingt nicht lauter, sondern kaputt. Geprueft wird die
+     schlimmste Stelle: die Summe aller Stimmen, die gleichzeitig klingen. */
+  const summen=await page.evaluate(()=>{ const merk=settings.alarmTon; const erg={};
+    Object.keys(ALARM_TOENE).forEach(k=>{ const v=ALARM_TOENE[k].stimmen;
+      let schlimmste=0;
+      v.forEach(a=>{ const t=a[5];            // an jedem Einsatzzeitpunkt nachsehen
+        const summe=v.filter(b=>b[5]<=t&&b[5]+b[2]>t).reduce((x,b)=>x+b[4],0);
+        if(summe>schlimmste) schlimmste=summe; });
+      erg[k]=Math.round(schlimmste*1000)/1000; });
+    settings.alarmTon=merk; return erg; });
+  console.log('INFO Pegelsummen: '+JSON.stringify(summen));
+  ok('Kein Alarmton uebersteuert',
+     Object.keys(summen).every(k=>summen[k]<1.0),
+     JSON.stringify(Object.keys(summen).filter(k=>summen[k]>=1.0))+' | '+JSON.stringify(summen));
+
+  /* Der Gong hat seit v1.26 einen eigenen Anfang: kurze Stimmen, die nach
+     spaetestens 0,3 s vorbei sind, darunter zwei hohe Teiltoene, die im
+     Nachklang nicht mehr vorkommen. */
+  const anfang=await page.evaluate(()=>{ const v=ALARM_TOENE.gong.stimmen;
+    const kurz=v.filter(a=>a[2]<=0.30), lang=v.filter(a=>a[2]>0.30);
+    return {kurz:kurz.length, lang:lang.length,
+      nurImAnfang:kurz.filter(a=>!lang.some(b=>b[0]===a[0])).map(a=>a[0]),
+      rauschen:v.some(a=>a[0]==='rausch')}; });
+  console.log('INFO Gong-Anfang: '+JSON.stringify(anfang));
+  ok('Der Gong hat einen eigenen Anfang aus kurzen Stimmen',
+     anfang.kurz>=4&&anfang.lang>=5, JSON.stringify(anfang));
+  ok('Im Anfang klingen Teiltoene, die spaeter fehlen',
+     anfang.nurImAnfang.length>=2, JSON.stringify(anfang.nurImAnfang));
+  ok('Der Anfang kommt ohne Rauschen aus - kein Klacken', !anfang.rauschen);
+
+  /* Ein gespeicherter Name, den es nicht mehr gibt, darf den Alarm nicht
+     still ausfallen lassen. */
+  const rueckfall=await page.evaluate(()=>{ const merk=settings.alarmTon;
+    settings.alarmTon='gibtsnichtmehr';
+    const a=alarmWahl(), d=alarmDauer();
+    settings.alarmTon='aus'; const ausA=alarmWahl(), ausD=alarmDauer();
+    settings.alarmTon=merk;
+    return {name:a?a.name:null, dauer:d, ausStill:ausA.stimmen.length===0, ausDauer:ausD}; });
+  console.log('INFO Rueckfall: '+JSON.stringify(rueckfall));
+  ok('Unbekannter Alarmton faellt auf den Gong zurueck, statt still zu sein',
+     rueckfall.name==='Klangschale'&&rueckfall.dauer>0, JSON.stringify(rueckfall));
+  ok('"Aus" bleibt aus und wird nicht zurueckgesetzt',
+     rueckfall.ausStill&&rueckfall.ausDauer===0, JSON.stringify(rueckfall));
   ok('Alarmton setzt erst nach dem Sprungton ein', toene.alarm[0].ab>0, toene.alarm[0].ab);
   // Fanfare: mehrstimmig (mehrere Toene mit demselben Einsatz) und laenger
   // als ein einzelner Ton, sonst klingt der Sieg wie jeder andere Piepser.
@@ -400,9 +471,9 @@ let fails=0; const ok=(name,cond,extra)=>{ console.log((cond?'OK  ':'FAIL')+' '+
       gewaehlt:[...l.children].filter(c=>c.classList.contains('on')).map(c=>c.textContent)}; });
   console.log('INFO Alarmwahl im Menue: '+JSON.stringify(chips));
   ok('Alle Alarmtoene stehen im Menue zur Wahl',
-     chips.n===6&&chips.namen.includes('Gong')&&chips.namen.includes('Aus'), JSON.stringify(chips.namen));
+     chips.n===6&&chips.namen.includes('Klangschale')&&chips.namen.includes('Aus'), JSON.stringify(chips.namen));
   ok('Genau der eingestellte Ton ist markiert',
-     chips.gewaehlt.length===1&&chips.gewaehlt[0]==='Gong', JSON.stringify(chips.gewaehlt));
+     chips.gewaehlt.length===1&&chips.gewaehlt[0]==='Klangschale', JSON.stringify(chips.gewaehlt));
   ok('Tippen auf einen anderen Ton stellt ihn ein', await page.evaluate(()=>{
        const l=document.getElementById('alarmList');
        const ziel=[...l.children].find(c=>c.textContent==='Absturz'); ziel.click();

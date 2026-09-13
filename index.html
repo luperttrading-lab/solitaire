@@ -321,7 +321,7 @@ header .boardname:active{background:var(--panel2)}
 
 <script>
 'use strict';
-const APP_VERSION='1.25';
+const APP_VERSION='1.26';
 /* =========================================================================
    Kern: Bretter, Züge, Symmetrien, Paritäts-Schranke, Solver
    (als Fabrik, damit derselbe Code im Web Worker läuft)
@@ -657,37 +657,71 @@ const Sound={ctx:null,wartend:[],
      Tonhoehe. Alle beginnen erst nach 0,06 s, damit der Sprungton des Zuges
      den Anfang nicht zudeckt.
      Dieselben Zahlen liegen der Hoerprobe zugrunde, aus der gewaehlt wurde. */
-  alarm(){ const a=ALARM_TOENE[settings.alarmTon]; if(a) a.stimmen.forEach(v=>this.tone(...v)); }
+  alarm(){ const a=alarmWahl(); if(a) a.stimmen.forEach(v=>this.tone(...v)); }
 };
+/* Ein gespeicherter Name, den es nicht mehr gibt (umbenannter oder entfernter
+   Entwurf), liesse den Alarm sonst still ausfallen - und still ist genau das,
+   was ein Alarm nicht sein darf. Deshalb Rueckfall auf den Gong. */
+function alarmWahl(){
+  return ALARM_TOENE[settings.alarmTon]||(settings.alarmTon==='aus'?ALARM_TOENE.aus:ALARM_TOENE.gong);
+}
 const ALARM_TOENE={
-  /* Ein schwerer Anschlag mit langem Nachklang. Die Teiltoene liegen bewusst
-     nicht harmonisch uebereinander (1 : 1,5 : 2,1 : 2,8) - das macht den
-     metallischen Klang eines Gongs aus. */
-  gong:{name:'Gong',stimmen:[
-    [110,0,1.60,'sine',0.20,0.06],[165,0,1.20,'sine',0.11,0.06],
-    [231,0,0.90,'sine',0.08,0.06],[308,0,0.60,'sine',0.05,0.06],
-    [55,0,1.60,'sine',0.09,0.06]]},
+  /* Klangschale mit kraeftigem Anfang, von Lutz am 13.09.2026 aus vier
+     Entwuerfen gewaehlt ("beides zusammen").
+     Aufbau in zwei Schichten:
+     1. Der Anfang - fuenf kurze Stimmen (0,12-0,28 s), darunter zwei hohe
+        Teiltoene bei 924 und 1232 Hz, die es spaeter nicht mehr gibt. Das
+        ist das metallische Aufbluehen einer echten Schale. Bewusst tonal
+        und nicht als Rauschimpuls: ein Rauschanschlag klackt, und genau das
+        wollte Lutz nicht.
+     2. Der Klang danach - Grundton 220 Hz doppelt besetzt mit 1,5 Hz
+        Abstand. Die beiden ueberlagern sich zu einem Pulsieren alle 0,67 s;
+        ohne diese Schwebung steht ein synthetischer Gong still.
+     Die Teiltoene stehen in den Verhaeltnissen 1 : 1,5 : 2,1 : 2,8, also
+     bewusst NICHT ganzzahlig - sonst klaenge es nach Orgelpfeife statt nach
+     Metall.
+     Die Hauptstimmen liegen bei 64 % ihres urspruenglichen Pegels: alle
+     Stimmen addieren sich am Ausgang, und ab Summe 1,0 uebersteuert es
+     hoerbar. So bleibt die Summe bei 0,93.
+     Warum 220 Hz und nicht tiefer: ein Telefonlautsprecher gibt unter 150 Hz
+     kaum etwas her. Diese Lage hat die dreifache Energie oberhalb davon wie
+     der tiefe Gong, den sie abloest. */
+  gong:{name:'Klangschale',stimmen:[
+    [220,0,0.28,'sine',0.110,0.06],[330,0,0.24,'sine',0.090,0.06],
+    [462,0,0.26,'sine',0.080,0.06],[924,0,0.18,'sine',0.060,0.06],
+    [1232,0,0.12,'sine',0.040,0.06],
+    [220,0,1.90,'sine',0.154,0.06],[221.5,0,1.90,'sine',0.128,0.06],
+    [330,0,1.50,'sine',0.090,0.06],[462,0,1.10,'sine',0.064,0.06],
+    [616,0,0.70,'sine',0.038,0.06],[110,0,1.90,'sine',0.077,0.06]]},
   saege:{name:'Sägezähne',stimmen:[
     [208,146,0.28,'sawtooth',0.16,0.06],[208,146,0.28,'sawtooth',0.18,0.30],
     [175,104,0.42,'sawtooth',0.20,0.54],[87,62,0.42,'triangle',0.10,0.54]]},
+  /* Jeder Stoss dreistimmig - Grundton, Oktave darunter, Oktave darueber.
+     Lautstaerke entsteht aus Mehrstimmigkeit, nicht aus hoeherem Pegel: ein
+     Saegezahn bei 0,36 wuerde kreischen, drei Stimmen bei 0,20/0,10/0,07
+     tragen genauso weit und klingen voll. */
   horn:{name:'Martinshorn',stimmen:[
-    [440,0,0.22,'sawtooth',0.20,0.06],[220,0,0.22,'triangle',0.07,0.06],
-    [330,0,0.22,'sawtooth',0.20,0.30],[165,0,0.22,'triangle',0.07,0.30],
-    [440,0,0.22,'sawtooth',0.20,0.54],[220,0,0.22,'triangle',0.07,0.54],
-    [330,0,0.24,'sawtooth',0.20,0.78],[165,0,0.24,'triangle',0.08,0.78]]},
+    [440,0,0.22,'sawtooth',0.20,0.06],[220,0,0.22,'triangle',0.10,0.06],[880,0,0.22,'triangle',0.07,0.06],
+    [330,0,0.22,'sawtooth',0.20,0.30],[165,0,0.22,'triangle',0.10,0.30],[660,0,0.22,'triangle',0.07,0.30],
+    [440,0,0.22,'sawtooth',0.20,0.54],[220,0,0.22,'triangle',0.10,0.54],[880,0,0.22,'triangle',0.07,0.54],
+    [330,0,0.24,'sawtooth',0.21,0.78],[165,0,0.24,'triangle',0.11,0.78],[660,0,0.24,'triangle',0.08,0.78]]},
+  /* Vier gleichzeitig fallende Gleittoene ueber drei Oktaven, jeder eine
+     Oktave vom naechsten entfernt - zusammen ein breiter Sturz. */
   absturz:{name:'Absturz',stimmen:[
-    [740,92,1.05,'sawtooth',0.20,0.06],[370,110,1.05,'triangle',0.08,0.06]]},
-  /* Rechteck bei 0,12 traegt so weit wie Saegezahn bei 0,20 - die Wellenform
-     bestimmt die Lautstaerke mit, nicht nur der Zahlenwert. */
+    [740,92,1.05,'sawtooth',0.20,0.06],[370,110,1.05,'triangle',0.11,0.06],
+    [1480,184,1.05,'triangle',0.08,0.06],[185,58,1.05,'triangle',0.07,0.06]]},
+  /* Rechteck traegt bei gleichem Zahlenwert am weitesten - die Wellenform
+     bestimmt die Lautstaerke mit. Die Quinte darueber macht den Stoss haerter,
+     ohne den Pegel zu erhoehen. */
   buzzer:{name:'Buzzer',stimmen:[
-    [196,0,0.30,'square',0.12,0.06],[98,0,0.66,'square',0.06,0.06],
-    [196,0,0.30,'square',0.12,0.42]]},
+    [196,0,0.30,'square',0.12,0.06],[98,0,0.66,'square',0.07,0.06],[294,0,0.30,'square',0.06,0.06],
+    [196,0,0.30,'square',0.12,0.42],[294,0,0.30,'square',0.06,0.42]]},
   aus:{name:'Aus',stimmen:[]}
 };
 /* Wie lange der gewaehlte Alarm laeuft. Der kurze Fehlton aus dem
    Strategie-Hinweis wird solange unterdrueckt, sonst deckt er ihn zu - beim
    Gong waeren die festen 1,2 s von frueher zu kurz gewesen (er laeuft 1,66). */
-function alarmDauer(){ const a=ALARM_TOENE[settings.alarmTon];
+function alarmDauer(){ const a=alarmWahl();
   return a&&a.stimmen.length?Math.max(...a.stimmen.map(v=>v[5]+v[2]))*1000+120:0; }
 
 /* =========================================================================
