@@ -102,7 +102,7 @@ header .boardname:active{background:var(--panel2)}
   transform:translateY(105%);transition:transform .3s cubic-bezier(.2,.8,.2,1);display:flex;flex-direction:column;box-shadow:0 -10px 40px rgba(0,0,0,.5)}
 #detail.on{transform:translateY(0)}
 #detail .handle{width:44px;height:5px;border-radius:3px;background:var(--line);margin:10px auto 4px;flex:none}
-#detail .scroll{overflow-y:auto;-webkit-overflow-scrolling:touch;padding:6px 18px calc(var(--sab) + 16px)}
+
 #detail .kopf{display:flex;align-items:center;gap:10px;font-size:17px;color:var(--ink);margin-bottom:8px}
 #detail .kopf .dot{flex:none;width:14px;height:14px;border-radius:50%;background:var(--muted)}
 #detail.ok .kopf .dot{background:#3fae6a}
@@ -158,7 +158,16 @@ header .boardname:active{background:var(--panel2)}
   transform:translateY(105%);transition:transform .3s cubic-bezier(.2,.8,.2,1);display:flex;flex-direction:column;box-shadow:0 -10px 40px rgba(0,0,0,.5)}
 #sheet.on{transform:translateY(0)}
 #sheet .handle{width:44px;height:5px;border-radius:3px;background:var(--line);margin:10px auto 4px;flex:none}
-#sheet .scroll{overflow-y:auto;-webkit-overflow-scrolling:touch;padding:4px 16px calc(var(--sab) + 16px)}
+/* Der Fertig-Knopf steht fest unten, nicht am Ende des Inhalts: das Menue
+   ist laenger als der Bildschirm, und Lutz musste jedes Mal ans Ende
+   scrollen, nur um es zu schliessen. flex:1 1 0 mit min-height:0 ist noetig,
+   damit der Scrollbereich schrumpft statt den Fuss aus dem Blatt zu
+   druecken - ohne min-height:0 waechst ein Flex-Kind auf seine Inhaltshoehe. */
+#sheet .scroll,#detail .scroll{flex:1 1 0;min-height:0;
+  overflow-y:auto;-webkit-overflow-scrolling:touch;padding:4px 16px 12px}
+#sheet .fuss,#detail .fuss{flex:none;border-top:1px solid var(--line);
+  background:var(--panel);padding:10px 16px calc(var(--sab) + 10px)}
+#sheet .fuss .btn,#detail .fuss .btn{width:100%}
 #sheet h2{font-family:var(--serif);font-weight:400;font-size:20px;margin:18px 0 10px;color:var(--brass2)}
 #sheet h2:first-child{margin-top:6px}
 #sheet p{color:var(--muted);font-size:14px;line-height:1.45;margin:6px 0}
@@ -285,9 +294,10 @@ header .boardname:active{background:var(--panel2)}
     <h2>So geht's</h2>
     <p>Ein Stein springt waagerecht, senkrecht (auf dem Dreieck auch schräg) über einen direkten Nachbarn in ein leeres Loch dahinter. Der übersprungene Stein wird entfernt. Ziel: nur ein Stein bleibt übrig – auf den Kreuzbrettern idealerweise in der Mitte.</p>
     <p>Tipp: Die Suche berechnet, mit welchem Zug sich die kleinste Restzahl erreichen lässt. Ist das nachweisbar, steht „bewiesen" dabei; sonst gilt der beste gefundene Zug innerhalb des Rechenbudgets.</p>
-    <div class="btnrow"><button class="btn ghost" id="btnResetStats">Bestleistungen löschen</button><button class="btn primary" id="btnCloseSheet">Fertig</button></div>
+    <div class="btnrow"><button class="btn ghost" id="btnResetStats">Bestleistungen löschen</button></div>
     <p style="text-align:center;margin-top:14px" id="versionLine"></p>
   </div>
+  <div class="fuss"><button class="btn primary" id="btnCloseSheet">Fertig</button></div>
 </div>
 
 <div class="modal" id="resultModal"><div class="card">
@@ -312,8 +322,8 @@ header .boardname:active{background:var(--panel2)}
     <div class="text" id="detailText"></div>
     <div class="zusatz" id="detailZusatz"></div>
     <div class="aktionen" id="detailAktionen"></div>
-    <div class="btnrow"><button class="btn primary" id="detailClose">Fertig</button></div>
   </div>
+  <div class="fuss"><button class="btn primary" id="detailClose">Fertig</button></div>
 </div>
 <div id="update" role="status"><span class="txt"></span><button class="zu" type="button" aria-label="Hinweis schließen">×</button></div>
 <div id="warnblitz"></div>
@@ -321,7 +331,7 @@ header .boardname:active{background:var(--panel2)}
 
 <script>
 'use strict';
-const APP_VERSION='1.26';
+const APP_VERSION='1.27';
 /* =========================================================================
    Kern: Bretter, Züge, Symmetrien, Paritäts-Schranke, Solver
    (als Fabrik, damit derselbe Code im Web Worker läuft)

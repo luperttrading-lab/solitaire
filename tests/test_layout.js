@@ -88,6 +88,48 @@ const FAELLE=[
  console.log('INFO Brettbreiten im Wechsel kurz/lang/kurz/lang: '+JSON.stringify(stabil));
  ok('Brett springt beim Wechsel der Meldungen nicht',stabil.every(v=>v===stabil[0]),stabil.join(' / '));
 
+ /* Der Fertig-Knopf muss ohne Scrollen erreichbar sein - das Menue ist
+    laenger als jeder Bildschirm. Geprueft ueber mehrere Geraetehoehen: der
+    Knopf liegt im sichtbaren Teil des Blattes, das Blatt selbst im Bild, und
+    der Scrollbereich ist trotzdem scrollbar (der Inhalt geht ja weiter). */
+ for(const [name,w,h] of [['iPhone 14 Pro',393,852],['iPhone SE',375,667],['sehr klein',360,600]]){
+   const pf=await browser.newPage(); await pf.setViewport({width:w,height:h});
+   await pf.goto(url,{waitUntil:'load'}); await sleep(2300);
+   // Das Blatt faehrt in 0,3 s hoch - vorher gemessen liegt alles noch unten
+   await pf.evaluate(()=>{
+     document.documentElement.style.setProperty('--sat','59px');
+     document.documentElement.style.setProperty('--sab','34px');
+     openSheet(); });
+   await sleep(450);
+   const r=await pf.evaluate(()=>{
+     const blatt=document.getElementById('sheet');
+     const knopf=document.getElementById('btnCloseSheet');
+     const sc=blatt.querySelector('.scroll');
+     const bb=blatt.getBoundingClientRect(), kb=knopf.getBoundingClientRect();
+     // Ohne zu scrollen: liegt der Knopf im Bild und innerhalb des Blattes?
+     const ergebnis={
+       imBild: kb.top>=0&&kb.bottom<=window.innerHeight+0.5,
+       imBlatt: kb.bottom<=bb.bottom+0.5,
+       hoehe: Math.round(kb.height),
+       breite: Math.round(kb.width),
+       ueberFussrand: Math.round(window.innerHeight-34-kb.bottom),
+       scrollbar: sc.scrollHeight>sc.clientHeight+2,
+       // Nach dem Scrollen ans Ende darf er nicht wandern
+       vorScroll: Math.round(kb.top)
+     };
+     sc.scrollTop=sc.scrollHeight;
+     ergebnis.nachScroll=Math.round(knopf.getBoundingClientRect().top);
+     closeSheet();
+     return ergebnis; });
+   console.log('INFO Fertig-Knopf ('+name+'): '+JSON.stringify(r));
+   ok('Fertig steht ohne Scrollen im Bild ('+name+')', r.imBild&&r.imBlatt, JSON.stringify(r));
+   ok('Fertig ist gross genug zum Treffen ('+name+')', r.hoehe>=40, r.hoehe+' px hoch');
+   ok('Fertig bleibt beim Scrollen an derselben Stelle ('+name+')',
+      r.vorScroll===r.nachScroll, r.vorScroll+' / '+r.nachScroll);
+   ok('Der Inhalt darueber laesst sich weiter scrollen ('+name+')', r.scrollbar, r.scrollbar);
+   await pf.close();
+ }
+
  /* Der Hinweis auf eine neuere Version schwebt ueber dem Inhalt. Wuerde er im
     Fluss stehen, naehme er ueber fitStage Brettflaeche weg - genau das, was
     unten bei den Meldungen schon einmal schiefging. */
