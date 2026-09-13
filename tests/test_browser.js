@@ -316,6 +316,44 @@ let fails=0; const ok=(name,cond,extra)=>{ console.log((cond?'OK  ':'FAIL')+' '+
      Math.max.apply(null,toene.alarm.map(t=>t.gain))>=toene.jump,
      JSON.stringify(toene.alarm.map(t=>t.gain))+' gegen '+toene.jump);
   ok('Alarm hat mehr als zwei Toene', toene.alarm.length>2, toene.alarm.length);
+  ok('Der Gong ist ab Werk eingestellt',
+     await page.evaluate(()=>settings.alarmTon==='gong'),
+     await page.evaluate(()=>settings.alarmTon));
+
+  /* Jeder waehlbare Ton muss taugen: hoerbar neben dem Sprungton, erst nach
+     ihm, und lang genug, dass der Fehlton ihn nicht zudeckt. 'Aus' bleibt
+     still - das ist der Zweck. */
+  const alle=await page.evaluate(()=>{ const merk=settings.alarmTon; const erg={};
+    const ot=Sound.tone.bind(Sound);
+    /* Der Zahlenwert allein sagt nichts ueber die Lautstaerke - eine
+       Rechteckwelle traegt bei gleichem Wert deutlich weiter als ein Sinus.
+       Gewichtet wird mit dem Effektivwert der Wellenform (Rechteck 1,
+       Sinus 1/Wurzel2, Saegezahn und Dreieck 1/Wurzel3). */
+    const FORM={square:1,sine:0.7071,sawtooth:0.5774,triangle:0.5774};
+    Object.keys(ALARM_TOENE).forEach(k=>{ settings.alarmTon=k; const ruf=[];
+      Sound.tone=(f0,f1,d,t,g,w)=>{ ruf.push({wirk:g*(FORM[t]||0.7),ab:w||0,ende:(w||0)+d}); };
+      Sound.alarm(); const dauer=alarmDauer();
+      erg[k]={n:ruf.length,lautest:ruf.length?Math.max(...ruf.map(x=>x.wirk)):0,
+        frueheste:ruf.length?Math.min(...ruf.map(x=>x.ab)):null,
+        letztesEnde:ruf.length?Math.max(...ruf.map(x=>x.ende)):0,dauer}; });
+    Sound.tone=ot; settings.alarmTon=merk; return erg; });
+  console.log('INFO Alarmtoene: '+JSON.stringify(alle));
+  const wahl=Object.keys(alle).filter(k=>k!=='aus');
+  /* Bezug ist der Saegezahn-Alarm: der lief seit v1.17 im Spiel und war fuer
+     Lutz hoerbar. Kein neuer Ton darf darunter liegen. */
+  ok('Kein waehlbarer Alarm ist leiser als der bewaehrte Saegezahn-Alarm',
+     wahl.every(k=>alle[k].lautest>=alle.saege.lautest*0.99),
+     JSON.stringify(wahl.map(k=>k+':'+alle[k].lautest.toFixed(3)))+' gegen '+alle.saege.lautest.toFixed(3));
+  ok('Jeder waehlbare Alarm setzt erst nach dem Sprungton ein',
+     wahl.every(k=>alle[k].frueheste>0), JSON.stringify(wahl.map(k=>k+':'+alle[k].frueheste)));
+  ok('Die Fehlton-Sperre deckt jeden Alarm ganz ab',
+     wahl.every(k=>alle[k].dauer>=alle[k].letztesEnde*1000),
+     JSON.stringify(wahl.map(k=>k+': '+alle[k].dauer+' ms fuer '+Math.round(alle[k].letztesEnde*1000))));
+  ok('"Aus" spielt nichts und sperrt den Fehlton nicht',
+     alle.aus.n===0&&alle.aus.dauer===0, JSON.stringify(alle.aus));
+  ok('Der Gong klingt laenger nach als der alte Ton',
+     alle.gong.letztesEnde>alle.saege.letztesEnde,
+     alle.gong.letztesEnde+' gegen '+alle.saege.letztesEnde);
   ok('Alarmton setzt erst nach dem Sprungton ein', toene.alarm[0].ab>0, toene.alarm[0].ab);
   // Fanfare: mehrstimmig (mehrere Toene mit demselben Einsatz) und laenger
   // als ein einzelner Ton, sonst klingt der Sieg wie jeder andere Piepser.
@@ -357,6 +395,19 @@ let fails=0; const ok=(name,cond,extra)=>{ console.log((cond?'OK  ':'FAIL')+' '+
   // Settings sheet
   await page.evaluate(()=>{ settings.theme='eigene'; }); await page.click('#btnMenu'); await sleep(500); await page.screenshot({path:'shot_sheet.png'});
   ok('Einstellungen geöffnet', await page.$eval('#sheet',e=>e.classList.contains('on')));
+  const chips=await page.evaluate(()=>{ const l=document.getElementById('alarmList');
+    return {n:l.children.length,namen:[...l.children].map(c=>c.textContent),
+      gewaehlt:[...l.children].filter(c=>c.classList.contains('on')).map(c=>c.textContent)}; });
+  console.log('INFO Alarmwahl im Menue: '+JSON.stringify(chips));
+  ok('Alle Alarmtoene stehen im Menue zur Wahl',
+     chips.n===6&&chips.namen.includes('Gong')&&chips.namen.includes('Aus'), JSON.stringify(chips.namen));
+  ok('Genau der eingestellte Ton ist markiert',
+     chips.gewaehlt.length===1&&chips.gewaehlt[0]==='Gong', JSON.stringify(chips.gewaehlt));
+  ok('Tippen auf einen anderen Ton stellt ihn ein', await page.evaluate(()=>{
+       const l=document.getElementById('alarmList');
+       const ziel=[...l.children].find(c=>c.textContent==='Absturz'); ziel.click();
+       const jetzt=settings.alarmTon; settings.alarmTon='gong'; saveSettings(); buildSheet();
+       return jetzt==='absturz'; }));
   ok('Menue nennt dieselbe Version wie das Startbild',
      await page.evaluate(()=>document.getElementById('versionLine').textContent==='Solitaire v'+APP_VERSION),
      await page.$eval('#versionLine',e=>e.textContent));
