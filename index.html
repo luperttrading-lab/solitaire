@@ -307,7 +307,7 @@ header .boardname:active{background:var(--panel2)}
 
 <script>
 'use strict';
-const APP_VERSION='1.21';
+const APP_VERSION='1.22';
 /* =========================================================================
    Kern: Bretter, Züge, Symmetrien, Paritäts-Schranke, Solver
    (als Fabrik, damit derselbe Code im Web Worker läuft)
@@ -595,9 +595,29 @@ function currentLook(){ const t=THEMES[settings.theme]||THEMES.glas; return t.cu
 /* =========================================================================
    Ton
    ========================================================================= */
-const Sound={ctx:null,
-  ensure(){ if(!settings.sound) return null; try{ if(!this.ctx) this.ctx=new (window.AudioContext||window.webkitAudioContext)(); if(this.ctx.state==='suspended') this.ctx.resume(); return this.ctx; }catch(e){ return null; } },
-  tone(f0,f1,dur,type,gain,when){ const c=this.ensure(); if(!c) return; const t=c.currentTime+(when||0); const o=c.createOscillator(), g=c.createGain();
+/* iOS legt den Audio-Kontext schlafen: nach einem Anruf, beim Wegschalten der
+   App, teils auch nach einer Pause ohne Ton. Er steht dann auf 'suspended'
+   oder - nur auf iOS - auf 'interrupted'. Zwei Fallen dabei:
+   1. resume() ist ein Versprechen und wirkt erst spaeter; solange laeuft
+      currentTime nicht weiter. Ein Ton, der auf currentTime geplant wird,
+      liegt nach dem Aufwachen in der Vergangenheit und wird verschluckt.
+   2. iOS laesst resume() nur aus einer Nutzergeste heraus zu. Fanfare und
+      Alarm kommen aber aus der Bewertung, also aus einem Timer - dort waere
+      es zu spaet. Deshalb weckt jede Beruehrung des Bildschirms den Kontext.
+   weckAudio() deckt beides ab, toene werden bis zum Aufwachen zurueckgestellt. */
+const Sound={ctx:null,wartend:[],
+  ensure(){ if(!settings.sound) return null;
+    try{ if(!this.ctx) this.ctx=new (window.AudioContext||window.webkitAudioContext)(); }catch(e){ return null; }
+    if(this.ctx.state!=='running'){ try{ const pr=this.ctx.resume(); if(pr&&pr.then) pr.then(()=>this.nachholen(),()=>{}); }catch(e){} }
+    return this.ctx; },
+  /* Toene, die waehrend des Schlafs aufliefen, jetzt abspielen - aber nur,
+     solange sie frisch sind. Ein Sprungton von vor zehn Sekunden waere
+     Unfug. */
+  nachholen(){ const w=this.wartend; this.wartend=[];
+    w.forEach(a=>{ if(Date.now()-a.zeit<400) this.tone(a.f0,a.f1,a.dur,a.type,a.gain,a.when); }); },
+  tone(f0,f1,dur,type,gain,when){ const c=this.ensure(); if(!c) return;
+    if(c.state!=='running'){ if(this.wartend.length<24) this.wartend.push({f0,f1,dur,type,gain,when,zeit:Date.now()}); return; }
+    const t=c.currentTime+(when||0); const o=c.createOscillator(), g=c.createGain();
     o.type=type||'sine'; o.frequency.setValueAtTime(f0,t); if(f1) o.frequency.exponentialRampToValueAtTime(f1,t+dur);
     g.gain.setValueAtTime(0.0001,t); g.gain.exponentialRampToValueAtTime(gain||0.2,t+0.01); g.gain.exponentialRampToValueAtTime(0.0001,t+dur);
     o.connect(g).connect(c.destination); o.start(t); o.stop(t+dur+0.02); },
@@ -1368,6 +1388,10 @@ function strategyAdvice(prev,ev){
   if(later){ cat='Reihenfolge'; why='Dein Zug gehört zur Lösung, aber erst später – vorher musste etwas anderes passieren.'; }
   else if(better.over===played.over){ cat='Falsche Richtung'; why='Derselbe Stein musste geschlagen werden, aber vom anderen Nachbarn aus.'; }
   else if(better.from===played.from){ cat='Falsche Richtung'; why='Der richtige Stein, aber in die falsche Richtung gesprungen.'; }
+  /* Dasselbe Loch, aber von der falschen Seite gefuellt. Diese Klasse fehlte:
+     Lutz' Zug am 13.09. (gruen von rechts statt rot von oben in dieselbe
+     Luecke) landete bei "Struktur" und war damit nicht zu verstehen. */
+  else if(better.to===played.to){ cat='Falsche Richtung'; why='Das Loch war das richtige – aber der Sprung hinein musste '+dirWord(better)+' gehen, nicht '+dirWord(played)+'.'; }
   else { let stranded=[]; if(ev.optFinal){ for(let i=0;i<b.n;i++){ if(game.pegAt[i]>=0&&((i<32?(ev.optFinal.mask[0]>>>i):(ev.optFinal.mask[1]>>>(i-32)))&1)) stranded.push(i); } }
     if(stranded.length){ cat='Stein gestrandet'; why=stranded.slice(0,2).map(i=>(pegName(game.pegAt[i])||'Ein Stein')+regionWord(i)).join(' und ')+(stranded.length>2?' und weitere':'')+' bleib'+(stranded.length===1?'t':'en')+' in jeder guten Fortsetzung stehen – kein Nachbar kann sie noch überspringen.'; }
     else { cat='Struktur'; why='Nach dem Zug fehlt ein Stein an der Stelle, an der später ein Sprung gebraucht wird.'; } }
@@ -1395,8 +1419,19 @@ function showTrainer(){
   if(ev.best===1){ setStatus('Trainer: 1 Stein ist noch erreichbar.','ok',null,null,note,'1 Stein bleibt erreichbar'); return; }
   const lost=prev&&prev.complete&&prev.best<ev.best;
   const nf=ev.optFinal?ev.optFinal.count:0;
-  const t='Trainer: ab hier bestenfalls '+ev.best+' Steine'+(nf>1?' ('+nf+' verschiedene Endbilder)':nf===1?' (ein einziges Endbild)':'')+'.'+(lost?' Der letzte Zug hat das gekostet.':'');
-  setStatus(t,'bad',lost?[['Zurück',()=>undo()]]:[['Fehler suchen',()=>findMistake()]],note,'Bestenfalls '+ev.best+' Steine'+(lost?' – Zug hat es gekostet':''));
+  /* Bis v1.21 sagte der Trainer nur, DASS der Zug die Loesung gekostet hat.
+     Woran es lag, stand allein in den Strategie-Hinweisen - wer die aus hat
+     (Lutz am 13.09.), stand ohne Erklaerung da. Die Klassifikation ist aus
+     der schon vorliegenden Bewertung praktisch gratis, also nennt der Trainer
+     sie jetzt mit. */
+  const adv=lost?strategyAdvice(prev,ev):null;
+  const t='Trainer: ab hier bestenfalls '+ev.best+' Steine'+(nf>1?' ('+nf+' verschiedene Endbilder)':nf===1?' (ein einziges Endbild)':'')+'.'
+    +(lost?' Der letzte Zug hat das gekostet.':'')
+    +(adv?' '+adv.cat+': '+adv.why+' Besser: '+adv.betterTxt+'.':'');
+  const aktion=adv?[['Zurück & Zug zeigen',()=>{ game.showBetter={path:adv.path.slice()}; undo(); }]]
+    :lost?[['Zurück',()=>undo()]]:[['Fehler suchen',()=>findMistake()]];
+  setStatus(t,'bad',aktion,note,adv?(KURZ_KLASSE[adv.cat]||'Dieser Zug kostet die Lösung')
+    :'Bestenfalls '+ev.best+' Steine'+(lost?' – Zug hat es gekostet':''));
 }
 function describeHint(){
   const h=currentLine(); if(!h){ setStatus('Kein Zug gefunden.','bad'); return; }
@@ -1476,6 +1511,11 @@ $('resNew').addEventListener('click',()=>{ hideModal('resultModal'); newGame(); 
 $('resUndo').addEventListener('click',()=>{ hideModal('resultModal'); undo(); });
 $('resClose').addEventListener('click',()=>hideModal('resultModal'));
 document.addEventListener('keydown',e=>{ if(e.key==='z'&&(e.metaKey||e.ctrlKey)){ e.preventDefault(); if(e.shiftKey) redo(); else undo(); } else if(e.key==='Escape'){ closeSheet(); hideModal('resultModal'); hideModal('confirmModal'); } else if(e.key==='h'||e.key==='?') requestHint(); });
+/* Jede Beruehrung ist eine Nutzergeste - die einzige Gelegenheit, in der iOS
+   den Audio-Kontext wieder anlaufen laesst. Passiv und in der Erfassungsphase,
+   damit kein anderer Handler das Wecken verhindern kann. */
+document.addEventListener('pointerdown',()=>{ Sound.ensure(); },{capture:true,passive:true});
+document.addEventListener('visibilitychange',()=>{ if(!document.hidden) Sound.ensure(); });
 document.addEventListener('visibilitychange',()=>{ if(document.hidden&&game.startedAt&&!game.finished){ game.elapsedBefore=elapsedMs(); game.startedAt=0; game.paused=true; } else if(!document.hidden&&game.paused){ game.paused=false; if(game.history.length&&!game.finished) game.startedAt=Date.now(); } });
 
 /* ---------- Startbild ---------- */

@@ -370,6 +370,74 @@ let fails=0; const ok=(name,cond,extra)=>{ console.log((cond?'OK  ':'FAIL')+' '+
   // (3,3)->(3,5) over (3,4) is legal; play it and then no more moves -> 3 pegs left, game over
   await page.evaluate(()=>{ game.history=[]; game.future=[]; game.finished=false; hideModal('resultModal'); }); await tap(await idx(3,3)); await sleep(700); s=await state();
   ok('Endstellung erkannt: keine Züge, 3 Steine', s.finished&&s.left===3, JSON.stringify(s));
+
+  /* Lutz' Stellung vom 13.09.2026 (Screenshot, 23 Steine, 8 Endbilder):
+     gruen springt von (4,6) ueber (4,5) nach (4,4) und verliert damit die
+     Loesung. Der bessere Zug fuellt dasselbe Loch von oben - (2,4) ueber
+     (3,4) nach (4,4). Bis v1.21 landete das bei der Klasse "Struktur" und
+     war nicht zu verstehen. Die Stellung ist unabhaengig nachgerechnet:
+     vorher 1 Stein erreichbar, nachher bestenfalls 2. */
+  const stellung=()=>{ newGame('english'); const b=game.board;
+    const bild=['  ppp  ','  ..p  ','ppppppp','pppzpzp','pppzzpp','  zpz  ','  zzp  '];
+    for(let i=0;i<b.n;i++) game.pegAt[i]=-1; let id=0;
+    for(let r=0;r<7;r++) for(let c=0;c<7;c++){ const i=b.index[r+','+c];
+      if(i!==undefined&&bild[r][c]==='p') game.pegAt[i]=id++; }
+    game.phase='play'; game.history=[]; game.future=[]; game.finished=false;
+    game.evalRes=null; game.prevEval=null; game.startCount=23; render(); };
+  const lutzZug=async(strategie)=>{
+    await page.evaluate(st=>{ settings.trainer=true; settings.strategy=st; settings.marks=false;
+      renderStrategyBtn(); },strategie);
+    await page.evaluate(stellung); await sleep(200);
+    await page.evaluate(()=>evaluatePosition());
+    await page.waitForFunction(()=>game.evalRes&&!game.evaluating,{timeout:20000});
+    const vorher=await page.evaluate(()=>game.evalRes.best);
+    await page.evaluate(()=>{ const b=game.board;
+      const m=b.moves.find(x=>x.from===b.index['4,6']&&x.over===b.index['4,5']&&x.to===b.index['4,4']);
+      applyMove(m,true); render(); evaluatePosition(); });
+    await page.waitForFunction(()=>game.evalRes&&!game.evaluating&&game.evalRes.key===stateKey(),{timeout:20000});
+    await sleep(300);
+    return {vorher, nachher:await page.evaluate(()=>game.evalRes.best),
+      endbilder:await page.evaluate(()=>game.evalRes.optFinal?game.evalRes.optFinal.count:0),
+      text:await page.evaluate(()=>statusFullText()),
+      kurz:await page.$eval('#status .kurz',e=>e.textContent)}; };
+
+  const mitStrat=await lutzZug(true);
+  console.log('INFO Lutz-Zug mit Strategie: '+JSON.stringify(mitStrat));
+  ok('Lutz-Stellung stimmt: vorher 1 Stein, nachher 2, 8 Endbilder',
+     mitStrat.vorher===1&&mitStrat.nachher===2&&mitStrat.endbilder===8, JSON.stringify(mitStrat).slice(0,120));
+  ok('Falsch gefuelltes Loch heisst "Falsche Richtung", nicht "Struktur"',
+     /Falsche Richtung/.test(mitStrat.text)&&!/Struktur/.test(mitStrat.text), mitStrat.text.slice(0,110));
+  ok('Erklaerung nennt beide Richtungen',
+     /musste nach (oben|unten|links|rechts) gehen, nicht nach (oben|unten|links|rechts)/.test(mitStrat.text),
+     mitStrat.text.slice(0,140));
+
+  const ohneStrat=await lutzZug(false);
+  console.log('INFO Lutz-Zug nur mit Trainer: '+JSON.stringify(ohneStrat));
+  ok('Trainer nennt die Fehlerklasse auch ohne Strategie-Hinweise',
+     /Falsche Richtung/.test(ohneStrat.text), ohneStrat.text.slice(0,140));
+  ok('Trainer nennt auch ohne Strategie-Hinweise den besseren Zug',
+     /Besser:/.test(ohneStrat.text), ohneStrat.text.slice(0,160));
+  ok('Kurzfassung bleibt bei hoechstens 32 Zeichen', ohneStrat.kurz.length<=32, ohneStrat.kurz);
+  await page.evaluate(()=>{ settings.strategy=true; renderStrategyBtn(); newGame('english'); });
+
+  /* Der Audio-Kontext schlaeft auf iOS ein (Anruf, App im Hintergrund). Toene
+     duerfen dann nicht verloren gehen, sondern muessen beim Aufwachen kommen. */
+  const schlaf=await page.evaluate(()=>{ Sound.ensure(); if(!Sound.ctx) return {ohneKontext:true};
+    Sound.wartend=[]; const echt=Sound.ctx;
+    Sound.ctx={state:'suspended',resume(){ return Promise.resolve(); }};
+    Sound.jump(); const gepuffert=Sound.wartend.length;
+    Sound.ctx=echt; const geplant=[]; const ot=Sound.tone.bind(Sound);
+    Sound.tone=(...a)=>{ geplant.push(a[0]); };
+    Sound.nachholen(); Sound.tone=ot;
+    return {gepuffert,nachgeholt:geplant.length}; });
+  console.log('INFO Schlafender Ton: '+JSON.stringify(schlaf));
+  ok('Ton im Schlaf geht nicht verloren, sondern wartet', schlaf.gepuffert===1, JSON.stringify(schlaf));
+  ok('Wartender Ton wird beim Aufwachen nachgeholt', schlaf.nachgeholt===1, JSON.stringify(schlaf));
+  ok('Beruehrung weckt den Ton', await page.evaluate(()=>{ let ruf=0; const oe=Sound.ensure.bind(Sound);
+       Sound.ensure=()=>{ ruf++; return oe(); };
+       document.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true}));
+       Sound.ensure=oe; return ruf>0; }));
+
   ok('keine Seitenfehler insgesamt', errors.length===0, errors.join(' | '));
   await browser.close();
   console.log(fails?`\n${fails} FEHLER`:'\nALLE BROWSER-TESTS OK'); process.exitCode=fails?1:0;
