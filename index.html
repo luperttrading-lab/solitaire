@@ -442,7 +442,7 @@ header .boardname:active{background:var(--panel2)}
 
 <script>
 'use strict';
-const APP_VERSION='1.41';
+const APP_VERSION='1.42';
 /* =========================================================================
    Kern: Bretter, Züge, Symmetrien, Paritäts-Schranke, Solver
    (als Fabrik, damit derselbe Code im Web Worker läuft)
@@ -1535,13 +1535,15 @@ function onTap(i){
     return; }
   if(a[i]>=0){
     game.lastMove=null;
-    /* Der Glanz ist die Antwort auf die BERUEHRUNG, nicht auf die Auswahl.
-       Er stand frueher erst hinter zwei return-Zweigen: ein Stein, der nicht
-       springen kann, kam nie dorthin, und bei Auto-Sprung (Standard an) auch
-       nicht - damit war er im Normalfall unsichtbar (Lutz, 14.09.2026). */
-    glanzAn(i);
     if(game.selected===i){ game.selected=-1; renderOverlay(); return; }
     const mv=legalMovesFrom(i);
+    /* Der Glanz gehoert dem Stein, der LIEGEN BLEIBT (Regel von Lutz,
+       14.09.2026). Wer sofort wegspringt, glaenzt an seinem Ziel, nicht an
+       seinem Ausgangspunkt - dort ist er im naechsten Augenblick nicht mehr.
+       Beruehrt und stehen geblieben heisst also: kein Zug moeglich, oder
+       mehrere Ziele zur Wahl. Genau diese beiden funkeln. */
+    const springtSofort=settings.autoJump&&mv.length===1;
+    if(!springtSofort) glanzAn(i);
     /* Das Zeichen am Stein erklaert sich sonst nirgends - wer es antippt,
        will wissen, was es bedeutet. Nur wenn kein Zug ausgeloest wird: wer
        den Stein bewegt, braucht keine Erklaerung. */
@@ -1549,7 +1551,7 @@ function onTap(i){
     if(!mv.length){ Sound.bad(); shakeCell(i);
       hinweis(markiert?MARKE_TEXT:'Dieser Stein kann nicht springen.',
               markiert?MARKE_KURZ:'Kann nicht springen'); return; }
-    if(settings.autoJump&&mv.length===1){ playMove(mv[0]); return; }
+    if(springtSofort){ playMove(mv[0]); return; }
     game.selected=i; renderOverlay(); Sound.select();
     if(markiert){ hinweis(MARKE_TEXT,MARKE_KURZ); return; }
     setStatus(mv.length===1?'Tippe das Zielfeld oder wische dorthin.':mv.length+' Züge möglich – wische in die Richtung oder tippe das Zielfeld.');

@@ -1229,30 +1229,50 @@ function kurzfassungGleich(proben,voll,erwartet){
      glanz.beiZug.length===1&&glanz.beiZug[0]===glanz.ziel,
      JSON.stringify(glanz.beiZug)+' gegen Zielfeld '+glanz.ziel);
 
-  /* Lutz am 14.09.2026: "wenn ich einen antippe, der sich nicht bewegt ...
-     glaenzt beim Antippen nicht". Der Aufruf stand hinter zwei return-Zweigen
-     - ein Stein ohne Zug kam nie dorthin, und bei Auto-Sprung (Standard AN)
-     auch nicht. Der Glanz antwortet auf die BERUEHRUNG, nicht auf die
-     Auswahl, also muss er in beiden Faellen kommen. */
+  /* Die Regel von Lutz (14.09.2026): "Nur beim Landen fuer Steine die
+     springen. Auch beim Tippen fuer Steine die sich nicht bewegen - entweder
+     weil es keine Sprungsteine sind oder weil mehr als eine Option besteht."
+
+     Also: Der Glanz gehoert dem Stein, der LIEGEN BLEIBT. Wer sofort
+     wegspringt, glaenzt an seinem Ziel, nicht an seinem Ausgangspunkt. Vier
+     Faelle, alle einzeln geprueft - v1.39 traf nur einen davon, v1.41 traf
+     alle vier und damit einen zu viel. */
   abschnitt='Glanz-Ausloeser';
   const ausl=await page.evaluate(async()=>{
     const erg={};
     const mit=()=>{ const e=window.glanzAn, l=[];
       window.glanzAn=function(i){ l.push(i); return e.apply(this,arguments); };
       return {l,zurueck:()=>{window.glanzAn=e;}}; };
-    settings.funkeln=true; settings.autoJump=true; newGame('english');
-    let g=mit();
-    const ohne=game.pegAt.findIndex((v,k)=>v>=0&&legalMovesFrom(k).length===0);
-    onTap(ohne); erg.ohneZug=g.l.slice(); erg.ohneStein=ohne; g.zurueck();
-    newGame('english'); settings.autoJump=true; g=mit();
-    const von=game.pegAt.findIndex((v,k)=>v>=0&&legalMovesFrom(k).length===1);
-    erg.von=von; erg.nach=legalMovesFrom(von)[0].to;
-    onTap(von); erg.sofort=g.l.slice();
+    const frisch=auto=>{ settings.funkeln=true; settings.autoJump=auto; newGame('english'); };
+    const suche=n=>game.pegAt.findIndex((v,k)=>v>=0&&legalMovesFrom(k).length===n);
+    /* (1) Kein moeglicher Zug - bleibt liegen, also Glanz. */
+    frisch(true); let g=mit();
+    erg.ohneStein=suche(0); onTap(erg.ohneStein); erg.ohneZug=g.l.slice(); g.zurueck();
+    /* (2) Genau ein Zug bei Auto-Sprung - springt weg, also KEIN Glanz am
+           Ausgangspunkt, nur am Ziel. */
+    frisch(true); g=mit();
+    erg.von=suche(1); erg.nach=legalMovesFrom(erg.von)[0].to;
+    onTap(erg.von); erg.sofort=g.l.slice();
     await new Promise(r=>setTimeout(r,700));
-    erg.gesamt=g.l.slice(); g.zurueck();
+    erg.nachSprung=g.l.slice(); g.zurueck();
+    /* (3) Mehrere Ziele - bleibt liegen und wird ausgewaehlt, also Glanz. */
+    frisch(true); g=mit();
+    erg.mehrStein=game.pegAt.findIndex((v,k)=>v>=0&&legalMovesFrom(k).length>1);
+    /* In der Eroeffnung hat kein Stein zwei Ziele - das Brett ist zu voll.
+       Also ein paar Zuege spielen, bis einer auftaucht. */
+    for(let z=0;z<10&&erg.mehrStein<0;z++){
+      const m=game.board.moves.find(m=>game.pegAt[m.from]>=0&&game.pegAt[m.over]>=0&&game.pegAt[m.to]<0);
+      if(!m) break; applyMove(m,true); render();
+      erg.mehrStein=game.pegAt.findIndex((v,k)=>v>=0&&legalMovesFrom(k).length>1); }
+    erg.mehrZiele=erg.mehrStein>=0?legalMovesFrom(erg.mehrStein).length:0;
+    if(erg.mehrStein>=0) onTap(erg.mehrStein);
+    erg.mehr=g.l.slice(); g.zurueck();
+    /* (4) Genau ein Zug, Auto-Sprung AUS - bleibt liegen, also Glanz. */
+    frisch(false); g=mit();
+    erg.einsStein=suche(1); onTap(erg.einsStein); erg.eins=g.l.slice(); g.zurueck();
     /* Wie lange steht er wirklich da? "sehr kurz" war Lutz' zweiter Punkt -
        die Spitze von sin() ist nur einen Augenblick lang oben. */
-    newGame('english');
+    frisch(true);
     const i=game.pegAt.findIndex(v=>v>=0);
     const c=pegsLayer.querySelector('[data-idx="'+i+'"] .glanz');
     const t0=performance.now(), proben=[]; glanzAn(i);
@@ -1267,12 +1287,18 @@ function kurzfassungGleich(proben,voll,erwartet){
   ok('Ein Stein ohne moeglichen Zug funkelt beim Antippen',
      ausl.ohneZug.length===1&&ausl.ohneZug[0]===ausl.ohneStein,
      JSON.stringify(ausl.ohneZug)+' gegen Stein '+ausl.ohneStein);
-  ok('Bei Auto-Sprung funkelt schon der beruehrte Stein',
-     ausl.sofort.length>=1&&ausl.sofort[0]===ausl.von,
-     JSON.stringify(ausl.sofort)+' gegen Stein '+ausl.von);
-  ok('Bei Auto-Sprung funkelt danach auch der gelandete Stein',
-     ausl.gesamt.length===2&&ausl.gesamt[1]===ausl.nach,
-     JSON.stringify(ausl.gesamt)+' gegen Zielfeld '+ausl.nach);
+  ok('Ein Stein mit mehreren Zielen funkelt beim Antippen',
+     ausl.mehrStein>=0&&ausl.mehrZiele>1&&ausl.mehr.length===1&&ausl.mehr[0]===ausl.mehrStein,
+     JSON.stringify(ausl.mehr)+' gegen Stein '+ausl.mehrStein+' ('+ausl.mehrZiele+' Ziele)');
+  ok('Ohne Auto-Sprung funkelt auch ein Stein mit genau einem Zug',
+     ausl.eins.length===1&&ausl.eins[0]===ausl.einsStein,
+     JSON.stringify(ausl.eins)+' gegen Stein '+ausl.einsStein);
+  /* Der Kern der Regel: wer wegspringt, glaenzt NICHT am Ausgangspunkt. */
+  ok('Bei Auto-Sprung funkelt der beruehrte Stein NICHT',
+     ausl.sofort.length===0, JSON.stringify(ausl.sofort)+' (erwartet: keiner)');
+  ok('Bei Auto-Sprung funkelt nur der gelandete Stein',
+     ausl.nachSprung.length===1&&ausl.nachSprung[0]===ausl.nach,
+     JSON.stringify(ausl.nachSprung)+' gegen Zielfeld '+ausl.nach);
   /* Vorher stand er nur rund 180 ms bei voller Kraft - das war "sehr kurz". */
   ok('Der Glanz steht lange genug voll da',
      ausl.vollMs>=500, ausl.vollMs+' ms bei voller Kraft');
