@@ -1055,6 +1055,24 @@ function kurzfassungGleich(proben,voll,erwartet){
      inPause.undoAus===true&&inPause.hintAus===true, JSON.stringify([inPause.undoAus,inPause.hintAus]));
   ok('Die Zeit-Zelle sagt, dass sie angehalten ist',
      inPause.label==='Angehalten', inPause.label);
+  /* Der sichtbare Weg in die Pause ist der Chip neben den
+     Strategie-Hinweisen. Vorher hing sie allein an einem Zeichen von
+     7 x 9 px neben dem Wort "Zeit" - Lutz fand es nicht. */
+  const chip=await page.evaluate(()=>{ const c=document.getElementById('btnPause');
+    const r=c.getBoundingClientRect(), st=document.getElementById('btnStrategy').getBoundingClientRect();
+    return {text:c.textContent.trim(), hervor:c.classList.contains('on'), aus:c.disabled,
+      flaeche:Math.round(r.width*r.height), b:Math.round(r.width), h:Math.round(r.height),
+      sichtbar:getComputedStyle(c).display!=='none'&&r.width>0,
+      nebenStrategie:r.left>=st.right-1, gleicheHoehe:Math.abs(r.height-st.height)<2}; });
+  console.log('INFO Pause-Chip: '+JSON.stringify(chip));
+  ok('Der Pause-Chip steht sichtbar neben den Strategie-Hinweisen',
+     chip.sichtbar===true&&chip.nebenStrategie===true&&chip.gleicheHoehe===true, JSON.stringify(chip));
+  /* Gross genug, um gefunden zu werden - das war der ganze Punkt. Zum
+     Vergleich: das alte Zeichen hatte 63 px². */
+  ok('Er ist um ein Vielfaches groesser als das alte Zeichen',
+     chip.flaeche>=2000, chip.flaeche+' px² gegen 63 px²');
+  ok('Waehrend der Pause heisst er Weiter und ist hervorgehoben',
+     chip.text==='Weiter'&&chip.hervor===true, JSON.stringify([chip.text,chip.hervor]));
   /* Kommt Lutz aus dem Hintergrund zurueck, darf die Uhr nicht von allein
      wieder loslaufen - er hat sie von Hand angehalten. */
   const ausHintergrund=await page.evaluate(async()=>{
@@ -1084,6 +1102,10 @@ function kurzfassungGleich(proben,voll,erwartet){
       sichtbar:document.getElementById('pause').classList.contains('an'),
       undoAus:document.getElementById('btnUndo').disabled}))}; })();
   console.log('INFO Weiter: '+JSON.stringify(nachWeiter));
+  const chipNach=await page.evaluate(()=>{ const c=document.getElementById('btnPause');
+    return {text:c.textContent.trim(), hervor:c.classList.contains('on')}; });
+  ok('Danach heisst der Chip wieder Pause',
+     chipNach.text==='Pause'&&chipNach.hervor===false, JSON.stringify(chipNach));
   ok('Weiter laesst die Uhr wieder laufen und gibt das Brett frei',
      nachWeiter.nach.an===false&&nachWeiter.nach.sichtbar===false
      &&nachWeiter.nach.undoAus===false&&nachWeiter.nach.zeit!==nachWeiter.vor,
@@ -1093,6 +1115,12 @@ function kurzfassungGleich(proben,voll,erwartet){
   const zeitTreu=await page.evaluate(()=>elapsedMs());
   ok('Die Pause verschiebt die gemessene Zeit nicht',
      zeitTreu>=29500&&zeitTreu<=33000, zeitTreu+' ms');
+  /* Vor dem ersten Zug laeuft keine Uhr - dann fuehrt der Chip ins Leere
+     und ist matt. */
+  const chipFrisch=await page.evaluate(()=>{ newGame('english');
+    return {aus:document.getElementById('btnPause').disabled, gestartet:!!game.startedAt}; });
+  ok('Ohne laufende Uhr ist der Chip matt',
+     chipFrisch.aus===true&&chipFrisch.gestartet===false, JSON.stringify(chipFrisch));
   await page.evaluate(()=>newGame('english'));
 
   /* Ein neues Spiel muss eine laufende Animation verwerfen, nicht abarbeiten:

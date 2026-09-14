@@ -63,8 +63,6 @@ header .boardname:active{background:var(--panel2)}
    weit ueber Apples 44 pt. */
 .hud>button{background:none;border:0;padding:0;font:inherit;color:inherit;cursor:pointer;-webkit-tap-highlight-color:transparent}
 .hud>button:active{opacity:.6}
-.hud .pz{display:inline-block;width:7px;height:9px;vertical-align:-1px;margin-left:3px;opacity:.75;
-  border-left:2.5px solid currentColor;border-right:2.5px solid currentColor}
 .hud b{display:block;font-family:var(--serif);font-size:30px;line-height:1;font-weight:400;color:var(--ink)}
 .hud span{font-size:12px;color:var(--muted)}
 /* Das Raster: Wort linksbuendig, Zahl rechtsbuendig - wie in einer Tabelle,
@@ -85,9 +83,23 @@ header .boardname:active{background:var(--panel2)}
 .hud .neben dd.da{color:var(--brass2);font-weight:600}
 @media (max-width:386px){ .hud span{font-size:11px}
   .hud .neben{gap:1px 5px} .hud .neben dt{font-size:11px} .hud .neben dd{font-size:12px} }
-.quick{display:flex;justify-content:center;padding:6px 0 0}
+/* Die Pause steht als Chip neben den Strategie-Hinweisen. Vorher hing sie
+   allein an einem Zeichen von 7 x 9 px neben dem Wort "Zeit" - Lutz am
+   14.09.2026: "so klein, dass man ihn kaum sieht bzw findet". Gemessene
+   Gruende gegen die beiden Alternativen: in der Fussleiste waeren aus fuenf
+   Knoepfen zu 68 px sechs zu 56 px geworden, und die Zaehlerzeile haette
+   ihre Spalten verschoben. In dieser Zeile lagen 191 px frei, und die
+   Chip-Form kennt das Auge hier schon als etwas Drueckbares. */
+.quick{display:flex;justify-content:center;gap:8px;padding:6px 0 0}
+#btnPause{display:inline-flex;align-items:center;gap:7px}
+/* Balken und Dreieck als CSS bzw. SVG, nicht als Schriftzeichen: iOS
+   rendert ⏸ und ▶ als blaue Emoji (dieselbe Falle wie beim ℹ). */
+.pzb{display:inline-block;width:8px;height:11px;border-left:3px solid currentColor;border-right:3px solid currentColor}
+.pzd{display:inline-block;width:0;height:0;border-left:10px solid currentColor;
+  border-top:6px solid transparent;border-bottom:6px solid transparent}
 .pill{border-radius:999px;padding:6px 14px;font-size:13px;background:var(--panel);color:var(--muted);border:1px solid var(--line)}
 .pill.on{background:linear-gradient(180deg,#d9b25f,#b88f36);color:#1f1608;border-color:transparent}
+.pill:disabled{opacity:.4}
 #stage{flex:none;display:flex;align-items:center;justify-content:center;padding:8px 0;position:relative}
 /* Die Pause verdeckt das Brett. Eine Pause, die es sichtbar laesst, waere
    keine Pause, sondern ein Zeitstopp zum Nachdenken - dann waere jede
@@ -337,13 +349,13 @@ header .boardname:active{background:var(--panel2)}
   <div class="hud">
     <div><b id="hudMoves">0</b><span>Sprünge</span></div>
     <div><b id="hudLeft">32</b><span id="hudLeftLabel">Übrig von 32</span></div>
-    <button type="button" id="hudZeit" aria-label="Zeit anhalten"><b id="hudTime">0:00</b><span id="hudZeitLabel">Zeit <i class="pz"></i></span></button>
+    <button type="button" id="hudZeit" aria-label="Zeit anhalten"><b id="hudTime">0:00</b><span id="hudZeitLabel">Zeit</span></button>
     <dl class="neben">
       <dt>Tipps</dt><dd id="hudTipp">–</dd>
       <dt>Rettung</dt><dd id="hudRett">–</dd>
     </dl>
   </div>
-  <div class="quick"><button id="btnStrategy" class="pill" aria-pressed="false">Strategie-Hinweise: aus</button></div>
+  <div class="quick"><button id="btnStrategy" class="pill" aria-pressed="false">Strategie-Hinweise: aus</button><button type="button" id="btnPause" class="pill"><i class="pzb"></i>Pause</button></div>
   <div id="stage"><svg id="board" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Spielbrett"></svg>
     <div id="pause" aria-hidden="true"><div class="pt">Pause</div><div class="ps">Das Brett ist verdeckt – sonst wäre die Pause eine Bedenkzeit.</div><button type="button" class="pknopf" id="btnWeiter" aria-label="Weiter spielen"><svg viewBox="0 0 24 24" width="34" height="34" aria-hidden="true"><path d="M8.5 5.2v13.6L19 12z" fill="currentColor"/></svg>Weiter</button></div></div>
   <div id="status"></div>
@@ -429,7 +441,7 @@ header .boardname:active{background:var(--panel2)}
 
 <script>
 'use strict';
-const APP_VERSION='1.37';
+const APP_VERSION='1.38';
 /* =========================================================================
    Kern: Bretter, Züge, Symmetrien, Paritäts-Schranke, Solver
    (als Fabrik, damit derselbe Code im Web Worker läuft)
@@ -1035,7 +1047,10 @@ function pauseSetzen(an){
     if(game.history.length&&!game.finished&&!game.paused) game.startedAt=Date.now(); }
   const e=$('pause'); if(e){ e.classList.toggle('an',!!game.pauseAn); e.setAttribute('aria-hidden',game.pauseAn?'false':'true'); }
   const z=$('hudZeit'); if(z) z.setAttribute('aria-label',game.pauseAn?'Zeit weiterlaufen lassen':'Zeit anhalten');
-  const l=$('hudZeitLabel'); if(l) l.innerHTML=game.pauseAn?'Angehalten':'Zeit <i class="pz"></i>';
+  const l=$('hudZeitLabel'); if(l) l.textContent=game.pauseAn?'Angehalten':'Zeit';
+  const c=$('btnPause');
+  if(c){ c.innerHTML=game.pauseAn?'<i class="pzd"></i>Weiter':'<i class="pzb"></i>Pause';
+    c.classList.toggle('on',!!game.pauseAn); }
   renderHud();
 }
 function fmtTime(ms){ const s=Math.floor(ms/1000); return Math.floor(s/60)+':'+String(s%60).padStart(2,'0'); }
@@ -1136,6 +1151,9 @@ function renderHud(){
   /* In der Pause ist auch die Fussleiste gesperrt - das Brett ist verdeckt,
      aber Zurueck, Vor und Tipp wuerden sonst weiter wirken. */
   const p=!!game.pauseAn;
+  /* Ohne laufende Uhr gibt es nichts anzuhalten - der Chip ist dann matt,
+     damit er nicht ins Leere fuehrt. */
+  const pb=$('btnPause'); if(pb) pb.disabled=!p&&(!game.startedAt||game.finished);
   $('btnUndo').disabled=!game.history.length||game.animating||p; $('btnRedo').disabled=!game.future.length||game.animating||p;
   $('btnHint').disabled=game.phase==='choose'||game.finished||game.searching||game.animating||!!game.lesson||p;
 }
@@ -1868,6 +1886,7 @@ $('btnUndo').addEventListener('click',undo); $('btnRedo').addEventListener('clic
 $('btnHint').addEventListener('click',()=>requestHint());
 $('btnNew').addEventListener('click',()=>confirmDiscard(()=>{ if(game.lesson){ startLesson(game.lesson.id); return; } newGame(); toast('Neues Spiel.'); }));
 $('hudZeit').addEventListener('click',()=>pauseSetzen(!game.pauseAn));
+$('btnPause').addEventListener('click',()=>pauseSetzen(!game.pauseAn));
 $('btnWeiter').addEventListener('click',()=>pauseSetzen(false));
 $('resNew').addEventListener('click',()=>{ hideModal('resultModal'); newGame(); });
 $('resUndo').addEventListener('click',()=>{ hideModal('resultModal'); undo(); });

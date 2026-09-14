@@ -304,6 +304,35 @@ const FAELLE=[
       Math.abs(r.versatzX)<=1&&Math.abs(r.versatzY)<=1, r.versatzX+'/'+r.versatzY+' px');
    ok('Die Zeit-Zelle ist gross genug zum Treffen',
       r.zelle.b>=44&&r.zelle.h>=44, r.zelle.b+'x'+r.zelle.h);
+   /* Der Pause-Chip darf die Chip-Zeile nicht sprengen und keine
+      Brettflaeche kosten - sie wird von fitStage mitgerechnet. */
+   const cz=await pp.evaluate(async()=>{
+     newGame('english');
+     const brettVorher=Math.round(document.getElementById('board').getBoundingClientRect().width);
+     const zeilenVorher=Math.round(document.querySelector('.quick').getBoundingClientRect().height);
+     const l=currentLine(); applyMove(game.board.moves[l.path[0]],true); render(); renderHud(); fitStage();
+     const q=document.querySelector('.quick').getBoundingClientRect();
+     const st=document.getElementById('btnStrategy').getBoundingClientRect();
+     const pa=document.getElementById('btnPause').getBoundingClientRect();
+     /* Einzeilig heisst hier: nicht hoeher als der Strategie-Chip, der
+        nachweislich einzeilig ist. Die sonst uebliche Formel Hoehe durch
+        line-height taugt bei einem Chip mit Polster nicht - line-height ist
+        dort "normal", parseFloat liefert NaN, und der Rueckfall auf 16 px
+        macht aus 29 px zwei Zeilen (einmal erlebt). */
+     return {beideDrin:st.left>=q.left-1&&pa.right<=q.right+1,
+       aufEinerHoehe:Math.abs(st.top-pa.top)<2,
+       chipHoehe:Math.round(pa.height), stratHoehe:Math.round(st.height),
+       einzeilig:Math.abs(pa.height-st.height)<2&&pa.height<40,
+       gesamt:Math.round(pa.right-st.left), zeile:Math.round(q.width),
+       brett:Math.round(document.getElementById('board').getBoundingClientRect().width),
+       brettVorher, zeilenHoehe:Math.round(q.height), zeilenVorher}; });
+   console.log('INFO Chip-Zeile: '+JSON.stringify(cz));
+   ok('Beide Chips passen nebeneinander in die Zeile',
+      cz.beideDrin===true&&cz.aufEinerHoehe===true&&cz.einzeilig===true, JSON.stringify(cz));
+   ok('Die Chip-Zeile waechst durch den Pause-Chip nicht',
+      cz.zeilenHoehe===cz.zeilenVorher, cz.zeilenVorher+' / '+cz.zeilenHoehe+' px');
+   ok('Der Pause-Chip kostet keine Brettflaeche',
+      cz.brett===cz.brettVorher, cz.brettVorher+' / '+cz.brett);
    await pp.close();
  }
 
