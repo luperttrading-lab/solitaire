@@ -1229,6 +1229,55 @@ function kurzfassungGleich(proben,voll,erwartet){
      glanz.beiZug.length===1&&glanz.beiZug[0]===glanz.ziel,
      JSON.stringify(glanz.beiZug)+' gegen Zielfeld '+glanz.ziel);
 
+  /* Lutz am 14.09.2026: "wenn ich einen antippe, der sich nicht bewegt ...
+     glaenzt beim Antippen nicht". Der Aufruf stand hinter zwei return-Zweigen
+     - ein Stein ohne Zug kam nie dorthin, und bei Auto-Sprung (Standard AN)
+     auch nicht. Der Glanz antwortet auf die BERUEHRUNG, nicht auf die
+     Auswahl, also muss er in beiden Faellen kommen. */
+  abschnitt='Glanz-Ausloeser';
+  const ausl=await page.evaluate(async()=>{
+    const erg={};
+    const mit=()=>{ const e=window.glanzAn, l=[];
+      window.glanzAn=function(i){ l.push(i); return e.apply(this,arguments); };
+      return {l,zurueck:()=>{window.glanzAn=e;}}; };
+    settings.funkeln=true; settings.autoJump=true; newGame('english');
+    let g=mit();
+    const ohne=game.pegAt.findIndex((v,k)=>v>=0&&legalMovesFrom(k).length===0);
+    onTap(ohne); erg.ohneZug=g.l.slice(); erg.ohneStein=ohne; g.zurueck();
+    newGame('english'); settings.autoJump=true; g=mit();
+    const von=game.pegAt.findIndex((v,k)=>v>=0&&legalMovesFrom(k).length===1);
+    erg.von=von; erg.nach=legalMovesFrom(von)[0].to;
+    onTap(von); erg.sofort=g.l.slice();
+    await new Promise(r=>setTimeout(r,700));
+    erg.gesamt=g.l.slice(); g.zurueck();
+    /* Wie lange steht er wirklich da? "sehr kurz" war Lutz' zweiter Punkt -
+       die Spitze von sin() ist nur einen Augenblick lang oben. */
+    newGame('english');
+    const i=game.pegAt.findIndex(v=>v>=0);
+    const c=pegsLayer.querySelector('[data-idx="'+i+'"] .glanz');
+    const t0=performance.now(), proben=[]; glanzAn(i);
+    await new Promise(fertig=>{ (function tick(){
+      proben.push([performance.now()-t0,parseFloat(c.getAttribute('fill-opacity'))||0]);
+      if(performance.now()-t0<1400) requestAnimationFrame(tick); else fertig(); })(); });
+    const voll=proben.filter(x=>x[1]>=0.8);
+    erg.vollMs=voll.length?Math.round(voll[voll.length-1][0]-voll[0][0]):0;
+    erg.hoechste=Math.max(...proben.map(x=>x[1]));
+    return erg; });
+  console.log('INFO Glanz-Ausloeser: '+JSON.stringify(ausl));
+  ok('Ein Stein ohne moeglichen Zug funkelt beim Antippen',
+     ausl.ohneZug.length===1&&ausl.ohneZug[0]===ausl.ohneStein,
+     JSON.stringify(ausl.ohneZug)+' gegen Stein '+ausl.ohneStein);
+  ok('Bei Auto-Sprung funkelt schon der beruehrte Stein',
+     ausl.sofort.length>=1&&ausl.sofort[0]===ausl.von,
+     JSON.stringify(ausl.sofort)+' gegen Stein '+ausl.von);
+  ok('Bei Auto-Sprung funkelt danach auch der gelandete Stein',
+     ausl.gesamt.length===2&&ausl.gesamt[1]===ausl.nach,
+     JSON.stringify(ausl.gesamt)+' gegen Zielfeld '+ausl.nach);
+  /* Vorher stand er nur rund 180 ms bei voller Kraft - das war "sehr kurz". */
+  ok('Der Glanz steht lange genug voll da',
+     ausl.vollMs>=500, ausl.vollMs+' ms bei voller Kraft');
+  ok('Er wird kraeftig genug', ausl.hoechste>=0.9, String(ausl.hoechste));
+
   /* Und jetzt die Frage, die zaehlt: sieht man etwas? Gezaehlt werden die
      Bildpunkte, die sich gegenueber dem Standbild aendern - an einem Stein,
      der NICHT angetippt ist, denn die Auswahl-Markierung ist selbst animiert

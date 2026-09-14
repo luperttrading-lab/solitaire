@@ -442,7 +442,7 @@ header .boardname:active{background:var(--panel2)}
 
 <script>
 'use strict';
-const APP_VERSION='1.40';
+const APP_VERSION='1.41';
 /* =========================================================================
    Kern: Bretter, Züge, Symmetrien, Paritäts-Schranke, Solver
    (als Fabrik, damit derselbe Code im Web Worker läuft)
@@ -912,7 +912,7 @@ function trayMarkup(board,lay,look,idPrefix){
    nichts zu sehen ist. Zusaetzlich aendert jeder Schritt fill-opacity auf dem
    Kreis selbst: so haengt das Neuzeichnen an einem element-eigenen Attribut
    und nicht daran, ob die Engine eine Aenderung tief im Verlauf bemerkt. */
-const GLANZ_MS=620;
+const GLANZ_MS=950;
 let glanzLaeuft=new Map(), glanzNr=0;
 const SVGNS='http://www.w3.org/2000/svg';
 function glanzMarkup(){
@@ -935,17 +935,21 @@ function glanzAn(idx){
     gr.appendChild(e); return e; });
   defsEl.appendChild(gr); c.setAttribute('fill','url(#'+gid+')');
   const reduce=window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  const t0=performance.now(), D=reduce?520:GLANZ_MS;
+  const t0=performance.now(), D=reduce?760:GLANZ_MS;
   const klemm=v=>Math.max(0,Math.min(1,v)).toFixed(3);
-  const setz=p=>{ st[0].setAttribute('offset',klemm(p-.28));
+  const setz=p=>{ st[0].setAttribute('offset',klemm(p-.36));
                   st[1].setAttribute('offset',klemm(p));
-                  st[2].setAttribute('offset',klemm(p+.28)); };
+                  st[2].setAttribute('offset',klemm(p+.36)); };
   (function schritt(jetzt){
     const t=Math.min(1,(jetzt-t0)/D);
     /* Wer Bewegung reduziert, bekommt den Streifen ruhig in der Mitte - er
        blendet auf und wieder ab, statt zu wandern. Sichtbar ist er dabei. */
-    setz(reduce?.5:(-.28+1.56*t));
-    c.setAttribute('fill-opacity',(Math.sin(t*Math.PI)*(reduce?.55:.9)).toFixed(3));
+    setz(reduce?.5:(-.36+1.72*t));
+    /* Nicht sin() pur: dessen Spitze ist nur einen Augenblick lang da. Mit
+       dem Faktor 1.9 und der Klemme bei 1 steht der Glanz laenger voll da und
+       blendet an den Raendern trotzdem weich auf und ab. */
+    const hell=Math.min(1,Math.sin(t*Math.PI)*1.9);
+    c.setAttribute('fill-opacity',(hell*(reduce?.7:.95)).toFixed(3));
     if(t<1) glanzLaeuft.set(c,{raf:requestAnimationFrame(schritt),gr:gr});
     else{ glanzLaeuft.delete(c); c.setAttribute('fill-opacity','0'); c.setAttribute('fill','none');
           if(gr.parentNode) gr.parentNode.removeChild(gr); }
@@ -1531,6 +1535,11 @@ function onTap(i){
     return; }
   if(a[i]>=0){
     game.lastMove=null;
+    /* Der Glanz ist die Antwort auf die BERUEHRUNG, nicht auf die Auswahl.
+       Er stand frueher erst hinter zwei return-Zweigen: ein Stein, der nicht
+       springen kann, kam nie dorthin, und bei Auto-Sprung (Standard an) auch
+       nicht - damit war er im Normalfall unsichtbar (Lutz, 14.09.2026). */
+    glanzAn(i);
     if(game.selected===i){ game.selected=-1; renderOverlay(); return; }
     const mv=legalMovesFrom(i);
     /* Das Zeichen am Stein erklaert sich sonst nirgends - wer es antippt,
@@ -1541,7 +1550,7 @@ function onTap(i){
       hinweis(markiert?MARKE_TEXT:'Dieser Stein kann nicht springen.',
               markiert?MARKE_KURZ:'Kann nicht springen'); return; }
     if(settings.autoJump&&mv.length===1){ playMove(mv[0]); return; }
-    game.selected=i; renderOverlay(); Sound.select(); glanzAn(i);
+    game.selected=i; renderOverlay(); Sound.select();
     if(markiert){ hinweis(MARKE_TEXT,MARKE_KURZ); return; }
     setStatus(mv.length===1?'Tippe das Zielfeld oder wische dorthin.':mv.length+' Züge möglich – wische in die Richtung oder tippe das Zielfeld.');
   } else {
