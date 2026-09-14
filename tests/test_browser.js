@@ -1146,6 +1146,71 @@ function kurzfassungGleich(proben,voll,erwartet){
      abbruch.nachNeu.zuege===0&&abbruch.nachNeu.steine===32
      &&abbruch.danach.zuege===0&&abbruch.danach.steine===32, JSON.stringify(abbruch));
 
+  /* Der Glanz beim Beruehren und beim Sprung (v1.39). Bewegt wird ueber
+     SVG-ATTRIBUTE, nicht ueber CSS-transform: eine Vorab-Fassung der
+     Auswahlseite benutzte CSS-transform auf SVG-Kindern und war auf dem
+     iPhone unsichtbar, im Testbrowser aber nicht - Safari behandelt das
+     anders. Deshalb pruefen wir hier die Attribute selbst. */
+  abschnitt='Glanz';
+  const glanz=await page.evaluate(async()=>{
+    settings.funkeln=true; newGame('english'); settings.autoJump=false;
+    const knoten=()=>pegsLayer.querySelector('[data-idx="'+erst+'"] .glanz');
+    const erst=game.pegAt.findIndex(v=>v>=0);
+    const g=pegsLayer.querySelector('[data-idx="'+erst+'"] .glanz');
+    const erg={vorhanden:!!g, ruheOpacity:g&&g.getAttribute('opacity'),
+      /* Der Clip muss auf der AEUSSEREN Gruppe sitzen: saesse er auf
+         derselben, die bewegt wird, wanderte der Ausschnitt mit und man
+         saehe nichts. */
+      clipAussen:!!(g&&g.parentNode&&g.parentNode.getAttribute('clip-path')),
+      clipInnen:!!(g&&g.getAttribute('clip-path')),
+      anzahl:pegsLayer.querySelectorAll('.glanz').length, steine:pegCount()};
+    glanzAn(erst);
+    await new Promise(r=>setTimeout(r,120));
+    erg.mittenOpacity=parseFloat(g.getAttribute('opacity'));
+    erg.mittenTransform=g.getAttribute('transform');
+    await new Promise(r=>setTimeout(r,900));
+    erg.endeOpacity=parseFloat(g.getAttribute('opacity'));
+    erg.endeTransform=g.getAttribute('transform');
+    /* Abgeschaltet darf nichts passieren. */
+    settings.funkeln=false;
+    glanzAn(erst);
+    await new Promise(r=>setTimeout(r,120));
+    erg.ausOpacity=parseFloat(g.getAttribute('opacity'));
+    settings.funkeln=true;
+    /* Ausloeser: Beruehren und Sprung, ueber die echten Wege. */
+    newGame('english'); settings.autoJump=false;
+    const echt=window.glanzAn, log=[];
+    window.glanzAn=function(i){ log.push(i); return echt.apply(this,arguments); };
+    const m=game.board.moves.find(m=>game.pegAt[m.from]>=0&&game.pegAt[m.over]>=0&&game.pegAt[m.to]<0);
+    onTap(m.from); erg.beiTipp=log.slice(); erg.getippt=m.from;
+    log.length=0; game.selected=-1; settings.autoJump=true; playMove(m);
+    await new Promise(r=>setTimeout(r,700));
+    erg.beiZug=log.slice(); erg.ziel=m.to;
+    window.glanzAn=echt;
+    return erg; });
+  console.log('INFO Glanz: '+JSON.stringify(glanz));
+  ok('Jede Murmel traegt einen Glanz-Knoten',
+     glanz.vorhanden===true&&glanz.anzahl===glanz.steine,
+     glanz.anzahl+' Knoten bei '+glanz.steine+' Steinen');
+  ok('In Ruhe ist er unsichtbar', glanz.ruheOpacity==='0', glanz.ruheOpacity);
+  ok('Der Ausschnitt sitzt auf der aeusseren Gruppe, nicht auf der bewegten',
+     glanz.clipAussen===true&&glanz.clipInnen===false,
+     JSON.stringify([glanz.clipAussen,glanz.clipInnen]));
+  ok('Mitten im Lauf ist er sichtbar und verschoben',
+     glanz.mittenOpacity>0.3&&/translate\(-?\d/.test(glanz.mittenTransform||'')
+     &&glanz.mittenTransform!=='translate(-96,0)',
+     glanz.mittenOpacity+' / '+glanz.mittenTransform);
+  ok('Danach ist er wieder unsichtbar und zurueckgesetzt',
+     glanz.endeOpacity===0&&glanz.endeTransform==='translate(-96,0)',
+     glanz.endeOpacity+' / '+glanz.endeTransform);
+  ok('Abgeschaltet bleibt er aus', glanz.ausOpacity===0, glanz.ausOpacity);
+  ok('Ein beruehrter Stein funkelt',
+     glanz.beiTipp.length===1&&glanz.beiTipp[0]===glanz.getippt,
+     JSON.stringify(glanz.beiTipp)+' gegen Stein '+glanz.getippt);
+  ok('Nach einem Sprung funkelt der gelandete Stein',
+     glanz.beiZug.length===1&&glanz.beiZug[0]===glanz.ziel,
+     JSON.stringify(glanz.beiZug)+' gegen Zielfeld '+glanz.ziel);
+
   abschnitt='Migration';
   /* Trainer und Strategie-Hinweise sind ab Werk an. Ein geaenderter Standard
      allein reicht nicht: Object.assign zieht den gespeicherten Wert vor, und
