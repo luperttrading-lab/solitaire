@@ -93,15 +93,31 @@ header .boardname:active{background:var(--panel2)}
    keine Pause, sondern ein Zeitstopp zum Nachdenken - dann waere jede
    Bestleistung wertlos. Deshalb deckend (kein Durchschimmern) und mit
    pointer-events, damit kein Zug durchrutscht. */
-#pause{position:absolute;inset:0;z-index:20;display:none;flex-direction:column;
-  align-items:center;justify-content:center;gap:14px;border-radius:16px;
-  background:var(--bg);text-align:center}
-#pause.an{display:flex}
-#pause .pt{font-family:var(--serif);font-size:26px;color:var(--ink)}
-#pause .ps{font-size:13px;color:var(--muted);max-width:24ch;line-height:1.4}
-/* .btn traegt flex:1 fuer die Knopfreihen der Blaetter; in dieser Spalte
-   streckt das den Knopf ueber die ganze Brettflaeche. */
-#pause .btn{flex:none;min-width:140px}
+#pause{position:absolute;inset:0;z-index:20;display:none;
+  grid-template-rows:1fr auto 1fr;justify-items:center;align-items:center;
+  border-radius:16px;background:var(--bg);text-align:center}
+#pause.an{display:grid}
+/* Drei Reihen 1fr/auto/1fr: der Knopf sitzt damit exakt in der Mitte der
+   Brettflaeche, Titel und Erklaerung ruecken von oben und unten heran.
+   Mit einer schlichten Flex-Spalte saesse er unter der Mitte, weil der
+   Text darueber mitzaehlt (Wunsch von Lutz, 14.09.2026). */
+/* Die Reihen ausdruecklich zuweisen: das Grid sortiert sonst nach der
+   Reihenfolge im Text, und dort steht die Erklaerung vor dem Knopf - der
+   landete damit in Reihe 3 statt in der Mitte (gemessen: 114 px zu tief).
+   Die Reihenfolge im Text bleibt Titel - Erklaerung - Knopf, damit sie
+   vorgelesen ergibt. */
+#pause .pt{grid-row:1;align-self:end;margin-bottom:18px;font-family:var(--serif);font-size:26px;color:var(--ink)}
+#pause .ps{grid-row:3;align-self:start;margin-top:18px;font-size:13px;color:var(--muted);max-width:24ch;line-height:1.4}
+/* Eigene Klasse statt .btn: der traegt flex:1 und Polster fuer die
+   Knopfreihen der Blaetter und streckte sich hier ueber die ganze
+   Brettflaeche. Quadrat, damit er als Flaeche gelesen wird und nicht als
+   Zeile - 104 px auf 369 px Brettbreite. */
+#pause .pknopf{grid-row:2;width:104px;height:104px;border:0;border-radius:24px;cursor:pointer;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;
+  background:linear-gradient(180deg,#d9b25f,#b88f36);color:#1f1608;
+  font-family:inherit;font-size:14px;font-weight:600;-webkit-tap-highlight-color:transparent}
+#pause .pknopf:active{filter:brightness(.92)}
+#pause .pknopf svg{display:block}
 #board{touch-action:none;display:block}
 .toolbar{flex:none;margin-top:auto}
 #status,#statusProbe{min-height:82px;flex-shrink:0;padding:4px 8px 11px;color:var(--muted);font-size:15px;line-height:1.35;display:flex;align-items:flex-end;justify-content:center;gap:12px}
@@ -329,7 +345,7 @@ header .boardname:active{background:var(--panel2)}
   </div>
   <div class="quick"><button id="btnStrategy" class="pill" aria-pressed="false">Strategie-Hinweise: aus</button></div>
   <div id="stage"><svg id="board" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Spielbrett"></svg>
-    <div id="pause" aria-hidden="true"><div class="pt">Pause</div><div class="ps">Das Brett ist verdeckt – sonst wäre die Pause eine Bedenkzeit.</div><button class="btn primary" id="btnWeiter">Weiter</button></div></div>
+    <div id="pause" aria-hidden="true"><div class="pt">Pause</div><div class="ps">Das Brett ist verdeckt – sonst wäre die Pause eine Bedenkzeit.</div><button type="button" class="pknopf" id="btnWeiter" aria-label="Weiter spielen"><svg viewBox="0 0 24 24" width="34" height="34" aria-hidden="true"><path d="M8.5 5.2v13.6L19 12z" fill="currentColor"/></svg>Weiter</button></div></div>
   <div id="status"></div>
   <div id="rechenband"><i></i></div>
   <div id="lessonBar" hidden><div class="lt" id="lessonTitle"></div><div class="lx" id="lessonText"></div><div class="lb"><button class="btn" id="lsDemo">Vormachen</button><button class="btn" id="lsRestart">Abschnitt neu</button><button class="btn ghost" id="lsQuit">Beenden</button></div></div>
@@ -413,7 +429,7 @@ header .boardname:active{background:var(--panel2)}
 
 <script>
 'use strict';
-const APP_VERSION='1.36';
+const APP_VERSION='1.37';
 /* =========================================================================
    Kern: Bretter, Züge, Symmetrien, Paritäts-Schranke, Solver
    (als Fabrik, damit derselbe Code im Web Worker läuft)

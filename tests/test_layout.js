@@ -257,18 +257,51 @@ const FAELLE=[
      const erg={brettVorher:vorher,brettInPause:brett(),
        zelle:{b:Math.round(zelle.width),h:Math.round(zelle.height)},
        deckt:pa.left<=st.left+1&&pa.right>=st.right-1&&pa.top<=st.top+1&&pa.bottom>=st.bottom-1,
-       /* Der Weiter-Knopf darf sich nicht ueber die ganze Flaeche strecken -
-          .btn traegt flex:1 fuer die Knopfreihen der Blaetter. */
+       /* Ein Quadrat, gross und genau in der Mitte der Brettflaeche (Wunsch
+          von Lutz): als Zeile quer ueber das Brett las er ihn nicht als
+          Knopf. Die Mitte haengt an grid-row - ohne die Zuweisung sortiert
+          das Grid nach der Reihenfolge im Text und der Knopf sass 114 px zu
+          tief. */
        knopfH:Math.round(knopf.height), knopfB:Math.round(knopf.width),
+       quadratisch:Math.abs(knopf.width-knopf.height)<2,
+       versatzX:Math.round((knopf.left+knopf.right)/2-(st.left+st.right)/2),
+       versatzY:Math.round((knopf.top+knopf.bottom)/2-(st.top+st.bottom)/2),
        knopfImBild:knopf.top>=st.top&&knopf.bottom<=st.bottom};
      document.getElementById('btnWeiter').click();
      return erg; });
+   const ruhe=await pp.evaluate(async()=>{
+     newGame('english'); const l=currentLine();
+     applyMove(game.board.moves[l.path[0]],true); render(); renderHud(); fitStage();
+     const mass=()=>({spalten:[...document.querySelector('.hud').children].map(e=>Math.round(e.getBoundingClientRect().left)),
+       hudHoehe:Math.round(document.querySelector('.hud').getBoundingClientRect().height),
+       statusTop:Math.round(document.getElementById('status').getBoundingClientRect().top),
+       zeitLinks:Math.round(document.getElementById('hudTime').getBoundingClientRect().left)});
+     const vor=mass();
+     document.getElementById('hudZeit').click();
+     await new Promise(x=>setTimeout(x,120));
+     const drin=mass();
+     document.getElementById('btnWeiter').click();
+     await new Promise(x=>setTimeout(x,120));
+     return {vor,drin,nach:mass()}; });
+   const gl=(a,b)=>JSON.stringify(a)===JSON.stringify(b);
+   console.log('INFO Pause-Ruhe: '+JSON.stringify(ruhe.vor)+' -> '+JSON.stringify(ruhe.drin));
+   /* "Angehalten" ist breiter als "Zeit ❙❙" - die Spalten sind 1fr und
+      halten trotzdem still. Ungeprueft waere das reine Hoffnung. */
+   ok('Die Zaehlerzeile verrutscht beim Pausieren nicht',
+      gl(ruhe.vor.spalten,ruhe.drin.spalten)&&ruhe.vor.zeitLinks===ruhe.drin.zeitLinks,
+      JSON.stringify([ruhe.vor.spalten,ruhe.drin.spalten]));
+   ok('Zeilenhoehe und Statuszeile bleiben stehen',
+      ruhe.vor.hudHoehe===ruhe.drin.hudHoehe&&ruhe.vor.statusTop===ruhe.drin.statusTop,
+      ruhe.vor.hudHoehe+'/'+ruhe.drin.hudHoehe+' px, Status '+ruhe.vor.statusTop+'/'+ruhe.drin.statusTop);
+   ok('Nach dem Weiter steht alles wieder wie vorher', gl(ruhe.vor,ruhe.nach));
    console.log('INFO Pause-Decke: '+JSON.stringify(r));
    ok('Die Pause deckt das Brett vollstaendig', r.deckt===true);
    ok('Die Pause kostet keine Brettflaeche', r.brettInPause===r.brettVorher,
       r.brettVorher+' / '+r.brettInPause);
-   ok('Der Weiter-Knopf hat eine normale Hoehe',
-      r.knopfH>=40&&r.knopfH<=72&&r.knopfImBild===true, r.knopfB+'x'+r.knopfH);
+   ok('Der Weiter-Knopf ist ein Quadrat und gross genug',
+      r.quadratisch===true&&r.knopfH>=88&&r.knopfImBild===true, r.knopfB+'x'+r.knopfH);
+   ok('Der Weiter-Knopf sitzt genau in der Mitte des Bretts',
+      Math.abs(r.versatzX)<=1&&Math.abs(r.versatzY)<=1, r.versatzX+'/'+r.versatzY+' px');
    ok('Die Zeit-Zelle ist gross genug zum Treffen',
       r.zelle.b>=44&&r.zelle.h>=44, r.zelle.b+'x'+r.zelle.h);
    await pp.close();
