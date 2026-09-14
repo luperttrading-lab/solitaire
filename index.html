@@ -442,7 +442,7 @@ header .boardname:active{background:var(--panel2)}
 
 <script>
 'use strict';
-const APP_VERSION='1.39';
+const APP_VERSION='1.40';
 /* =========================================================================
    Kern: Bretter, Züge, Symmetrien, Paritäts-Schranke, Solver
    (als Fabrik, damit derselbe Code im Web Worker läuft)
@@ -895,43 +895,60 @@ function trayMarkup(board,lay,look,idPrefix){
   return {defs,shape};
 }
 /* Der Glanz beim Beruehren und beim Sprung: ein Streiflicht, das einmal
-   schraeg ueber die Murmel wandert - Glas faengt Licht ein. Bewegt wird ueber
-   SVG-ATTRIBUTE, nicht ueber CSS-transform: Safari behandelt CSS-transform auf
-   SVG-Kindern anders als Chromium, eine erste Fassung war auf dem iPhone
-   unsichtbar und im Testbrowser nicht (Lutz, 14.09.2026). */
-function glanzDefs(){
-  return '<clipPath id="mKugel"><circle r="'+R_PEG+'"/></clipPath>'
-    +'<linearGradient id="mStreif" x1="0" y1="0" x2="1" y2="0">'
-    +'<stop offset="0" stop-color="#fff" stop-opacity="0"/>'
-    +'<stop offset=".42" stop-color="#fff" stop-opacity=".55"/>'
-    +'<stop offset=".5" stop-color="#fff" stop-opacity="1"/>'
-    +'<stop offset=".58" stop-color="#fff" stop-opacity=".55"/>'
-    +'<stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient>';
-}
+   schraeg ueber die Murmel wandert - Glas faengt Licht ein.
+
+   Zwei Fallen liegen hier, beide einmal erlebt (Lutz, 14.09.2026):
+   (1) CSS-transform auf SVG-Kindern behandelt Safari anders als Chromium -
+       die erste Fassung war auf dem iPhone unsichtbar, im Testbrowser nicht.
+   (2) Die zweite Fassung schob ein Rechteck von aussen durch einen
+       Ausschnitt herein. Wer "Bewegung reduzieren" eingeschaltet hat, bekam
+       gar keine Bewegung - das Rechteck blieb 96 Einheiten neben einer
+       Murmel mit Radius 34 stehen und wurde weggeschnitten. Gemessen: null
+       geaenderte Bildpunkte, der Effekt war fuer diese Nutzer tot.
+
+   Deshalb jetzt ohne Ausschnitt und ohne bewegte Teile: Der Glanz IST ein
+   Kreis in Murmelgroesse, gewandert wird ueber die Stops seines Verlaufs.
+   Damit kann nichts ueber den Rand ragen, und es gibt keine Stellung, in der
+   nichts zu sehen ist. Zusaetzlich aendert jeder Schritt fill-opacity auf dem
+   Kreis selbst: so haengt das Neuzeichnen an einem element-eigenen Attribut
+   und nicht daran, ob die Engine eine Aenderung tief im Verlauf bemerkt. */
 const GLANZ_MS=620;
-let glanzLaeuft=new Map();
-/* Der Clip sitzt auf der aeusseren Gruppe und bleibt stehen; bewegt wird die
-   innere. Saesse beides auf einem Element, wanderte der Ausschnitt mit und es
-   waere nichts zu sehen. */
+let glanzLaeuft=new Map(), glanzNr=0;
+const SVGNS='http://www.w3.org/2000/svg';
 function glanzMarkup(){
-  return '<g clip-path="url(#mKugel)"><g class="glanz" opacity="0" transform="translate(-96,0)">'
-    +'<rect x="-17" y="-60" width="34" height="120" fill="url(#mStreif)" transform="rotate(16)"/>'
-    +'</g></g>';
+  return '<circle class="glanz" r="'+R_PEG+'" fill="none" fill-opacity="0" pointer-events="none"/>';
 }
 function glanzAn(idx){
   if(!settings.funkeln) return;
-  const g=pegsLayer&&pegsLayer.querySelector('[data-idx="'+idx+'"] .glanz'); if(!g) return;
-  if(glanzLaeuft.has(g)) cancelAnimationFrame(glanzLaeuft.get(g));
-  /* Wer Bewegung reduziert, bekommt ein ruhiges Aufblenden ohne Wanderung. */
+  const c=pegsLayer&&pegsLayer.querySelector('[data-idx="'+idx+'"] .glanz'); if(!c||!defsEl) return;
+  const alt=glanzLaeuft.get(c);
+  if(alt){ cancelAnimationFrame(alt.raf); if(alt.gr.parentNode) alt.gr.parentNode.removeChild(alt.gr); }
+  /* Ein eigener Verlauf je Lauf: teilten sich zwei gleichzeitig funkelnde
+     Steine einen, spraenge der Streifen des einen zurueck, wenn der andere
+     beginnt. */
+  const gid='mglz'+(++glanzNr);
+  const gr=document.createElementNS(SVGNS,'linearGradient');
+  gr.setAttribute('id',gid); gr.setAttribute('x1','0'); gr.setAttribute('y1','0');
+  gr.setAttribute('x2','1'); gr.setAttribute('y2','1');
+  const st=[0,1,2].map(i=>{ const e=document.createElementNS(SVGNS,'stop');
+    e.setAttribute('stop-color','#fff'); e.setAttribute('stop-opacity',i===1?'1':'0');
+    gr.appendChild(e); return e; });
+  defsEl.appendChild(gr); c.setAttribute('fill','url(#'+gid+')');
   const reduce=window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   const t0=performance.now(), D=reduce?520:GLANZ_MS;
-  const bogen=t=>Math.sin(Math.max(0,Math.min(1,t))*Math.PI);
+  const klemm=v=>Math.max(0,Math.min(1,v)).toFixed(3);
+  const setz=p=>{ st[0].setAttribute('offset',klemm(p-.28));
+                  st[1].setAttribute('offset',klemm(p));
+                  st[2].setAttribute('offset',klemm(p+.28)); };
   (function schritt(jetzt){
     const t=Math.min(1,(jetzt-t0)/D);
-    if(!reduce) g.setAttribute('transform','translate('+(-96+192*t).toFixed(1)+','+(42-84*t).toFixed(1)+')');
-    g.setAttribute('opacity',(bogen(t)*(reduce?.5:.92)).toFixed(3));
-    if(t<1) glanzLaeuft.set(g,requestAnimationFrame(schritt));
-    else{ glanzLaeuft.delete(g); g.setAttribute('opacity','0'); g.setAttribute('transform','translate(-96,0)'); }
+    /* Wer Bewegung reduziert, bekommt den Streifen ruhig in der Mitte - er
+       blendet auf und wieder ab, statt zu wandern. Sichtbar ist er dabei. */
+    setz(reduce?.5:(-.28+1.56*t));
+    c.setAttribute('fill-opacity',(Math.sin(t*Math.PI)*(reduce?.55:.9)).toFixed(3));
+    if(t<1) glanzLaeuft.set(c,{raf:requestAnimationFrame(schritt),gr:gr});
+    else{ glanzLaeuft.delete(c); c.setAttribute('fill-opacity','0'); c.setAttribute('fill','none');
+          if(gr.parentNode) gr.parentNode.removeChild(gr); }
   })(t0);
 }
 function pegMarkup(style,color,x,y,extraClass,prefix){
@@ -1102,7 +1119,7 @@ function buildBoardSvg(){
   boardSvg.setAttribute('viewBox',`0 0 ${lay.W} ${lay.H}`);
   boardSvg.innerHTML='';
   const t=trayMarkup(b,lay,look.board,'m_');
-  defsEl=el('defs'); defsEl.innerHTML=t.defs+glanzDefs()+`<marker id="arrowHead" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="4" markerHeight="4" orient="auto"><path d="M0 0L10 5 0 10z" fill="#7fd3ff"/></marker><marker id="arrowHeadWhite" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="4" markerHeight="4" orient="auto"><path d="M0 0L10 5 0 10z" fill="rgba(255,255,255,.55)"/></marker><marker id="arrowHeadRed" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="4" markerHeight="4" orient="auto"><path d="M0 0L10 5 0 10z" fill="#e0574a"/></marker>`;
+  defsEl=el('defs'); defsEl.innerHTML=t.defs+`<marker id="arrowHead" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="4" markerHeight="4" orient="auto"><path d="M0 0L10 5 0 10z" fill="#7fd3ff"/></marker><marker id="arrowHeadWhite" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="4" markerHeight="4" orient="auto"><path d="M0 0L10 5 0 10z" fill="rgba(255,255,255,.55)"/></marker><marker id="arrowHeadRed" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="4" markerHeight="4" orient="auto"><path d="M0 0L10 5 0 10z" fill="#e0574a"/></marker>`;
   const pegDefs=el('g'); pegDefs.setAttribute('id','pegDefs'); defsEl.appendChild(pegDefs);
   boardSvg.appendChild(defsEl);
   trayLayer=el('g'); trayLayer.innerHTML=t.shape; boardSvg.appendChild(trayLayer);

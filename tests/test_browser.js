@@ -1,5 +1,6 @@
 const puppeteer=require(process.env.PUPPETEER_PATH||'puppeteer');
 const path=require('path');
+const {PNG}=require('pngjs');
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 let fails=0; const ok=(name,cond,extra)=>{ console.log((cond?'OK  ':'FAIL')+' '+name+(extra!==undefined?' -> '+extra:'')); if(!cond) fails++; };
 /* Vergleicht die Kurzfassung einer Probe mit dem erwarteten Wortlaut. */
@@ -1146,38 +1147,51 @@ function kurzfassungGleich(proben,voll,erwartet){
      abbruch.nachNeu.zuege===0&&abbruch.nachNeu.steine===32
      &&abbruch.danach.zuege===0&&abbruch.danach.steine===32, JSON.stringify(abbruch));
 
-  /* Der Glanz beim Beruehren und beim Sprung (v1.39). Bewegt wird ueber
-     SVG-ATTRIBUTE, nicht ueber CSS-transform: eine Vorab-Fassung der
-     Auswahlseite benutzte CSS-transform auf SVG-Kindern und war auf dem
-     iPhone unsichtbar, im Testbrowser aber nicht - Safari behandelt das
-     anders. Deshalb pruefen wir hier die Attribute selbst. */
+  /* Der Glanz beim Beruehren und beim Sprung (v1.39, umgebaut v1.40).
+
+     Die erste Fassung dieser Pruefungen fragte, ob opacity gesetzt WIRD - das
+     wurde es, und trotzdem sah Lutz auf dem iPhone nichts. Sie stellte die
+     falsche Frage, genau wie die Trefferflaechen-Messung bei v1.38. Mit
+     "Bewegung reduzieren" blieb der Streifen 96 Einheiten neben einer Murmel
+     mit Radius 34 stehen und wurde weggeschnitten: opacity gesetzt, null zu
+     sehen. Deshalb wird hier jetzt GEZAEHLT, was sich auf dem Bild aendert -
+     und zwar in beiden Bewegungs-Einstellungen. */
   abschnitt='Glanz';
   const glanz=await page.evaluate(async()=>{
     settings.funkeln=true; newGame('english'); settings.autoJump=false;
-    const knoten=()=>pegsLayer.querySelector('[data-idx="'+erst+'"] .glanz');
     const erst=game.pegAt.findIndex(v=>v>=0);
     const g=pegsLayer.querySelector('[data-idx="'+erst+'"] .glanz');
-    const erg={vorhanden:!!g, ruheOpacity:g&&g.getAttribute('opacity'),
-      /* Der Clip muss auf der AEUSSEREN Gruppe sitzen: saesse er auf
-         derselben, die bewegt wird, wanderte der Ausschnitt mit und man
-         saehe nichts. */
-      clipAussen:!!(g&&g.parentNode&&g.parentNode.getAttribute('clip-path')),
-      clipInnen:!!(g&&g.getAttribute('clip-path')),
+    const kugel=pegsLayer.querySelector('[data-idx="'+erst+'"] circle:not(.glanz)');
+    const erg={vorhanden:!!g, ruheFill:g&&g.getAttribute('fill'),
+      ruheOpacity:g&&g.getAttribute('fill-opacity'),
       anzahl:pegsLayer.querySelectorAll('.glanz').length, steine:pegCount()};
+    /* Der Glanz ist ein Kreis in Murmelgroesse - er deckt sie, statt von
+       aussen durch einen Ausschnitt hereingeschoben zu werden. Damit gibt es
+       keine Stellung, in der er daneben liegt. */
+    const rg=g.getBoundingClientRect(), rk=kugel.getBoundingClientRect();
+    const ueber=Math.max(0,Math.min(rg.right,rk.right)-Math.max(rg.left,rk.left))
+               *Math.max(0,Math.min(rg.bottom,rk.bottom)-Math.max(rg.top,rk.top));
+    erg.deckung=rk.width*rk.height>0?ueber/(rk.width*rk.height):0;
     glanzAn(erst);
-    await new Promise(r=>setTimeout(r,120));
-    erg.mittenOpacity=parseFloat(g.getAttribute('opacity'));
-    erg.mittenTransform=g.getAttribute('transform');
+    await new Promise(r=>setTimeout(r,60));
+    erg.frueh=(g.getAttribute('fill')||'').match(/url\(#(.*)\)/);
+    erg.fruehStops=erg.frueh?[...document.getElementById(erg.frueh[1]).children].map(e=>e.getAttribute('offset')).join(','):'';
+    erg.frueh=!!erg.frueh;
+    await new Promise(r=>setTimeout(r,240));
+    erg.mitteOpacity=parseFloat(g.getAttribute('fill-opacity'));
+    const m2=(g.getAttribute('fill')||'').match(/url\(#(.*)\)/);
+    erg.mitteStops=m2?[...document.getElementById(m2[1]).children].map(e=>e.getAttribute('offset')).join(','):'';
+    erg.verlaeufeLaufend=document.querySelectorAll('defs linearGradient[id^="mglz"]').length;
     await new Promise(r=>setTimeout(r,900));
-    erg.endeOpacity=parseFloat(g.getAttribute('opacity'));
-    erg.endeTransform=g.getAttribute('transform');
-    /* Abgeschaltet darf nichts passieren. */
-    settings.funkeln=false;
-    glanzAn(erst);
+    erg.endeOpacity=parseFloat(g.getAttribute('fill-opacity'));
+    erg.endeFill=g.getAttribute('fill');
+    /* Der eigene Verlauf wird nach dem Lauf wieder abgeraeumt, sonst waechst
+       defs mit jedem Funkeln. */
+    erg.verlaeufeDanach=document.querySelectorAll('defs linearGradient[id^="mglz"]').length;
+    settings.funkeln=false; glanzAn(erst);
     await new Promise(r=>setTimeout(r,120));
-    erg.ausOpacity=parseFloat(g.getAttribute('opacity'));
+    erg.ausOpacity=parseFloat(g.getAttribute('fill-opacity'));
     settings.funkeln=true;
-    /* Ausloeser: Beruehren und Sprung, ueber die echten Wege. */
     newGame('english'); settings.autoJump=false;
     const echt=window.glanzAn, log=[];
     window.glanzAn=function(i){ log.push(i); return echt.apply(this,arguments); };
@@ -1192,24 +1206,66 @@ function kurzfassungGleich(proben,voll,erwartet){
   ok('Jede Murmel traegt einen Glanz-Knoten',
      glanz.vorhanden===true&&glanz.anzahl===glanz.steine,
      glanz.anzahl+' Knoten bei '+glanz.steine+' Steinen');
-  ok('In Ruhe ist er unsichtbar', glanz.ruheOpacity==='0', glanz.ruheOpacity);
-  ok('Der Ausschnitt sitzt auf der aeusseren Gruppe, nicht auf der bewegten',
-     glanz.clipAussen===true&&glanz.clipInnen===false,
-     JSON.stringify([glanz.clipAussen,glanz.clipInnen]));
-  ok('Mitten im Lauf ist er sichtbar und verschoben',
-     glanz.mittenOpacity>0.3&&/translate\(-?\d/.test(glanz.mittenTransform||'')
-     &&glanz.mittenTransform!=='translate(-96,0)',
-     glanz.mittenOpacity+' / '+glanz.mittenTransform);
-  ok('Danach ist er wieder unsichtbar und zurueckgesetzt',
-     glanz.endeOpacity===0&&glanz.endeTransform==='translate(-96,0)',
-     glanz.endeOpacity+' / '+glanz.endeTransform);
-  ok('Abgeschaltet bleibt er aus', glanz.ausOpacity===0, glanz.ausOpacity);
+  ok('In Ruhe ist er unsichtbar',
+     glanz.ruheOpacity==='0'&&glanz.ruheFill==='none',
+     glanz.ruheOpacity+' / '+glanz.ruheFill);
+  ok('Der Glanz deckt die Murmel, statt daneben zu liegen',
+     glanz.deckung>0.95, 'Deckung '+(glanz.deckung*100).toFixed(1)+' %');
+  ok('Mitten im Lauf ist er sichtbar', glanz.mitteOpacity>0.3, String(glanz.mitteOpacity));
+  ok('Der Streifen wandert (die Stops verschieben sich)',
+     glanz.frueh===true&&glanz.fruehStops!==''&&glanz.fruehStops!==glanz.mitteStops,
+     glanz.fruehStops+'  ->  '+glanz.mitteStops);
+  ok('Danach ist er wieder unsichtbar',
+     glanz.endeOpacity===0&&glanz.endeFill==='none',
+     glanz.endeOpacity+' / '+glanz.endeFill);
+  ok('Der eigene Verlauf wird abgeraeumt',
+     glanz.verlaeufeLaufend===1&&glanz.verlaeufeDanach===0,
+     glanz.verlaeufeLaufend+' waehrend, '+glanz.verlaeufeDanach+' danach');
+  ok('Abgeschaltet bleibt er aus', glanz.ausOpacity===0, String(glanz.ausOpacity));
   ok('Ein beruehrter Stein funkelt',
      glanz.beiTipp.length===1&&glanz.beiTipp[0]===glanz.getippt,
      JSON.stringify(glanz.beiTipp)+' gegen Stein '+glanz.getippt);
   ok('Nach einem Sprung funkelt der gelandete Stein',
      glanz.beiZug.length===1&&glanz.beiZug[0]===glanz.ziel,
      JSON.stringify(glanz.beiZug)+' gegen Zielfeld '+glanz.ziel);
+
+  /* Und jetzt die Frage, die zaehlt: sieht man etwas? Gezaehlt werden die
+     Bildpunkte, die sich gegenueber dem Standbild aendern - an einem Stein,
+     der NICHT angetippt ist, denn die Auswahl-Markierung ist selbst animiert
+     und legt sonst einen Sockel von rund 1500 Punkten unter das Ergebnis. */
+  async function glanzBildpunkte(){
+    const info=await page.evaluate(()=>{
+      settings.funkeln=true; newGame('english');
+      const i=game.pegAt.findIndex(v=>v>=0);
+      const r=pegsLayer.querySelector('[data-idx="'+i+'"]').getBoundingClientRect();
+      return {i,box:{x:Math.round(r.x)-6,y:Math.round(r.y)-6,
+                     width:Math.round(r.width)+12,height:Math.round(r.height)+12}};
+    });
+    await sleep(120);
+    const grund=PNG.sync.read(await page.screenshot({clip:info.box}));
+    await page.evaluate(i=>glanzAn(i),info.i);
+    let max=0, zuletzt=0;
+    for(let k=0;k<9;k++){
+      await sleep(60);
+      const jetzt=PNG.sync.read(await page.screenshot({clip:info.box}));
+      let n=0; for(let j=0;j<jetzt.data.length;j+=4)
+        if(Math.abs(jetzt.data[j]-grund.data[j])>6) n++;
+      if(n>max) max=n; zuletzt=n;
+    }
+    return {max,zuletzt};
+  }
+  const pxNormal=await glanzBildpunkte();
+  await page.emulateMediaFeatures([{name:'prefers-reduced-motion',value:'reduce'}]);
+  const pxReduce=await glanzBildpunkte();
+  await page.emulateMediaFeatures([]);
+  console.log('INFO Glanz sichtbar: normal='+JSON.stringify(pxNormal)+' reduziert='+JSON.stringify(pxReduce));
+  ok('Man sieht den Glanz wirklich', pxNormal.max>150, pxNormal.max+' geaenderte Bildpunkte');
+  ok('Er endet spurlos', pxNormal.zuletzt===0, pxNormal.zuletzt+' Punkte bleiben');
+  /* Die Pruefung, die v1.39 gefehlt hat: iOS hat "Bewegung reduzieren" oft
+     an, und dort war der Effekt vollstaendig tot - gemessene null. */
+  ok('Auch mit reduzierter Bewegung sieht man ihn',
+     pxReduce.max>150, pxReduce.max+' geaenderte Bildpunkte');
+  ok('Auch reduziert endet er spurlos', pxReduce.zuletzt===0, pxReduce.zuletzt+' Punkte bleiben');
 
   abschnitt='Migration';
   /* Trainer und Strategie-Hinweise sind ab Werk an. Ein geaenderter Standard
