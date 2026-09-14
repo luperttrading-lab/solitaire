@@ -10,7 +10,8 @@ function kurzfassungGleich(proben,voll,erwartet){
   const browser=await puppeteer.launch({headless:true,args:['--no-sandbox','--disable-setuid-sandbox','--allow-file-access-from-files']});
   const page=await browser.newPage();
   await page.setViewport({width:390,height:844,deviceScaleFactor:2,isMobile:true,hasTouch:true});
-  const errors=[]; page.on('pageerror',e=>errors.push('pageerror: '+e.message)); page.on('console',m=>{ if(m.type()==='error') errors.push('console: '+m.text()); });
+  const errors=[]; let abschnitt='Start';
+  page.on('pageerror',e=>errors.push('pageerror bei "'+abschnitt+'": '+e.message+(e.stack?' | '+String(e.stack).split('\n').slice(0,3).join(' / '):''))); page.on('console',m=>{ if(m.type()==='error') errors.push('console: '+m.text()); });
   await page.goto('file://'+path.resolve(__dirname,'..','index.html'),{waitUntil:'load'});
   await sleep(300); await page.screenshot({path:'shot_splash.png'});
   await sleep(2600); await page.screenshot({path:'shot_game.png'});
@@ -726,6 +727,7 @@ function kurzfassungGleich(proben,voll,erwartet){
   await page.evaluate(()=>{ settings.marks=false; settings.strategy=true; renderStrategyBtn();
     Store.del('markeErklaert'); newGame('english'); });
 
+  abschnitt='Zaehler';
   /* Zwei Zaehler fuer die Partie: Ruecknahmen nach einem Verlustzug und
      verbrauchte Tipps. Gezaehlt wird nicht jedes Zurueck, sondern nur das
      Zuruecknehmen genau des Zuges, der die Loesung gekostet hat. */
@@ -761,10 +763,6 @@ function kurzfassungGleich(proben,voll,erwartet){
     erg.zeigtRueck=document.getElementById('hudRett').textContent;
     erg.zeigtTipp=document.getElementById('hudTipp').textContent;
     erg.hervor=document.getElementById('hudRett').classList.contains('da');
-    const lang=z=>[z.rueck,z.tipp].filter(Boolean).join(' und ');
-    erg.langMehr=lang(zaehlerLang());
-    game.rueckAlarm=1; game.tippKeys=new Set(['a']); renderHud();
-    erg.langEins=lang(zaehlerLang());
     game.rueckAlarm=0; game.tippKeys=new Set(); renderHud();
     erg.leerRueck=document.getElementById('hudRett').textContent;
     erg.leerTipp=document.getElementById('hudTipp').textContent;
@@ -788,6 +786,9 @@ function kurzfassungGleich(proben,voll,erwartet){
     game.history=[{mi:0,jumped:0}]; game.rueckAlarm=0; game.tippKeys=new Set();
     afterMove(true);
     erg.ergebnisSauber=document.getElementById('resText').textContent;
+    erg.sauberRett=document.getElementById('resRett').textContent;
+    erg.sauberTipp=document.getElementById('resTipp').textContent;
+    erg.sauberHervor=document.getElementById('resRett').classList.contains('da');
     hideModal('resultModal'); newGame('english');
     return erg; });
   console.log('INFO Zaehler: '+JSON.stringify(zaehler));
@@ -817,12 +818,17 @@ function kurzfassungGleich(proben,voll,erwartet){
   ok('Eine Zahl groesser null wird hervorgehoben',
      zaehler.hervor===true&&zaehler.leerHervor===false,
      JSON.stringify([zaehler.hervor,zaehler.leerHervor]));
-  ok('Das Ergebnis nennt Einzahl und Mehrzahl richtig',
-     zaehler.langMehr==='2 Rettungen und 3 Tipps'
-     &&zaehler.langEins==='1 Rettung und 1 Tipp',
-     JSON.stringify([zaehler.langMehr,zaehler.langEins]));
-  ok('Ohne Hürden sagt das Ergebnis das ausdrücklich',
-     /Ohne Rettung und ohne Tipp/.test(zaehler.ergebnisSauber), zaehler.ergebnisSauber);
+  /* Im Ergebnis stehen die Zahlen NEBEN der Steinzahl, nicht mehr im Satz -
+     sie sind Leistungsmerkmale der Partie und gingen im Fliesstext unter
+     (Lutz, 14.09.2026). Der Satz darf sie deshalb nicht mehr wiederholen. */
+  ok('Das Ergebnis wiederholt die Zaehler nicht im Text',
+     !/Rettung|Tipp/.test(zaehler.ergebnisSauber), zaehler.ergebnisSauber);
+  /* Hier zeigt eine Null bewusst eine Null: am Ende einer Partie ist
+     "0 Rettungen" die Leistung, ueber die man sich freut - live waere sie
+     nur "noch nichts passiert" und steht dort als Strich. */
+  ok('Ohne Huerden stehen im Ergebnis Nullen, kein Strich',
+     zaehler.sauberRett==='0'&&zaehler.sauberTipp==='0'&&zaehler.sauberHervor===false,
+     JSON.stringify([zaehler.sauberRett,zaehler.sauberTipp,zaehler.sauberHervor]));
   /* Bei null ein Strich statt einer Null: eine Null liest sich wie ein
      Mangel, ein Strich wie "noch nichts passiert". */
   ok('Bei null steht ein Strich, keine Null',
@@ -979,6 +985,140 @@ function kurzfassungGleich(proben,voll,erwartet){
   ok('CLAUDE.md fuehrt diese Version in der Aenderungsliste',
      new RegExp('\\*\\*v'+appV.replace(/\./g,'\\.')+'\\*\\*').test(claude), 'v'+appV);
 
+  abschnitt='Ergebnis-Block';
+  /* Die Zaehler stehen im Ergebnis neben der grossen Steinzahl, auf einer
+     Hoehe mit ihr und rechts davon - nicht im Fliesstext. */
+  const ergBlock=await page.evaluate(()=>{ const B=game.board; newGame('english');
+    for(let i=0;i<B.n;i++) game.pegAt[i]=-1; game.pegAt[B.centerIdx]=0;
+    game.finished=false; game.startedAt=Date.now()-296000; game.elapsedBefore=0;
+    game.history=new Array(31).fill({mi:0,jumped:0});
+    game.rueckAlarm=8; game.tippKeys=new Set(['a']);
+    afterMove(true); showModal('resultModal');
+    const big=document.getElementById('resBig').getBoundingClientRect();
+    const nb=document.querySelector('.ergneben').getBoundingClientRect();
+    const rt=document.getElementById('resRett'), tp=document.getElementById('resTipp');
+    const karte=document.querySelector('#resultModal .card').getBoundingClientRect();
+    const dts=[...document.querySelectorAll('.ergneben dt')].map(e=>e.textContent);
+    return {rett:rt.textContent, tipp:tp.textContent, hervor:rt.classList.contains('da'),
+      rechts:nb.left>=big.right, aufHoehe:Math.abs((big.top+big.height/2)-(nb.top+nb.height/2))<20,
+      /* Gross genug, um aufzufallen: mindestens halb so hoch wie die
+         Steinzahl, sonst sind sie wieder nur Kleingedrucktes. */
+      zahlHoch:parseFloat(getComputedStyle(rt).fontSize),
+      bigHoch:parseFloat(getComputedStyle(document.getElementById('resBig')).fontSize),
+      worte:dts, karteImBild:karte.top>=0&&karte.bottom<=window.innerHeight,
+      text:document.getElementById('resText').textContent}; });
+  await page.evaluate(()=>{ hideModal('resultModal'); newGame('english'); });
+  console.log('INFO Ergebnis-Block: '+JSON.stringify(ergBlock));
+  ok('Die Zaehler stehen rechts neben der Steinzahl',
+     ergBlock.rechts===true&&ergBlock.aufHoehe===true, JSON.stringify(ergBlock));
+  ok('Die Zaehler zeigen die richtigen Zahlen, hervorgehoben',
+     ergBlock.rett==='8'&&ergBlock.tipp==='1'&&ergBlock.hervor===true,
+     JSON.stringify([ergBlock.rett,ergBlock.tipp,ergBlock.hervor]));
+  ok('Sie sind gross genug, um aufzufallen',
+     ergBlock.zahlHoch>=ergBlock.bigHoch*0.5, ergBlock.zahlHoch+' gegen '+ergBlock.bigHoch);
+  ok('Im Ergebnis stehen ganze Worte in der Mehrzahl',
+     ergBlock.worte[0]==='Rettungen'&&ergBlock.worte[1]==='Tipps', JSON.stringify(ergBlock.worte));
+  ok('Die Ergebniskarte bleibt im Bild', ergBlock.karteImBild===true);
+
+  abschnitt='Pause';
+  /* Pause von Hand. Sie muss die Uhr wirklich anhalten und das Brett dabei
+     verdecken - eine Pause mit sichtbarem Brett waere ein Zeitstopp zum
+     Nachdenken, und dann ist jede Bestleistung wertlos. */
+  await page.evaluate(()=>{ newGame('english');
+    const l=currentLine(); applyMove(game.board.moves[l.path[0]],true); render(); renderHud();
+    game.startedAt=Date.now()-30000; game.elapsedBefore=0; renderHud(); });
+  const vorPause=await page.evaluate(()=>({zeit:document.getElementById('hudTime').textContent,
+    treffer:(r=>({b:r.width,h:r.height}))(document.getElementById('hudZeit').getBoundingClientRect())}));
+  await page.evaluate(()=>document.getElementById('hudZeit').click());
+  await sleep(1600);
+  const inPause=await page.evaluate(()=>{ const st=document.getElementById('stage').getBoundingClientRect();
+    const pa=document.getElementById('pause').getBoundingClientRect();
+    const bg=getComputedStyle(document.getElementById('pause')).backgroundColor;
+    return {an:game.pauseAn, zeit:document.getElementById('hudTime').textContent,
+      label:document.getElementById('hudZeitLabel').textContent.trim(),
+      deckt:pa.width>=st.width-1&&pa.height>=st.height-1,
+      /* Deckend heisst: keine Transparenz. Ein durchscheinendes Brett
+         waere genau die Bedenkzeit, die die Pause verhindern soll. */
+      deckend:!/rgba\(.*,\s*0?\.\d+\)/.test(bg)&&bg!=='transparent',
+      undoAus:document.getElementById('btnUndo').disabled,
+      hintAus:document.getElementById('btnHint').disabled}; });
+  console.log('INFO Pause: '+JSON.stringify(vorPause)+' -> '+JSON.stringify(inPause));
+  ok('Die Zeit-Zelle ist gross genug zum Treffen (44 pt)',
+     vorPause.treffer.b>=44&&vorPause.treffer.h>=44,
+     Math.round(vorPause.treffer.b)+'x'+Math.round(vorPause.treffer.h));
+  ok('Die Pause haelt die Uhr an',
+     inPause.an===true&&inPause.zeit===vorPause.zeit,
+     vorPause.zeit+' -> '+inPause.zeit);
+  ok('Die Pause verdeckt das Brett deckend',
+     inPause.deckt===true&&inPause.deckend===true, JSON.stringify(inPause));
+  ok('In der Pause ist die Fussleiste gesperrt',
+     inPause.undoAus===true&&inPause.hintAus===true, JSON.stringify([inPause.undoAus,inPause.hintAus]));
+  ok('Die Zeit-Zelle sagt, dass sie angehalten ist',
+     inPause.label==='Angehalten', inPause.label);
+  /* Kommt Lutz aus dem Hintergrund zurueck, darf die Uhr nicht von allein
+     wieder loslaufen - er hat sie von Hand angehalten. */
+  const ausHintergrund=await page.evaluate(async()=>{
+    /* document.hidden ist nur lesbar - fuer den echten Ablauf (weg und
+       zurueck) muss es umdefiniert werden. Ein blosses Event ohne hidden
+       durchlaeuft den Handler gar nicht und pruefte nichts. */
+    let versteckt=false;
+    const alt=Object.getOwnPropertyDescriptor(Document.prototype,'hidden');
+    Object.defineProperty(document,'hidden',{configurable:true,get:()=>versteckt});
+    versteckt=true; document.dispatchEvent(new Event('visibilitychange'));
+    await new Promise(r=>setTimeout(r,60));
+    const weg={an:game.pauseAn,paused:game.paused,startedAt:game.startedAt};
+    versteckt=false; document.dispatchEvent(new Event('visibilitychange'));
+    await new Promise(r=>setTimeout(r,60));
+    const zurueck={an:game.pauseAn,paused:game.paused,startedAt:game.startedAt,
+      zeit:document.getElementById('hudTime').textContent};
+    delete document.hidden; if(alt) Object.defineProperty(Document.prototype,'hidden',alt);
+    return {weg,zurueck}; });
+  console.log('INFO Hintergrund: '+JSON.stringify(ausHintergrund));
+  ok('Eine Handpause ueberlebt die Rueckkehr aus dem Hintergrund',
+     ausHintergrund.zurueck.an===true&&!ausHintergrund.zurueck.startedAt,
+     JSON.stringify(ausHintergrund.zurueck));
+  const nachWeiter=await (async()=>{ const v=await page.evaluate(()=>document.getElementById('hudTime').textContent);
+    await page.evaluate(()=>document.getElementById('btnWeiter').click());
+    await sleep(1600);
+    return {vor:v, nach:await page.evaluate(()=>({an:game.pauseAn, zeit:document.getElementById('hudTime').textContent,
+      sichtbar:document.getElementById('pause').classList.contains('an'),
+      undoAus:document.getElementById('btnUndo').disabled}))}; })();
+  console.log('INFO Weiter: '+JSON.stringify(nachWeiter));
+  ok('Weiter laesst die Uhr wieder laufen und gibt das Brett frei',
+     nachWeiter.nach.an===false&&nachWeiter.nach.sichtbar===false
+     &&nachWeiter.nach.undoAus===false&&nachWeiter.nach.zeit!==nachWeiter.vor,
+     JSON.stringify(nachWeiter));
+  /* Die Zeit darf durch die Pause nicht verloren gehen und nicht dazukommen:
+     30 s vor der Pause, rund 1,6 s Pause, danach wieder rund 30 s. */
+  const zeitTreu=await page.evaluate(()=>elapsedMs());
+  ok('Die Pause verschiebt die gemessene Zeit nicht',
+     zeitTreu>=29500&&zeitTreu<=33000, zeitTreu+' ms');
+  await page.evaluate(()=>newGame('english'));
+
+  /* Ein neues Spiel muss eine laufende Animation verwerfen, nicht abarbeiten:
+     ihr Abschluss gehoert zum alten Spiel und spielte seinen Zug sonst auf
+     dem frischen Brett nach. Gefunden hat das die Pause - sie raeumt
+     Animationen ab und stuerzte dabei in redo() ab (game.lastMove war schon
+     null). Der Fehler steckte unabhaengig davon im Code. */
+  abschnitt='Abbruch';
+  const abbruch=await page.evaluate(async()=>{
+    newGame('english');
+    const l=currentLine(); applyMove(game.board.moves[l.path[0]],true); render();
+    undo();                                   // startet eine Spul-Animation
+    const lief=game.animating;
+    newGame('english');                       // mitten hinein
+    const nachNeu={animating:game.animating, zuege:game.history.length, steine:pegCount()};
+    /* Jetzt darf finishAnimation() nichts mehr nachholen. */
+    finishAnimation();
+    await new Promise(r=>setTimeout(r,900));
+    return {lief, nachNeu, danach:{zuege:game.history.length, steine:pegCount()}}; });
+  console.log('INFO Abbruch: '+JSON.stringify(abbruch));
+  ok('Ein neues Spiel verwirft eine laufende Animation (Testaufbau)', abbruch.lief===true);
+  ok('Das frische Brett bleibt unberuehrt',
+     abbruch.nachNeu.zuege===0&&abbruch.nachNeu.steine===32
+     &&abbruch.danach.zuege===0&&abbruch.danach.steine===32, JSON.stringify(abbruch));
+
+  abschnitt='Migration';
   /* Trainer und Strategie-Hinweise sind ab Werk an. Ein geaenderter Standard
      allein reicht nicht: Object.assign zieht den gespeicherten Wert vor, und
      Lutz trug strategy:false seit der ersten Installation mit sich. Deshalb

@@ -207,6 +207,73 @@ const FAELLE=[
    await pz.close();
  }
 
+ /* Die Ergebniskarte traegt jetzt eine Zeile mehr - die Zaehler neben der
+    Steinzahl. Sie muss auf jedem Geraet ganz ins Bild passen, und der Block
+    muss rechts der Zahl stehen (oder, wenn es eng wird, sauber darunter -
+    nie ueberlappend). */
+ for(const [name,w,h] of [['iPhone 14 Pro',393,852],['iPhone SE',375,667],['sehr klein',360,600]]){
+   const pe=await browser.newPage(); await pe.setViewport({width:w,height:h});
+   await pe.goto(url,{waitUntil:'load'}); await sleep(2300);
+   const r=await pe.evaluate(async()=>{ const B=game.board; newGame('english');
+     for(let i=0;i<B.n;i++) game.pegAt[i]=-1; game.pegAt[B.centerIdx]=0;
+     game.finished=false; game.startedAt=Date.now()-296000; game.elapsedBefore=0;
+     game.history=new Array(31).fill({mi:0,jumped:0});
+     game.rueckAlarm=12; game.tippKeys=new Set('abcdefghijkl'.split(''));
+     afterMove(true); showModal('resultModal');
+     await new Promise(x=>setTimeout(x,450));
+     const k=document.querySelector('#resultModal .card').getBoundingClientRect();
+     const big=document.getElementById('resBig').getBoundingClientRect();
+     const nb=document.querySelector('.ergneben').getBoundingClientRect();
+     const txt=document.getElementById('resText');
+     return {karte:{t:Math.round(k.top),b:Math.round(k.bottom),w:Math.round(k.width)},
+       imBild:k.top>=0&&k.bottom<=window.innerHeight,
+       /* Entweder rechts daneben oder darunter - aber nie ineinander. */
+       getrennt:nb.left>=big.right-1||nb.top>=big.bottom-1,
+       textOhneZaehler:!/Rettung|Tipp/.test(txt.textContent),
+       fensterH:window.innerHeight}; });
+   console.log('INFO Ergebniskarte ('+name+'): '+JSON.stringify(r.karte)+' in '+r.fensterH+' px');
+   ok('Die Ergebniskarte passt ins Bild ('+name+')', r.imBild===true, JSON.stringify(r.karte));
+   ok('Steinzahl und Zaehler ueberlappen nicht ('+name+')', r.getrennt===true);
+   ok('Der Ergebnistext wiederholt die Zaehler nicht ('+name+')', r.textOhneZaehler===true);
+   await pe.close();
+ }
+
+ /* Die Pause deckt das Brett vollstaendig ab und kostet keine Brettflaeche -
+    sie liegt absolut ueber dem Stage, nicht im Fluss. */
+ {
+   const pp=await browser.newPage(); await pp.setViewport({width:393,height:852});
+   await pp.goto(url,{waitUntil:'load'}); await sleep(2300);
+   const r=await pp.evaluate(async()=>{
+     const brett=()=>Math.round(document.getElementById('board').getBoundingClientRect().width);
+     newGame('english'); const l=currentLine();
+     applyMove(game.board.moves[l.path[0]],true); render(); renderHud(); fitStage();
+     const vorher=brett();
+     const zelle=document.getElementById('hudZeit').getBoundingClientRect();
+     document.getElementById('hudZeit').click();
+     await new Promise(x=>setTimeout(x,80)); fitStage();
+     const st=document.getElementById('stage').getBoundingClientRect();
+     const pa=document.getElementById('pause').getBoundingClientRect();
+     const knopf=document.getElementById('btnWeiter').getBoundingClientRect();
+     const erg={brettVorher:vorher,brettInPause:brett(),
+       zelle:{b:Math.round(zelle.width),h:Math.round(zelle.height)},
+       deckt:pa.left<=st.left+1&&pa.right>=st.right-1&&pa.top<=st.top+1&&pa.bottom>=st.bottom-1,
+       /* Der Weiter-Knopf darf sich nicht ueber die ganze Flaeche strecken -
+          .btn traegt flex:1 fuer die Knopfreihen der Blaetter. */
+       knopfH:Math.round(knopf.height), knopfB:Math.round(knopf.width),
+       knopfImBild:knopf.top>=st.top&&knopf.bottom<=st.bottom};
+     document.getElementById('btnWeiter').click();
+     return erg; });
+   console.log('INFO Pause-Decke: '+JSON.stringify(r));
+   ok('Die Pause deckt das Brett vollstaendig', r.deckt===true);
+   ok('Die Pause kostet keine Brettflaeche', r.brettInPause===r.brettVorher,
+      r.brettVorher+' / '+r.brettInPause);
+   ok('Der Weiter-Knopf hat eine normale Hoehe',
+      r.knopfH>=40&&r.knopfH<=72&&r.knopfImBild===true, r.knopfB+'x'+r.knopfH);
+   ok('Die Zeit-Zelle ist gross genug zum Treffen',
+      r.zelle.b>=44&&r.zelle.h>=44, r.zelle.b+'x'+r.zelle.h);
+   await pp.close();
+ }
+
  /* Der Sockel legt nur den Schutzrand drauf, der nicht ohnehin schon unter
     dem Viewport liegt. Geprueft in beiden Lagen: Viewport = Bildschirm
     (Home-Bildschirm-App) und Viewport kuerzer (Safari mit Leiste). */

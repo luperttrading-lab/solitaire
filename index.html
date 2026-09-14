@@ -56,7 +56,15 @@ header .boardname:active{background:var(--panel2)}
    der Rest verteilt sich gleichmaessig auf die drei grossen. */
 .hud{display:grid;grid-template-columns:repeat(3,1fr) auto;align-items:center;
   gap:0 10px;padding:4px 6px 8px;border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
-.hud>div{text-align:center}
+.hud>div,.hud>button{text-align:center}
+/* Die Zeit selbst haelt die Zeit an: ein sechster Knopf in der Fussleiste
+   haette jeden von 78 auf 65 px gedrueckt, und die Uhr ist der Gegenstand -
+   sie anzutippen ist die naheliegende Geste. Trefferflaeche rund 90 x 40 px,
+   weit ueber Apples 44 pt. */
+.hud>button{background:none;border:0;padding:0;font:inherit;color:inherit;cursor:pointer;-webkit-tap-highlight-color:transparent}
+.hud>button:active{opacity:.6}
+.hud .pz{display:inline-block;width:7px;height:9px;vertical-align:-1px;margin-left:3px;opacity:.75;
+  border-left:2.5px solid currentColor;border-right:2.5px solid currentColor}
 .hud b{display:block;font-family:var(--serif);font-size:30px;line-height:1;font-weight:400;color:var(--ink)}
 .hud span{font-size:12px;color:var(--muted)}
 /* Das Raster: Wort linksbuendig, Zahl rechtsbuendig - wie in einer Tabelle,
@@ -80,7 +88,20 @@ header .boardname:active{background:var(--panel2)}
 .quick{display:flex;justify-content:center;padding:6px 0 0}
 .pill{border-radius:999px;padding:6px 14px;font-size:13px;background:var(--panel);color:var(--muted);border:1px solid var(--line)}
 .pill.on{background:linear-gradient(180deg,#d9b25f,#b88f36);color:#1f1608;border-color:transparent}
-#stage{flex:none;display:flex;align-items:center;justify-content:center;padding:8px 0}
+#stage{flex:none;display:flex;align-items:center;justify-content:center;padding:8px 0;position:relative}
+/* Die Pause verdeckt das Brett. Eine Pause, die es sichtbar laesst, waere
+   keine Pause, sondern ein Zeitstopp zum Nachdenken - dann waere jede
+   Bestleistung wertlos. Deshalb deckend (kein Durchschimmern) und mit
+   pointer-events, damit kein Zug durchrutscht. */
+#pause{position:absolute;inset:0;z-index:20;display:none;flex-direction:column;
+  align-items:center;justify-content:center;gap:14px;border-radius:16px;
+  background:var(--bg);text-align:center}
+#pause.an{display:flex}
+#pause .pt{font-family:var(--serif);font-size:26px;color:var(--ink)}
+#pause .ps{font-size:13px;color:var(--muted);max-width:24ch;line-height:1.4}
+/* .btn traegt flex:1 fuer die Knopfreihen der Blaetter; in dieser Spalte
+   streckt das den Knopf ueber die ganze Brettflaeche. */
+#pause .btn{flex:none;min-width:140px}
 #board{touch-action:none;display:block}
 .toolbar{flex:none;margin-top:auto}
 #status,#statusProbe{min-height:82px;flex-shrink:0;padding:4px 8px 11px;color:var(--muted);font-size:15px;line-height:1.35;display:flex;align-items:flex-end;justify-content:center;gap:12px}
@@ -244,6 +265,17 @@ header .boardname:active{background:var(--panel2)}
 .card p{color:var(--muted);font-size:14px;line-height:1.45;margin:8px 0}
 .card .big{font-family:var(--serif);font-size:56px;line-height:1;color:var(--ink);margin:6px 0 2px}
 .card .big small{font-size:16px;color:var(--muted);font-family:var(--sans)}
+/* Rettungen und Tipps stehen im Ergebnis NEBEN der grossen Zahl, nicht im
+   Fliesstext: Lutz liest sie als Leistungsmerkmale der Partie, und im Satz
+   ("Dabei 8 Rettungen und 1 Tipp.") gingen sie unter. Links die Steinzahl,
+   rechts der Block - beide auf einer Grundlinie (align-items:center), damit
+   die Zeile ruhig wirkt. Unter 330 px Kartenbreite untereinander. */
+.card .ergzeile{display:flex;align-items:center;justify-content:center;gap:20px;margin:6px 0 2px;flex-wrap:wrap}
+.card .ergzeile .big{margin:0}
+.card .ergneben{display:flex;gap:18px;margin:0;text-align:center}
+.card .ergneben dd{margin:0;font-family:var(--serif);font-size:30px;line-height:1;color:var(--muted)}
+.card .ergneben dd.da{color:var(--brass2)}
+.card .ergneben dt{font-size:12px;color:var(--muted);margin-top:3px}
 /* Warnblitz: Sobald ein Zug die Loesung kostet, zieht einmal ein rotes
    Leuchten ueber den Bildschirm. Liegt ueber allem, faengt aber keine
    Beruehrung ab. */
@@ -289,14 +321,15 @@ header .boardname:active{background:var(--panel2)}
   <div class="hud">
     <div><b id="hudMoves">0</b><span>Sprünge</span></div>
     <div><b id="hudLeft">32</b><span id="hudLeftLabel">Übrig von 32</span></div>
-    <div><b id="hudTime">0:00</b><span>Zeit</span></div>
+    <button type="button" id="hudZeit" aria-label="Zeit anhalten"><b id="hudTime">0:00</b><span id="hudZeitLabel">Zeit <i class="pz"></i></span></button>
     <dl class="neben">
       <dt>Tipps</dt><dd id="hudTipp">–</dd>
       <dt>Rettung</dt><dd id="hudRett">–</dd>
     </dl>
   </div>
   <div class="quick"><button id="btnStrategy" class="pill" aria-pressed="false">Strategie-Hinweise: aus</button></div>
-  <div id="stage"><svg id="board" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Spielbrett"></svg></div>
+  <div id="stage"><svg id="board" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Spielbrett"></svg>
+    <div id="pause" aria-hidden="true"><div class="pt">Pause</div><div class="ps">Das Brett ist verdeckt – sonst wäre die Pause eine Bedenkzeit.</div><button class="btn primary" id="btnWeiter">Weiter</button></div></div>
   <div id="status"></div>
   <div id="rechenband"><i></i></div>
   <div id="lessonBar" hidden><div class="lt" id="lessonTitle"></div><div class="lx" id="lessonText"></div><div class="lb"><button class="btn" id="lsDemo">Vormachen</button><button class="btn" id="lsRestart">Abschnitt neu</button><button class="btn ghost" id="lsQuit">Beenden</button></div></div>
@@ -346,7 +379,13 @@ header .boardname:active{background:var(--panel2)}
 <div class="modal" id="resultModal"><div class="card">
   <h3 id="resTitle">Gelöst</h3>
   <div class="stars" id="resStars"></div>
-  <div class="big" id="resBig">1 <small>Stein übrig</small></div>
+  <div class="ergzeile">
+    <div class="big" id="resBig">1 <small>Stein übrig</small></div>
+    <dl class="ergneben">
+      <div><dd id="resRett">0</dd><dt>Rettungen</dt></div>
+      <div><dd id="resTipp">0</dd><dt>Tipps</dt></div>
+    </dl>
+  </div>
   <p id="resText"></p>
   <div class="btnrow"><button class="btn" id="resUndo">Zurück</button><button class="btn primary" id="resNew">Nochmal</button></div>
   <div class="btnrow" style="margin-top:8px"><button class="btn ghost" id="resClose">Brett ansehen</button></div>
@@ -374,7 +413,7 @@ header .boardname:active{background:var(--panel2)}
 
 <script>
 'use strict';
-const APP_VERSION='1.35';
+const APP_VERSION='1.36';
 /* =========================================================================
    Kern: Bretter, Züge, Symmetrien, Paritäts-Schranke, Solver
    (als Fabrik, damit derselbe Code im Web Worker läuft)
@@ -859,7 +898,7 @@ const pegDefsCache=new Map();
    ========================================================================= */
 const boards={}; CORE.BOARD_DEFS.forEach(d=>boards[d.id]=CORE.buildBoard(d));
 const game={board:null,lay:null,pegAt:[],initial:[],history:[],future:[],selected:-1,phase:'play',startedAt:0,elapsedBefore:0,finished:false,
-  line:null,bookLine:null,hintOn:false,searching:false,animating:false,autoplay:false,startCount:0,evalRes:null,prevEval:null,prevPos:null,evaluating:false,lastMove:null,lesson:null,demo:false,showBetter:null,markAus:false,
+  line:null,bookLine:null,hintOn:false,searching:false,animating:false,autoplay:false,startCount:0,evalRes:null,prevEval:null,prevPos:null,evaluating:false,pauseAn:false,lastMove:null,lesson:null,demo:false,showBetter:null,markAus:false,
   /* Zaehler fuer die Partie. rueckAlarm: wie oft ein Zug zurueckgenommen
      wurde, der die Loesung gekostet hatte - nicht jedes Zurueck, sondern
      nur die Reue nach dem Alarm. alarmZuege merkt sich dafuer die
@@ -880,7 +919,7 @@ function stateKey(){ const [lo,hi]=CORE.fromArray(occ()); return CORE.key(lo,hi)
 // bekannte beste Fortsetzung für die aktuelle Stellung (aus Suche oder Eröffnungsbuch)
 function currentLine(){ const k=stateKey(); if(game.line&&game.line.key===k&&game.line.path.length) return game.line; if(game.bookLine&&game.bookLine.key===k&&game.bookLine.path.length) return game.bookLine; return null; }
 
-function newGame(boardId,keepPhase){ hinweisBis=0;
+function newGame(boardId,keepPhase){ hinweisBis=0; abortAnimation();
   if(boardId) settings.board=boardId;
   const board=boards[settings.board]||boards.english; game.board=board; game.lay=layoutBoard(board);
   game.lastMove=null; if(!keepPhase) game.lesson=null;
@@ -890,6 +929,7 @@ function newGame(boardId,keepPhase){ hinweisBis=0;
   game.initial=game.pegAt.slice(); game.history=[]; game.future=[]; game.selected=-1; game.finished=false;
   game.startedAt=0; game.elapsedBefore=0; game.line=null; game.hintOn=false; game.autoplay=false; game.startCount=pegCount();
   game.rueckAlarm=0; game.alarmZuege=new Set(); game.tippKeys=new Set();
+  if(game.pauseAn) pauseSetzen(false);
   game.evalRes=null; game.prevEval=null; game.prevPos=null; evalCache.clear(); cancelEval();
   game.bookLine=(!settings.freeStart&&OPENING_BOOK[board.def.id])?{key:stateKey(),path:OPENING_BOOK[board.def.id].slice(),best:1,complete:true,nodes:0,lb:1,book:true}:null;
   buildBoardSvg(); render(); saveSettings(); fitStage();
@@ -967,6 +1007,21 @@ function redo(){
     if(anyLegalMove()&&!(settings.trainer&&!game.hintOn)) setStatus(game.lastMove.text,'',null,null,game.lastMove.count); },false,'slow',400);
 }
 function elapsedMs(){ return game.elapsedBefore+(game.startedAt&&!game.finished?Date.now()-game.startedAt:0); }
+/* Pause von Hand. game.pauseAn ist bewusst etwas anderes als game.paused
+   (Wegschalten der App): kommt Lutz aus dem Hintergrund zurueck, soll eine
+   von Hand gesetzte Pause bestehen bleiben - sonst laeuft die Uhr wieder,
+   ohne dass er es gewollt hat. */
+function pauseSetzen(an){
+  if(an){ if(game.pauseAn||game.finished||!game.startedAt) return;
+    if(game.animating) finishAnimation();
+    game.elapsedBefore=elapsedMs(); game.startedAt=0; game.pauseAn=true; }
+  else { if(!game.pauseAn) return; game.pauseAn=false;
+    if(game.history.length&&!game.finished&&!game.paused) game.startedAt=Date.now(); }
+  const e=$('pause'); if(e){ e.classList.toggle('an',!!game.pauseAn); e.setAttribute('aria-hidden',game.pauseAn?'false':'true'); }
+  const z=$('hudZeit'); if(z) z.setAttribute('aria-label',game.pauseAn?'Zeit weiterlaufen lassen':'Zeit anhalten');
+  const l=$('hudZeitLabel'); if(l) l.innerHTML=game.pauseAn?'Angehalten':'Zeit <i class="pz"></i>';
+  renderHud();
+}
 function fmtTime(ms){ const s=Math.floor(ms/1000); return Math.floor(s/60)+':'+String(s%60).padStart(2,'0'); }
 
 /* ---------- Rendering ---------- */
@@ -1053,14 +1108,6 @@ function renderOverlay(){
 function zaehlerZahlen(){
   return {r:game.rueckAlarm||0, t:game.tippKeys?game.tippKeys.size:0};
 }
-/* Im Ergebnis stehen ganze Worte. "Rettung" statt "Rücknahme", weil das
-   der Zweck ist: der Knopf heisst Zurück, aber man drueckt ihn, um sich zu
-   retten (Wortwahl von Lutz). */
-function zaehlerLang(){
-  const {r,t}=zaehlerZahlen();
-  return {rueck:r?r+(r===1?' Rettung':' Rettungen'):'',
-          tipp:t?t+(t===1?' Tipp':' Tipps'):''};
-}
 function renderZaehler(){
   const {r,t}=zaehlerZahlen();
   const setz=(id,wert)=>{ const e=$(id); if(!e) return;
@@ -1070,8 +1117,11 @@ function renderZaehler(){
 function renderHud(){
   renderZaehler();
   $('hudMoves').textContent=game.history.length; $('hudLeft').textContent=pegCount(); $('hudLeftLabel').textContent='Übrig von '+game.startCount; $('hudTime').textContent=fmtTime(elapsedMs());
-  $('btnUndo').disabled=!game.history.length||game.animating; $('btnRedo').disabled=!game.future.length||game.animating;
-  $('btnHint').disabled=game.phase==='choose'||game.finished||game.searching||game.animating||!!game.lesson;
+  /* In der Pause ist auch die Fussleiste gesperrt - das Brett ist verdeckt,
+     aber Zurueck, Vor und Tipp wuerden sonst weiter wirken. */
+  const p=!!game.pauseAn;
+  $('btnUndo').disabled=!game.history.length||game.animating||p; $('btnRedo').disabled=!game.future.length||game.animating||p;
+  $('btnHint').disabled=game.phase==='choose'||game.finished||game.searching||game.animating||!!game.lesson||p;
 }
 // Feste Brettgröße: hängt nur von Fenster und Lektionsmodus ab, nicht von der Textlänge darunter
 /* Laengste Meldung, die die Strategie-Hinweise erzeugen koennen: Fehlerklasse,
@@ -1277,6 +1327,12 @@ function hideModal(id){ $(id).classList.remove('on'); }
 /* ---------- Zug mit Animation ---------- */
 let animFinish=null, animCancel=null;
 function finishAnimation(){ if(animCancel){ animCancel(); animCancel=null; } if(animFinish){ const f=animFinish; animFinish=null; game.animating=false; f(); } }
+/* Verwirft eine laufende Animation, OHNE ihren Abschluss auszufuehren. Der
+   gehoert zum alten Spiel: wuerde newGame ihn ueber finishAnimation() noch
+   abarbeiten, spielte er seinen Zug auf dem frischen Brett nach. Sichtbar
+   wurde das erst durch die Pause (sie raeumt Animationen ab) - als Absturz
+   in redo(), weil game.lastMove da schon null war. */
+function abortAnimation(){ if(animCancel){ animCancel(); animCancel=null; } animFinish=null; game.animating=false; }
 // reverse=true: Stein springt von m.to nach m.from zurück, der geschlagene Stein bleibt unsichtbar bis zum Neuzeichnen
 function animateMove(m,done,reverse,fast,delay){
   finishAnimation();
@@ -1318,13 +1374,15 @@ function afterMove(fresh){ hinweisBis=0;
   $('resTitle').textContent=left===1?(inCenter?'Perfekt':'Gelöst'):'Keine Züge mehr';
   $('resStars').textContent=left===1?'★★★':left===2?'★★☆':left===3?'★☆☆':'☆☆☆';
   $('resBig').innerHTML=left+' <small>'+(left===1?'Stein übrig':'Steine übrig')+'</small>';
+  /* Rettungen und Tipps stehen als eigene Zahlen neben der Steinzahl, nicht
+     im Satz. Hier zeigt eine Null bewusst eine Null - "0 Rettungen" ist am
+     Ende einer Partie die Leistung, ueber die man sich freut; live waere sie
+     nur "noch nichts passiert" und steht deshalb dort als Strich. */
+  const z=zaehlerZahlen();
+  const setzErg=(id,wert)=>{ const e=$(id); if(!e) return;
+    e.textContent=String(wert); e.classList.toggle('da',wert>0); };
+  setzErg('resRett',z.r); setzErg('resTipp',z.t);
   let txt=game.history.length+' Sprünge in '+fmtTime(t)+'.';
-  /* Die beiden Zaehler kommen direkt nach den Spruengen, weil sie dasselbe
-     beschreiben: wie die Partie zustande kam. Ohne Huerden steht ein Satz
-     dafuer - das ist die Leistung, ueber die man sich freut. */
-  const z=zaehlerLang();
-  if(z.rueck||z.tipp) txt+=' Dabei '+[z.rueck,z.tipp].filter(Boolean).join(' und ')+'.';
-  else txt+=' Ohne Rettung und ohne Tipp.';
   if(left===1&&inCenter) txt+=' Der letzte Stein steht genau in der Mitte.';
   if(better&&prev) txt+=' Neue Bestleistung.'; else if(prev) txt+=' Bestleistung auf diesem Brett: '+prev.left+(prev.left===1?' Stein':' Steine')+' in '+fmtTime(prev.time)+'.';
   $('resText').textContent=txt;
@@ -1428,7 +1486,7 @@ setTimeout(getWorker,300);
 let hintSeq=0, cancelHint=null, lastSearchWhere='';
 function fmtNum(n){ return n<1000000?n.toLocaleString('de-DE'):(n/1e6).toFixed(1).replace('.',',')+' Mio.'; }
 function requestHint(again){
-  if(game.searching||game.finished||game.phase==='choose'||game.animating) return;
+  if(game.searching||game.finished||game.phase==='choose'||game.animating||game.pauseAn) return;
   /* Ein Tipp je Stellung. Denselben Tipp nochmal ansehen ist kein zweiter. */
   if(game.tippKeys) game.tippKeys.add(stateKey());
   const ev=game.evalRes; if(!again&&!currentLine()&&ev&&ev.key===stateKey()&&ev.complete&&ev.path.length){ game.line={key:ev.key,best:ev.best,path:ev.path.slice(),complete:true,nodes:ev.nodes,lb:ev.lb,ms:ev.ms}; }
@@ -1793,6 +1851,8 @@ $('swFree').addEventListener('click',()=>{ settings.freeStart=!settings.freeStar
 $('btnUndo').addEventListener('click',undo); $('btnRedo').addEventListener('click',redo);
 $('btnHint').addEventListener('click',()=>requestHint());
 $('btnNew').addEventListener('click',()=>confirmDiscard(()=>{ if(game.lesson){ startLesson(game.lesson.id); return; } newGame(); toast('Neues Spiel.'); }));
+$('hudZeit').addEventListener('click',()=>pauseSetzen(!game.pauseAn));
+$('btnWeiter').addEventListener('click',()=>pauseSetzen(false));
 $('resNew').addEventListener('click',()=>{ hideModal('resultModal'); newGame(); });
 $('resUndo').addEventListener('click',()=>{ hideModal('resultModal'); undo(); });
 $('resClose').addEventListener('click',()=>hideModal('resultModal'));
@@ -1802,7 +1862,7 @@ document.addEventListener('keydown',e=>{ if(e.key==='z'&&(e.metaKey||e.ctrlKey))
    damit kein anderer Handler das Wecken verhindern kann. */
 document.addEventListener('pointerdown',()=>{ Sound.ensure(); },{capture:true,passive:true});
 document.addEventListener('visibilitychange',()=>{ if(!document.hidden) Sound.ensure(); });
-document.addEventListener('visibilitychange',()=>{ if(document.hidden&&game.startedAt&&!game.finished){ game.elapsedBefore=elapsedMs(); game.startedAt=0; game.paused=true; } else if(!document.hidden&&game.paused){ game.paused=false; if(game.history.length&&!game.finished) game.startedAt=Date.now(); } });
+document.addEventListener('visibilitychange',()=>{ if(document.hidden&&game.startedAt&&!game.finished){ game.elapsedBefore=elapsedMs(); game.startedAt=0; game.paused=true; } else if(!document.hidden&&game.paused){ game.paused=false; if(game.history.length&&!game.finished&&!game.pauseAn) game.startedAt=Date.now(); } });
 
 /* ---------- Startbild ---------- */
 function buildSplash(){
