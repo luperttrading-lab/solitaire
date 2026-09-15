@@ -1342,6 +1342,112 @@ function kurzfassungGleich(proben,voll,erwartet){
      pxReduce.max>150, pxReduce.max+' geaenderte Bildpunkte');
   ok('Auch reduziert endet er spurlos', pxReduce.zuletzt===0, pxReduce.zuletzt+' Punkte bleiben');
 
+  /* Wie hell die Ampel leuchtet (v1.43). Langer Druck auf die Ampel oeffnet
+     einen Regler mit fuenf Stufen. Gemessen wird wieder, was zu SEHEN ist -
+     dass eine Variable sich aendert, sagt nichts darueber. */
+  abschnitt='Ampelkraft';
+  const ak=await page.evaluate(async()=>{
+    const erg={};
+    const druck=async(ms,versatz)=>{
+      ampelBlattZu(); await new Promise(r=>setTimeout(r,340));
+      const d=statusEl.querySelector('.dot'), r=d.getBoundingClientRect();
+      const x=r.x+r.width/2, y=r.y+r.height/2, id=Math.floor(Math.random()*1e6);
+      d.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true,clientX:x,clientY:y,pointerId:id}));
+      if(versatz) statusEl.dispatchEvent(new PointerEvent('pointermove',
+        {bubbles:true,clientX:x+versatz,clientY:y,pointerId:id}));
+      await new Promise(r2=>setTimeout(r2,ms));
+      const auf=$('ampelBlatt').classList.contains('on');
+      d.dispatchEvent(new PointerEvent('pointerup',{bubbles:true,clientX:x,clientY:y,pointerId:id}));
+      return auf;
+    };
+    erg.lang=await druck(700,0);
+    erg.kurz=await druck(200,0);
+    /* Ein Wisch ueber das Brett darf den Regler nicht aufziehen. */
+    erg.gewischt=await druck(700,40);
+    ampelBlattZu();
+    erg.stufen=AMPEL_STUFEN.length;
+    erg.standard=AMPEL_STUFEN[0].schein===8&&AMPEL_STUFEN[0].dicht===0&&AMPEL_STUFEN[0].hof===0
+                 &&AMPEL_STUFEN[0].hintergrund===false;
+    /* Nur die hoechste Stufe legt einen Schein ueber das Bild. */
+    erg.hintergrund=AMPEL_STUFEN.map(s2=>s2.hintergrund);
+    /* Probe und echte Ampel muessen denselben Schein tragen. */
+    setStatus('1 Stein bleibt erreichbar','ok'); ampelKraftSetzen(3,false);
+    $('ampelBlatt').classList.add('on');
+    erg.echt=getComputedStyle(statusEl.querySelector('.dot b.gr')).boxShadow;
+    erg.probe=getComputedStyle(document.querySelectorAll('.aprobe')[2].querySelector('b.gr')).boxShadow;
+    $('ampelBlatt').classList.remove('on');
+    /* Der Regler zeigt, wo er steht. */
+    ampelKraftSetzen(2,false); erg.name=$('ampelStufe').textContent; erg.regler=$('ampelRegler').value;
+    /* Gespeichert wird die Wahl. */
+    ampelKraftSetzen(3,true); erg.gemerkt=(Store.get('settings',{})||{}).ampelKraft;
+    /* Bei Rot tritt der Hof hinter den Warnblitz zurueck - zwei rote Blitze
+       uebereinander waeren Matsch, keine Verstaerkung. */
+    ampelKraftSetzen(4,false);
+    $('ampelhof').classList.remove('an'); warnblitzZeit=Date.now();
+    blitzAusstehend=Date.now(); setStatus('Bestenfalls 2 Steine','bad');
+    await new Promise(r=>setTimeout(r,120));
+    erg.hofBeiRotMitBlitz=$('ampelhof').classList.contains('an');
+    $('ampelhof').classList.remove('an'); warnblitzZeit=0;
+    blitzAusstehend=Date.now(); setStatus('1 Stein bleibt erreichbar','ok');
+    await new Promise(r=>setTimeout(r,120));
+    erg.hofBeiGruen=$('ampelhof').classList.contains('an');
+    /* Eine gewoehnliche Meldung ohne Ergebnis darf den Raum nicht fluten. */
+    $('ampelhof').classList.remove('an'); blitzAusstehend=0;
+    setStatus('Dieser Stein kann nicht springen.','bad');
+    await new Promise(r=>setTimeout(r,120));
+    erg.hofOhneErgebnis=$('ampelhof').classList.contains('an');
+    ampelKraftSetzen(0,true);
+    return erg; });
+  console.log('INFO Ampelkraft: '+JSON.stringify(ak));
+  ok('Langer Druck auf die Ampel oeffnet den Regler', ak.lang===true, String(ak.lang));
+  ok('Ein kurzer Druck oeffnet ihn nicht', ak.kurz===false, String(ak.kurz));
+  ok('Ein Wisch bricht den langen Druck ab', ak.gewischt===false, String(ak.gewischt));
+  ok('Fuenf Stufen', ak.stufen===5, String(ak.stufen));
+  ok('Die unterste Stufe ist genau der alte Zustand', ak.standard===true,
+     'Schein 8, dicht 0, Hof 0, kein Schein im Bild');
+  ok('Nur die hoechste Stufe legt einen Schein ueber das Bild',
+     JSON.stringify(ak.hintergrund)==='[false,false,false,false,true]', JSON.stringify(ak.hintergrund));
+  ok('Probe und echte Ampel tragen denselben Schein', ak.echt===ak.probe,
+     ak.echt+'  gegen  '+ak.probe);
+  ok('Der Regler zeigt, wo er steht', ak.name==='Kräftig'&&ak.regler==='2', ak.name+' / '+ak.regler);
+  ok('Die Wahl wird gemerkt', ak.gemerkt===3, String(ak.gemerkt));
+  ok('Bei Rot tritt der Schein hinter den Warnblitz zurueck',
+     ak.hofBeiRotMitBlitz===false, String(ak.hofBeiRotMitBlitz));
+  ok('Bei Gruen kommt der Schein im Bild', ak.hofBeiGruen===true, String(ak.hofBeiGruen));
+  ok('Ohne Ergebnis bleibt der Raum dunkel', ak.hofOhneErgebnis===false, String(ak.hofOhneErgebnis));
+
+  /* Und die Frage, die zaehlt: waechst der Schein sichtbar mit der Stufe?
+     Ein groesserer Weichzeichner allein macht ihn nur breiter und dabei
+     flacher - gemessen sank die staerkste Abweichung dabei von 33 auf 23. */
+  await page.evaluate(()=>{ ampelBlattZu(); setStatus('1 Stein bleibt erreichbar','ok'); });
+  await sleep(320);
+  const akBox=await page.evaluate(()=>{ const r=statusEl.querySelector('.dot').getBoundingClientRect();
+    /* Der Rand muss geklemmt werden: die Ampel steht bei x=20, ein negativer
+       Ausschnitt liefert stillschweigend immer dasselbe Bild (einmal erlebt). */
+    return {x:Math.max(0,Math.round(r.x)-40),y:Math.max(0,Math.round(r.y)-40),
+            width:Math.round(r.width)+80,height:Math.round(r.height)+80}; });
+  const akBild=async n=>{ await page.evaluate(k=>ampelKraftSetzen(k,false),n); await sleep(300);
+    return PNG.sync.read(await page.screenshot({clip:akBox})); };
+  const akGrund=await akBild(0);
+  const akFlaeche=[], akSpitze=[];
+  for(const n of [1,2,3,4]){
+    const bn=await akBild(n);
+    let max=0,zahl=0;
+    for(let k=0;k<bn.data.length;k+=4){
+      const d=Math.max(Math.abs(bn.data[k]-akGrund.data[k]),
+                       Math.abs(bn.data[k+1]-akGrund.data[k+1]),
+                       Math.abs(bn.data[k+2]-akGrund.data[k+2]));
+      if(d>max)max=d; if(d>8)zahl++;
+    }
+    akFlaeche.push(zahl); akSpitze.push(max);
+  }
+  await page.evaluate(()=>ampelKraftSetzen(0,true));
+  console.log('INFO Ampelkraft sichtbar: Flaeche='+JSON.stringify(akFlaeche)+' Spitze='+JSON.stringify(akSpitze));
+  ok('Jede Stufe leuchtet sichtbar weiter als die vorige',
+     akFlaeche.every((v,i)=>i===0?v>200:v>akFlaeche[i-1]), JSON.stringify(akFlaeche));
+  ok('Der Kern wird dabei nicht flauer',
+     Math.min(...akSpitze)>=40, 'staerkste Abweichungen '+JSON.stringify(akSpitze));
+
   abschnitt='Migration';
   /* Trainer und Strategie-Hinweise sind ab Werk an. Ein geaenderter Standard
      allein reicht nicht: Object.assign zieht den gespeicherten Wert vor, und

@@ -138,12 +138,20 @@ header .boardname:active{background:var(--panel2)}
 #status .kurz,#statusProbe .kurz{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-align:center;max-width:100%}
 #status .kurz{min-height:21px}
 #status.tapbar{cursor:pointer}
+#status .dot{-webkit-touch-callout:none;-webkit-user-select:none;user-select:none}
 #status .dot{flex:none;align-self:center;box-sizing:content-box;width:14px;height:50px;display:flex;flex-direction:column;align-items:center;justify-content:space-between;gap:4px;padding:5px;border-radius:10px;background:rgba(0,0,0,.3);box-shadow:inset 0 1px 3px rgba(0,0,0,.55)}
 #status .dot b{flex:none;display:block;width:14px;height:14px;border-radius:50%;opacity:.16;transition:opacity .2s}
 #status .dot b.r{background:#e0574a}
 #status .dot b.g{background:#d9a72c}
 #status .dot b.gr{background:#3fae6a}
-#status.bad .dot b.r,#status.warn .dot b.g,#status.ok .dot b.gr{opacity:1;box-shadow:0 0 8px currentColor}
+/* Die Staerke steckt in zwei Variablen, damit die Probe im Ampel-Blatt
+   DIESELBEN Deklarationen benutzt wie die echte Ampel - zwei Regelsaetze
+   wuerden frueher oder spaeter auseinanderlaufen (Lutz, 15.09.2026). */
+#status .dot,.aprobe{flex:none;box-sizing:content-box;width:14px;height:50px;display:flex;flex-direction:column;align-items:center;justify-content:space-between;gap:4px;padding:5px;border-radius:10px;background:rgba(0,0,0,.3);box-shadow:inset 0 1px 3px rgba(0,0,0,.55)}
+#status .dot b,.aprobe b{flex:none;display:block;width:14px;height:14px;border-radius:50%;opacity:.16;transition:opacity .2s}
+.aprobe b.r{background:#e0574a}.aprobe b.g{background:#d9a72c}.aprobe b.gr{background:#3fae6a}
+#status.bad .dot b.r,#status.warn .dot b.g,#status.ok .dot b.gr,.aprobe b.an{opacity:1;box-shadow:0 0 var(--aschein,8px) var(--adicht,0px) currentColor,0 0 var(--ahof,0px) currentColor}
+.aprobe b.an.r{color:#e0574a}.aprobe b.an.g{color:#d9a72c}.aprobe b.an.gr{color:#3fae6a}
 #status.bad .dot b.r{color:#e0574a}
 #status.warn .dot b.g{color:#d9a72c}
 #status.ok .dot b.gr{color:#3fae6a}
@@ -161,7 +169,7 @@ header .boardname:active{background:var(--panel2)}
 /* Sobald das Ergebnis steht, blitzt das zutreffende Licht einmal auf und
    kommt dann zur Ruhe - so ist der Uebergang vom Rechnen zum Urteil zu sehen. */
 #status.blitz.bad .dot b.r,#status.blitz.warn .dot b.g,#status.blitz.ok .dot b.gr{animation:blitz .5s ease-out 1}
-@keyframes blitz{0%{transform:scale(1);box-shadow:0 0 0 0 currentColor}35%{transform:scale(1.45);box-shadow:0 0 14px 4px currentColor}100%{transform:scale(1);box-shadow:0 0 8px currentColor}}
+@keyframes blitz{0%{transform:scale(1);box-shadow:0 0 0 0 currentColor}35%{transform:scale(1.45);box-shadow:0 0 calc(var(--aschein,8px) + 6px) 4px currentColor,0 0 calc(var(--ahof,0px) * 1.6) currentColor}100%{transform:scale(1);box-shadow:0 0 var(--aschein,8px) var(--adicht,0px) currentColor,0 0 var(--ahof,0px) currentColor}}
 #rechenband{flex:none;height:3px;margin:0 8px;border-radius:2px;background:var(--line);overflow:hidden;opacity:0;transition:opacity .15s}
 #rechenband.on{opacity:1}
 #rechenband i{display:block;height:100%;width:38%;border-radius:2px;background:linear-gradient(90deg,transparent,var(--brass2),transparent);transform:translateX(-100%);animation:wandern .96s linear infinite}
@@ -245,7 +253,7 @@ header .boardname:active{background:var(--panel2)}
      max-height, keine feste Hoehe, also bestimmt der Inhalt sie - und der
      ist dann fast nichts. Das Menue schrumpfte auf 134 px mit 16 px
      sichtbarem Inhalt. Deshalb basis auto. */
-#sheet .scroll,#detail .scroll{flex:1 1 auto;min-height:0;
+#sheet .scroll,#detail .scroll,#ampelBlatt .scroll{flex:1 1 auto;min-height:0;
   overflow-y:auto;-webkit-overflow-scrolling:touch;padding:4px 16px 12px}
 /* So schmal wie vertretbar: von den 83 px sind 34 der Schutzrand des
    Geraets (Home-Leiste), die bleiben. Gespart wird an der Polsterung -
@@ -253,7 +261,7 @@ header .boardname:active{background:var(--panel2)}
    genug ist. Der Knopf selbst ist 40 statt 44 px hoch; bei voller Breite
    (361 px auf dem iPhone 14 Pro) ist die Trefferflaeche trotzdem ein
    Vielfaches dessen, was Apple als Mindestmass nennt. */
-#sheet .fuss,#detail .fuss{flex:none;border-top:1px solid var(--line);
+#sheet .fuss,#detail .fuss,#ampelBlatt .fuss{flex:none;border-top:1px solid var(--line);
   background:var(--panel);padding:6px 16px var(--sockelrand,calc(var(--sab) + 2px))}
 #sheet .fuss .btn,#detail .fuss .btn{width:100%;padding:11px}
 #sheet h2{font-family:var(--serif);font-weight:400;font-size:20px;margin:18px 0 10px;color:var(--brass2)}
@@ -307,6 +315,31 @@ header .boardname:active{background:var(--panel2)}
 /* Warnblitz: Sobald ein Zug die Loesung kostet, zieht einmal ein rotes
    Leuchten ueber den Bildschirm. Liegt ueber allem, faengt aber keine
    Beruehrung ab. */
+/* Der Schein im Bild fuer die hoechste Stufe. Bewusst UNTER den Blaettern
+   (z-index 21) und unter dem Warnblitz (45): er ist Beiwerk, keine Meldung. */
+#ampelhof{position:fixed;inset:0;z-index:12;pointer-events:none;opacity:0;
+  background:radial-gradient(ellipse 120% 55% at 50% 82%,var(--ahoffarbe,transparent) 0%,transparent 64%)}
+#ampelhof.an{animation:ampelhof .8s ease-out 1}
+@keyframes ampelhof{0%{opacity:0}22%{opacity:1}58%{opacity:.34}100%{opacity:0}}
+@media (prefers-reduced-motion:reduce){#ampelhof.an{animation-duration:1.4s}}
+#ampelBlatt{position:fixed;left:0;right:0;bottom:0;z-index:22;background:var(--panel);border-radius:22px 22px 0 0;
+  max-height:calc(100% - var(--sat) - 30px);transform:translateY(105%);transition:transform .3s cubic-bezier(.2,.8,.2,1);
+  display:flex;flex-direction:column;box-shadow:0 -10px 40px rgba(0,0,0,.5)}
+#ampelBlatt.on{transform:translateY(0)}
+#ampelBlatt .handle{width:44px;height:5px;border-radius:3px;background:var(--line);margin:10px auto 4px;flex:none}
+#ampelBlatt h3{margin:0 0 4px;font-size:17px;color:var(--ink);font-weight:600}
+#ampelBlatt .hint{font-size:13px;color:var(--muted);line-height:1.45;margin:0 0 14px}
+/* Alle drei Farben nebeneinander: so sieht man in einem Blick, was die
+   Stufe fuer Gruen tut, nicht nur fuer die gerade brennende Farbe. */
+.aproben{display:flex;justify-content:center;gap:34px;padding:22px 0 18px}
+.aproben .aprobe{align-self:center}
+#ampelStufe{text-align:center;color:var(--brass2);font-size:15px;min-height:21px;margin-bottom:2px}
+#ampelRegler{-webkit-appearance:none;appearance:none;width:100%;height:34px;background:transparent;margin:0}
+#ampelRegler::-webkit-slider-runnable-track{height:6px;border-radius:3px;background:var(--line)}
+#ampelRegler::-webkit-slider-thumb{-webkit-appearance:none;width:30px;height:30px;border-radius:50%;
+  background:var(--brass2);border:none;margin-top:-12px;box-shadow:0 1px 4px rgba(0,0,0,.5)}
+#ampelRegler::-moz-range-track{height:6px;border-radius:3px;background:var(--line)}
+#ampelRegler::-moz-range-thumb{width:30px;height:30px;border-radius:50%;background:var(--brass2);border:none}
 #warnblitz{position:fixed;inset:0;z-index:45;pointer-events:none;opacity:0;
   background:radial-gradient(circle at 50% 62%,rgba(224,87,74,.30) 0%,rgba(224,87,74,.55) 60%,rgba(224,87,74,.75) 100%)}
 #warnblitz.an{animation:warnblitz .62s ease-out 1}
@@ -437,12 +470,28 @@ header .boardname:active{background:var(--panel2)}
   <div class="fuss"><button class="btn primary" id="detailClose">Fertig</button></div>
 </div>
 <div id="update" role="status"><span class="txt"></span><button class="zu" type="button" aria-label="Hinweis schließen">×</button></div>
+<div id="ampelhof"></div>
 <div id="warnblitz"></div>
+<div id="ampelBlatt" role="dialog" aria-label="Ampel">
+  <div class="handle"></div>
+  <div class="scroll">
+    <h3>Wie hell die Ampel leuchtet</h3>
+    <p class="hint">Ziehe den Regler – die Ampel unten und die drei Proben hier ändern sich sofort mit. Auf der höchsten Stufe legt sich zusätzlich ein Schein über das Bild, wie ihn Rot beim Warnblitz schon hat.</p>
+    <div class="aproben">
+      <span class="aprobe"><b class="r an"></b><b class="g"></b><b class="gr"></b></span>
+      <span class="aprobe"><b class="r"></b><b class="g an"></b><b class="gr"></b></span>
+      <span class="aprobe"><b class="r"></b><b class="g"></b><b class="gr an"></b></span>
+    </div>
+    <div id="ampelStufe"></div>
+    <input type="range" id="ampelRegler" min="0" max="4" step="1" value="0" aria-label="Leuchtstärke der Ampel">
+  </div>
+  <div class="fuss"><button class="btn primary" id="ampelClose">Fertig</button></div>
+</div>
 <div id="toast"></div>
 
 <script>
 'use strict';
-const APP_VERSION='1.42';
+const APP_VERSION='1.43';
 /* =========================================================================
    Kern: Bretter, Züge, Symmetrien, Paritäts-Schranke, Solver
    (als Fabrik, damit derselbe Code im Web Worker läuft)
@@ -723,7 +772,7 @@ const Store={
   set(k,v){ try{ localStorage.setItem('solitaire.'+k,JSON.stringify(v)); }catch(e){} },
   del(k){ try{ localStorage.removeItem('solitaire.'+k); }catch(e){} }
 };
-const settings=Object.assign({board:'english',theme:'glas',boardLook:'holz',pegStyle:'glas',pegColor:'bunt',autoJump:true,showTargets:true,freeStart:false,sound:true,trainer:true,marks:false,strategy:true,alarm:true,alarmTon:'gong',funkeln:true},Store.get('settings',{}));
+const settings=Object.assign({board:'english',theme:'glas',boardLook:'holz',pegStyle:'glas',pegColor:'bunt',autoJump:true,showTargets:true,freeStart:false,sound:true,trainer:true,marks:false,strategy:true,alarm:true,alarmTon:'gong',funkeln:true,ampelKraft:0},Store.get('settings',{}));
 function saveSettings(){ Store.set('settings',settings); }
 /* Einmalige Umstellung: Trainer und Strategie-Hinweise sind ab Werk an. Wer
    die App vorher installiert hatte, trug den alten Stand (strategy:false) in
@@ -1326,7 +1375,9 @@ let rechnet=false;
    erreichbar" zu "nicht mehr erreichbar" - nicht bei jedem weiteren Zug in
    einer schon verlorenen Stellung, und nicht bei Meldungen wie "Dieser Stein
    kann nicht springen", die ebenfalls rot sind. */
-let warnblitzTimer=0;
+let warnblitzTimer=0, warnblitzZeit=0;
+/* Lief der Warnblitz gerade? Dann tritt der Ampelhof zurueck. */
+function warnblitzGleich(){ return Date.now()-warnblitzZeit<1200; }
 let alarmZuletzt=0;
 function warnblitz(erzwingen){
   /* Die Zuglaenge wird auch dann gemerkt, wenn der Warnblitz abgeschaltet
@@ -1334,7 +1385,7 @@ function warnblitz(erzwingen){
      Probe aus dem Menue (erzwingen) zaehlt nicht mit. */
   if(!erzwingen&&game.alarmZuege) game.alarmZuege.add(game.history.length);
   if(!settings.alarm&&!erzwingen) return;
-  alarmZuletzt=Date.now(); Sound.alarm();
+  alarmZuletzt=Date.now(); warnblitzZeit=Date.now(); Sound.alarm();
   const e=$('warnblitz'); if(!e) return;
   e.classList.remove('an'); void e.offsetWidth; e.classList.add('an');
   clearTimeout(warnblitzTimer); warnblitzTimer=setTimeout(()=>e.classList.remove('an'),1300);
@@ -1370,7 +1421,12 @@ function setStatus(text,cls,linkText,linkFn,note,kurz){
   statusEl.appendChild(dot);
   statusEl.classList.toggle('rechnet',rechnet);
   if(blitzAusstehend&&/^(ok|bad|warn)$/.test(cls||'')&&Date.now()-blitzAusstehend<1500){
-    blitzAusstehend=0; statusEl.classList.add('blitz'); setTimeout(()=>statusEl.classList.remove('blitz'),600); }
+    blitzAusstehend=0; statusEl.classList.add('blitz'); setTimeout(()=>statusEl.classList.remove('blitz'),600);
+    /* Der Schein im Bild haengt am Ergebnis-Blitz, nicht am Setzen der
+       Statuszeile: rote Meldungen wie "Dieser Stein kann nicht springen"
+       duerfen den Raum nicht aufleuchten lassen. Bei Rot laesst er dem
+       Warnblitz den Vortritt - der kommt aus derselben Bewertung. */
+    if(!(cls==='bad'&&warnblitzGleich())) ampelHof(AMPEL_FARBEN[cls]); }
   const saeule=document.createElement('span'); saeule.className='saeule';
   const anker=document.createElement('span'); anker.className='anker'; anker.textContent=ankerText(); saeule.appendChild(anker);
   const k=document.createElement('span'); k.className='kurz'; k.textContent=kurzT;
@@ -1943,7 +1999,80 @@ $('cfNo').addEventListener('click',()=>{ hideModal('confirmModal'); confirmFn=nu
 $('btnMenu').addEventListener('click',openSheet); $('btnBoardName').addEventListener('click',openSheet);
 $('btnCloseSheet').addEventListener('click',closeSheet); $('backdrop').addEventListener('click',()=>{ closeSheet(); closeDetail(); });
 $('detailClose').addEventListener('click',closeDetail);
-statusEl.addEventListener('click',e=>{ /* Ein Druck auf eine Aktion ist keine Aufforderung, zusaetzlich das Blatt zu oeffnen. */ if(e.target.closest('.link')) return; if(statusDetail) openDetail(); });
+statusEl.addEventListener('click',e=>{ /* Ein Druck auf eine Aktion ist keine Aufforderung, zusaetzlich das Blatt zu oeffnen. */ if(e.target.closest('.link')) return;
+  /* Nach einem langen Druck hat die Beruehrung ihre Wirkung schon gehabt. */
+  if(ampelLang){ ampelLang=false; return; }
+  if(statusDetail) openDetail(); });
+
+/* ---------- Wie hell die Ampel leuchtet (langer Druck auf die Ampel) ----------
+   Fuenf Stufen. Die unterste ist genau das, was die App vorher hatte - wer
+   nichts einstellt, merkt nichts. Nach oben waechst erst der Schein am Licht
+   selbst, dann der Hof darum, und die hoechste legt zusaetzlich einen Schein
+   ueber das Bild. Den kennt Rot vom Warnblitz schon; hier bekommen ihn alle
+   drei Farben, damit es einheitlich ist (Wunsch von Lutz, 15.09.2026). */
+/* Drei Groessen je Stufe, nicht eine. Ein groesserer Weichzeichner allein
+   macht den Schein nur BREITER und dabei flacher - gemessen: von Stufe 0 auf 4
+   sank die staerkste Abweichung von 33 auf 23, obwohl die Flaeche wuchs. Es
+   sah diffuser aus statt kraeftiger. "dicht" (der spread des Schattens) haelt
+   den Kern zusammen, "hof" ist der weite Schein darum. */
+const AMPEL_STUFEN=[
+  {schein:8,  dicht:0,   hof:0,  hintergrund:false, name:'Wie bisher'},
+  {schein:11, dicht:1.5, hof:8,  hintergrund:false, name:'Etwas kräftiger'},
+  {schein:15, dicht:3,   hof:16, hintergrund:false, name:'Kräftig'},
+  {schein:19, dicht:4.5, hof:26, hintergrund:false, name:'Sehr kräftig'},
+  {schein:24, dicht:6,   hof:36, hintergrund:true,  name:'Mit Schein im Bild'}
+];
+function ampelStufe(){ const n=settings.ampelKraft; return (n>=0&&n<AMPEL_STUFEN.length)?n:0; }
+function ampelKraftSetzen(n,speichern){
+  n=Math.max(0,Math.min(AMPEL_STUFEN.length-1,n|0));
+  settings.ampelKraft=n; if(speichern) saveSettings();
+  const st=AMPEL_STUFEN[n], w=document.documentElement.style;
+  w.setProperty('--aschein',st.schein+'px');
+  w.setProperty('--adicht',st.dicht+'px');
+  w.setProperty('--ahof',st.hof+'px');
+  const e=$('ampelStufe'); if(e) e.textContent=st.name;
+  const r=$('ampelRegler'); if(r&&+r.value!==n) r.value=String(n);
+}
+/* Der Schein im Bild laeuft nur auf der hoechsten Stufe und nur zum Ergebnis.
+   Bei Rot tritt er hinter den Warnblitz zurueck - zwei rote Blitze
+   uebereinander waeren keine Verstaerkung, sondern Matsch. */
+let ampelHofTimer=0;
+function ampelHof(farbe){
+  if(!AMPEL_STUFEN[ampelStufe()].hintergrund) return;
+  const e=$('ampelhof'); if(!e) return;
+  e.style.setProperty('--ahoffarbe',farbe);
+  e.classList.remove('an'); void e.offsetWidth; e.classList.add('an');
+  clearTimeout(ampelHofTimer); ampelHofTimer=setTimeout(()=>e.classList.remove('an'),900);
+}
+const AMPEL_FARBEN={bad:'rgba(224,87,74,.30)',warn:'rgba(217,167,44,.28)',ok:'rgba(63,174,106,.28)'};
+function ampelBlattAuf(){
+  ampelKraftSetzen(ampelStufe(),false);
+  const e=$('ampelBlatt'); if(e) e.classList.add('on');
+}
+function ampelBlattZu(){ const e=$('ampelBlatt'); if(e) e.classList.remove('on'); }
+$('ampelClose').addEventListener('click',ampelBlattZu);
+$('ampelRegler').addEventListener('input',e=>{
+  const n=+e.target.value; ampelKraftSetzen(n,true);
+  /* Sofort sehen, was die Stufe tut - sonst ist der Name nur ein Wort. */
+  if(AMPEL_STUFEN[n].hintergrund) ampelHof(AMPEL_FARBEN.ok);
+});
+/* Langer Druck auf die Ampel. Ein Wisch darf ihn nicht ausloesen, deshalb
+   bricht eine Bewegung ueber 10 px ab. */
+let ampelLang=false, ampelTimer=0, ampelStart=null;
+const ampelDot=()=>statusEl.querySelector('.dot');
+statusEl.addEventListener('pointerdown',e=>{
+  const d=ampelDot(); if(!d||!e.target.closest('.dot')) return;
+  ampelStart={x:e.clientX,y:e.clientY}; ampelLang=false;
+  clearTimeout(ampelTimer);
+  ampelTimer=setTimeout(()=>{ ampelLang=true; ampelStart=null; ampelBlattAuf(); },550);
+});
+statusEl.addEventListener('pointermove',e=>{
+  if(!ampelStart) return;
+  if(Math.hypot(e.clientX-ampelStart.x,e.clientY-ampelStart.y)>10){ clearTimeout(ampelTimer); ampelStart=null; }
+});
+['pointerup','pointercancel','pointerleave'].forEach(t=>
+  statusEl.addEventListener(t,()=>{ clearTimeout(ampelTimer); ampelStart=null; }));
+ampelKraftSetzen(ampelStufe(),false);
 $('sheet').querySelector('.handle').addEventListener('click',closeSheet);
 $('btnResetStats').addEventListener('click',()=>{ Store.del('stats'); buildSheet(); toast('Bestleistungen gelöscht.'); });
 $('swAuto').addEventListener('click',()=>{ settings.autoJump=!settings.autoJump; saveSettings(); buildSheet(); });

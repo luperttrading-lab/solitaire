@@ -157,6 +157,46 @@ const FAELLE=[
    ok('Der Inhalt bekommt den Grossteil des Blattes ('+name+')',
       r.sichtbar>=r.blatt*0.7, r.sichtbar+' von '+r.blatt+' px ('
       +Math.round(100*r.sichtbar/r.blatt)+' %)');
+   /* Das Ampel-Blatt ist kurz - es darf nicht die volle Hoehe fuellen, aber
+      sein Fertig-Knopf muss im Bild liegen und der Regler gross genug sein.
+      Geprueft auf denselben drei Geraetehoehen. */
+   const pa=await browser.newPage(); await pa.setViewport({width:w,height:h});
+   await pa.goto(url,{waitUntil:'load'}); await sleep(2300);
+   await pa.evaluate(()=>{
+     document.documentElement.style.setProperty('--sat','59px');
+     document.documentElement.style.setProperty('--sab','34px');
+     try{ Object.defineProperty(screen,'height',
+       {value:window.innerHeight,configurable:true}); }catch(e){}
+     sockelRandSetzen(); ampelBlattAuf(); });
+   await sleep(450);
+   const ra=await pa.evaluate(()=>{
+     const blatt=document.getElementById('ampelBlatt');
+     const knopf=document.getElementById('ampelClose');
+     const regler=document.getElementById('ampelRegler');
+     const proben=document.querySelectorAll('.aprobe');
+     const bb=blatt.getBoundingClientRect(), kb=knopf.getBoundingClientRect(),
+           rb=regler.getBoundingClientRect();
+     const sicht=[...proben].every(e=>{ const r=e.getBoundingClientRect();
+       return r.top>=0&&r.bottom<=window.innerHeight+0.5&&r.width>0; });
+     return {
+       imBild: kb.top>=0&&kb.bottom<=window.innerHeight+0.5,
+       imBlatt: kb.bottom<=bb.bottom+0.5,
+       blattImBild: bb.top>=0&&bb.bottom<=window.innerHeight+0.5,
+       reglerHoehe: Math.round(rb.height), reglerBreite: Math.round(rb.width),
+       reglerImBild: rb.top>=0&&rb.bottom<=window.innerHeight+0.5,
+       probenSichtbar: sicht, probenZahl: proben.length,
+       blatt: Math.round(bb.height), fenster: window.innerHeight
+     }; });
+   console.log('INFO Ampel-Blatt ('+name+'): '+JSON.stringify(ra));
+   ok('Das Ampel-Blatt liegt im Bild ('+name+')',
+      ra.blattImBild&&ra.imBild&&ra.imBlatt, JSON.stringify(ra));
+   ok('Alle drei Proben sind zu sehen ('+name+')',
+      ra.probenSichtbar&&ra.probenZahl===3, ra.probenZahl+' Proben, sichtbar '+ra.probenSichtbar);
+   /* Der Regler ist das Bedienteil - er muss zu treffen sein. */
+   ok('Der Regler ist gross genug zum Ziehen ('+name+')',
+      ra.reglerImBild&&ra.reglerHoehe>=30&&ra.reglerBreite>=200,
+      ra.reglerHoehe+' x '+ra.reglerBreite+' px');
+   await pa.close();
    await pf.close();
  }
 
