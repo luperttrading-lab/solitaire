@@ -99,13 +99,13 @@ Autor/Product Owner: Lutz („Neo"). Sprache im Chat und in der App: Deutsch, pe
 
 ## Kostenanzeige
 
-Unter **jeder** Antwort steht die Ausgabe von `tools/kostentabelle.py`, wörtlich und als letzter Block – nichts dahinter, nicht umformatiert, nicht geschätzt. Ablauf: `python3 tools/kostentabelle.py` ausführen, Ausgabe anhängen. Läuft das Skript nicht, das offen sagen statt eine Zahl zu erfinden.
+Unter **jeder** Antwort steht die Ausgabe von `tools/kosten.py`, wörtlich als letzte Zeile – nichts dahinter, nicht umformatiert, nicht geschätzt. Ablauf: `python3 tools/kosten.py` ausführen, Ausgabe anhängen. Ohne Ausnahme, auch bei kurzen Antworten. Läuft das Skript nicht (kein Sitzungsprotokoll, andere Umgebung), das offen sagen statt eine Zahl zu erfinden.
 
-Eine Spalte je Dienst, Datum und Uhrzeit in der Kopfzeile links, drei Zeilen (diese Frage / heute / dieser Chat). Diese Fassung (`KOSTENTABELLE.md`, 15.09.2026) **ersetzt** die frühere einzeilige (`KOSTENZEILE.md`); es gilt immer die zuletzt hochgeladene.
+Eine einzige Zeile in `<sub>…</sub>`: Uhrzeit · Frage · heute · gesamt, deutsches Zahlenformat, Dollarzeichen nur am Ende. **Zwei eng stehende Zeilen sind in der Claude-App nicht möglich** – `<br>`, zwei Leerzeichen und Backslash am Zeilenende werden verworfen, eine Leerzeile reißt 133 statt 82 px auf, ein Codeblock baut einen Kasten mit Kopierknopf drumherum. Alles durchprobiert, deshalb eine Zeile.
 
-Weitere Spalten entstehen aus `tools/fremdkosten.json` (`ts`, `usd`, `dienst`, optional `was`) – das Skript misst fremde Dienste nicht selbst. **Sobald in diesem Projekt ein kostenpflichtiger Dienst dazukommt, trägt der Chat selbst einen Eintrag an** (eine Schreibweise je Dienst, sonst entstehen zwei Spalten für dasselbe); fehlt ein Betrag, lieber nichts eintragen als raten und die Lücke im Text nennen. Höchstens drei Zusatzspalten, der Rest wird zu „Sonstige“.
+Diese Fassung (`KOSTENZEILE.md`, 15.09.2026) **ersetzt** die Tabelle (`KOSTENTABELLE.md`); es gilt immer die zuletzt hochgeladene. `tools/kostentabelle.py` bleibt als Werkzeug liegen, wird aber nicht mehr gerufen – wer eine Spalte je Dienst will, lädt die Tabellen-Fassung erneut hoch.
 
-Zwei Fallstricke, die das Skript abfängt: Cloud-Sitzungen laufen mit dem **Stunden-Cache** (doppelter Schreibpreis, `--ttl5` rechnet mit fünf Minuten), und Modellnamen im Protokoll tragen ein Datum – deshalb Präfix-Vergleich, sonst greift der Rückfallpreis. Die Token der gerade entstehenden Antwort fehlen noch und tauchen erst beim nächsten Mal auf.
+Zwei Fallstricke, die das Skript abfängt: Cloud-Sitzungen laufen mit dem **Stunden-Cache** (doppelter Schreibpreis, `--ttl5` rechnet mit fünf Minuten), und Modellnamen im Protokoll tragen ein Datum – deshalb Präfix-Vergleich, sonst greift der Rückfallpreis (bei Haiku das Fünffache). Die Token der gerade entstehenden Antwort fehlen noch und tauchen erst beim nächsten Mal auf. Fremde Dienste (Bildgenerierung, Hosting) rechnet diese Fassung **nicht** mit – solche Beträge gehören zusätzlich in den Text.
 
 ## Tests (headless Chromium via Puppeteer, einmal `npm install`)
 - `npm test` – alle sieben Suiten nacheinander; jede meldet Fehler über den Exit-Code. Einzeln z. B. `npm run test:browser`.
