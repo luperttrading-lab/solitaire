@@ -97,6 +97,16 @@ Autor/Product Owner: Lutz („Neo"). Sprache im Chat und in der App: Deutsch, pe
 - Nichts raten, was Lutz in wenigen Handgriffen prüfen kann; Diagnosen in die Ausgabe schreiben; Tests dürfen nicht dieselbe Annahme treffen wie der Code (Literaturwerte, unabhängige BFS).
 - Keine Zustimmungsfloskeln; Widerspruch mit Grund.
 
+## Kostenanzeige
+
+Unter **jeder** Antwort steht die Ausgabe von `tools/kostentabelle.py`, wörtlich und als letzter Block – nichts dahinter, nicht umformatiert, nicht geschätzt. Ablauf: `python3 tools/kostentabelle.py` ausführen, Ausgabe anhängen. Läuft das Skript nicht, das offen sagen statt eine Zahl zu erfinden.
+
+Eine Spalte je Dienst, Datum und Uhrzeit in der Kopfzeile links, drei Zeilen (diese Frage / heute / dieser Chat). Diese Fassung (`KOSTENTABELLE.md`, 15.09.2026) **ersetzt** die frühere einzeilige (`KOSTENZEILE.md`); es gilt immer die zuletzt hochgeladene.
+
+Weitere Spalten entstehen aus `tools/fremdkosten.json` (`ts`, `usd`, `dienst`, optional `was`) – das Skript misst fremde Dienste nicht selbst. **Sobald in diesem Projekt ein kostenpflichtiger Dienst dazukommt, trägt der Chat selbst einen Eintrag an** (eine Schreibweise je Dienst, sonst entstehen zwei Spalten für dasselbe); fehlt ein Betrag, lieber nichts eintragen als raten und die Lücke im Text nennen. Höchstens drei Zusatzspalten, der Rest wird zu „Sonstige“.
+
+Zwei Fallstricke, die das Skript abfängt: Cloud-Sitzungen laufen mit dem **Stunden-Cache** (doppelter Schreibpreis, `--ttl5` rechnet mit fünf Minuten), und Modellnamen im Protokoll tragen ein Datum – deshalb Präfix-Vergleich, sonst greift der Rückfallpreis. Die Token der gerade entstehenden Antwort fehlen noch und tauchen erst beim nächsten Mal auf.
+
 ## Tests (headless Chromium via Puppeteer, einmal `npm install`)
 - `npm test` – alle sieben Suiten nacheinander; jede meldet Fehler über den Exit-Code. Einzeln z. B. `npm run test:browser`.
 - `node tests/test_browser.js` – 212 Prüfungen (Spiel, Tipp, Trainer, Markierung, Strategie, Fehlersuche, Spulen, Textbreiten, Alarmtöne, Update-Hinweis).
