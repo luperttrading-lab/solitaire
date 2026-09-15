@@ -1623,7 +1623,10 @@ function kurzfassungGleich(proben,voll,erwartet){
     console.log('INFO Ampelskala: '+JSON.stringify(m)+' Fehler: '+(kaputt[0]||'keine'));
     ok('Die App startet auch mit einer gespeicherten alten Stufe',
        m.laeuft===true&&kaputt.length===0, JSON.stringify(m)+' / '+(kaputt[0]||'keine'));
-    ok('Die alte Vollstufe 4 wird zur neuen Vollstufe 10', m.kraft===10, String(m.kraft));
+    /* Seit v1.47 stellt eine zweite, einmalige Umstellung ab Werk auf 6 -
+       die laeuft NACH der Skalen-Umrechnung und ueberschreibt sie bewusst
+       (Wunsch von Lutz). Geprueft wird deshalb der Endzustand. */
+    ok('Nach beiden Umstellungen steht die Ampel auf 6', m.kraft===6, String(m.kraft));
     ok('Die Umstellung merkt sich, dass sie gelaufen ist', m.skala===2, String(m.skala));
     await pm.close();
     /* Gegenprobe: wer schon auf der neuen Skala steht, wird nicht noch einmal
@@ -1631,13 +1634,122 @@ function kurzfassungGleich(proben,voll,erwartet){
     const pm2=await browser.newPage();
     await pm2.setViewport({width:390,height:844});
     await pm2.evaluateOnNewDocument(()=>{ try{ localStorage.setItem('solitaire.settings',
-      JSON.stringify({ampelKraft:6,ampelSkala:2,anGestellt:true})); }catch(e){} });
+      JSON.stringify({ampelKraft:8,ampelSkala:2,ampelStd:6,anGestellt:true})); }catch(e){} });
     await pm2.goto('file://'+path.resolve(__dirname,'..','index.html'),{waitUntil:'load'});
     await sleep(1600);
     const m2=await pm2.evaluate(()=>settings.ampelKraft).catch(()=>null);
-    ok('Eine schon umgestellte Einstellung bleibt, wo sie ist', m2===6, String(m2));
+    ok('Eine schon umgestellte Einstellung bleibt, wo sie ist', m2===8, String(m2));
     await pm2.close();
   }
+
+  /* Probierte Zuege (v1.47). Nimmt man einen Zug zurueck, bleibt er als
+     duenner roter Strich stehen. Zweck nach Lutz (15.09.2026): "dass ich sehe,
+     welchen Zug ich schon probiert habe, wenn ich den gleichen Zug mehrfach
+     falsch mache". Gemerkt wird je STELLUNG, nicht je Zugnummer. */
+  abschnitt='Probierte Zuege';
+  const pz=await page.evaluate(async()=>{
+    const erg={};
+    const striche=()=>document.querySelectorAll('#board path.probiert').length;
+    settings.probiert=true; settings.autoJump=false; newGame('english');
+    await new Promise(r=>setTimeout(r,80));
+    erg.amAnfang=striche();
+    const m1=game.board.moves.find(m=>game.pegAt[m.from]>=0&&game.pegAt[m.over]>=0&&game.pegAt[m.to]<0);
+    applyMove(m1,true); render(); undo();
+    await new Promise(r=>setTimeout(r,1400));
+    erg.nachEinem=striche();
+    /* Ein zweiter, ANDERER Zug aus derselben Stellung kommt dazu - genau das
+       ist der Zweck: sehen, was man hier schon alles versucht hat. */
+    const m2=game.board.moves.find(m=>m!==m1&&game.pegAt[m.from]>=0
+      &&game.pegAt[m.over]>=0&&game.pegAt[m.to]<0);
+    applyMove(m2,true); render(); undo();
+    await new Promise(r=>setTimeout(r,1400));
+    erg.nachZweien=striche();
+    /* Derselbe Zug nochmal zaehlt nicht doppelt. */
+    applyMove(m1,true); render(); undo();
+    await new Promise(r=>setTimeout(r,1400));
+    erg.wiederholt=striche();
+    /* Ein Zug fuehrt in eine andere Stellung - dort ist die Tafel leer. */
+    applyMove(m1,true); render();
+    await new Promise(r=>setTimeout(r,80));
+    erg.nachZug=striche();
+    /* Zurueck an dieselbe Stelle: die eigenen Versuche stehen wieder da. */
+    undo(); await new Promise(r=>setTimeout(r,1400));
+    erg.zurueck=striche();
+    /* Abgeschaltet verschwinden sie sofort. */
+    settings.probiert=false; renderOverlay();
+    erg.abgeschaltet=striche();
+    settings.probiert=true; newGame('english');
+    await new Promise(r=>setTimeout(r,80));
+    erg.neuesSpiel=striche();
+    return erg; });
+  console.log('INFO Probierte Zuege: '+JSON.stringify(pz));
+  ok('Am Anfang ist die Tafel leer', pz.amAnfang===0, String(pz.amAnfang));
+  ok('Ein zurueckgenommener Zug bleibt stehen', pz.nachEinem===1, String(pz.nachEinem));
+  ok('Ein zweiter Versuch kommt dazu', pz.nachZweien===2, String(pz.nachZweien));
+  ok('Derselbe Zug zaehlt nicht doppelt', pz.wiederholt===2, String(pz.wiederholt));
+  ok('Nach einem Zug ist die neue Stellung leer', pz.nachZug===0, String(pz.nachZug));
+  ok('Zurueck stehen die eigenen Versuche wieder da', pz.zurueck===2, String(pz.zurueck));
+  ok('Abgeschaltet verschwinden sie sofort', pz.abgeschaltet===0, String(pz.abgeschaltet));
+  ok('Ein neues Spiel raeumt sie ab', pz.neuesSpiel===0, String(pz.neuesSpiel));
+
+  /* Nach zwei Sekunden tritt die grosse Markierung zurueck und laesst nur den
+     Strich stehen - sonst deckt sie beim Nachdenken zu, was man vergleichen
+     will. Der Timer haengt an SEINER Markierung: kommt inzwischen ein
+     Vor-Zug, gehoert sie dem und muss bleiben (einmal falsch gebaut, der rote
+     Pfeil des Vor-Zuges verschwand nach 2 s). */
+  const pzT=await page.evaluate(async()=>{
+    const erg={};
+    settings.probiert=true; settings.autoJump=false; newGame('english');
+    const m=game.board.moves.find(m=>game.pegAt[m.from]>=0&&game.pegAt[m.over]>=0&&game.pegAt[m.to]<0);
+    applyMove(m,true); render(); undo();
+    /* Das Spulen braucht 400 ms Vorlauf + 650 ms; erst danach steht die
+       Stellung, der der Versuch gehoert, und erst dann laeuft der Timer an. */
+    await new Promise(r=>setTimeout(r,1400));
+    erg.gleichDanach={gross:!game.markAus&&!!game.lastMove,
+      striche:document.querySelectorAll('#board path.probiert').length};
+    await new Promise(r=>setTimeout(r,2400));
+    erg.nachZweiSekunden={gross:!game.markAus&&!!game.lastMove,
+      striche:document.querySelectorAll('#board path.probiert').length};
+    /* Jetzt die Gegenprobe: Vor-Zug direkt nach dem Zurueck. */
+    newGame('english');
+    applyMove(m,true); render(); undo();
+    await new Promise(r=>setTimeout(r,1400));
+    redo();
+    await new Promise(r=>setTimeout(r,2600));
+    erg.nachVorZug={gross:!game.markAus&&!!game.lastMove};
+    settings.autoJump=true; newGame('english');
+    return erg; });
+  console.log('INFO Probierte Zuege Zeit: '+JSON.stringify(pzT));
+  ok('Gleich nach dem Zurueck steht die grosse Markierung',
+     pzT.gleichDanach.gross===true&&pzT.gleichDanach.striche===1, JSON.stringify(pzT.gleichDanach));
+  ok('Nach zwei Sekunden bleibt nur der Strich',
+     pzT.nachZweiSekunden.gross===false&&pzT.nachZweiSekunden.striche===1,
+     JSON.stringify(pzT.nachZweiSekunden));
+  ok('Die Markierung eines Vor-Zuges bleibt dagegen stehen',
+     pzT.nachVorZug.gross===true, JSON.stringify(pzT.nachVorZug));
+
+  /* Und die Frage, die zaehlt: sieht man die Striche? */
+  await page.evaluate(async()=>{
+    settings.probiert=true; settings.autoJump=false; newGame('english');
+    await new Promise(r=>setTimeout(r,80)); });
+  await sleep(250);
+  const pzBox={x:0,y:80,width:390,height:420};
+  const pzGrund=PNG.sync.read(await page.screenshot({clip:pzBox}));
+  await page.evaluate(async()=>{
+    const m=game.board.moves.find(m=>game.pegAt[m.from]>=0&&game.pegAt[m.over]>=0&&game.pegAt[m.to]<0);
+    applyMove(m,true); render(); undo();
+    await new Promise(r=>setTimeout(r,3600));    // Spulen plus zwei Sekunden
+    game.markAus=true; renderOverlay(); });
+  await sleep(300);
+  const pzJetzt=PNG.sync.read(await page.screenshot({clip:pzBox}));
+  let pzRot=0;
+  for(let k=0;k<pzJetzt.data.length;k+=4){
+    const dr=pzJetzt.data[k]-pzGrund.data[k];
+    if(dr>18&&pzJetzt.data[k]>pzJetzt.data[k+1]+30) pzRot++;
+  }
+  console.log('INFO Probierte Zuege sichtbar: '+pzRot+' rote Bildpunkte');
+  ok('Der Strich ist wirklich zu sehen', pzRot>120, pzRot+' rote Bildpunkte');
+  await page.evaluate(()=>{ settings.autoJump=true; newGame('english'); });
 
   abschnitt='Migration';
   /* Trainer und Strategie-Hinweise sind ab Werk an. Ein geaenderter Standard
