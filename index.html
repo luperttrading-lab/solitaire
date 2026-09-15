@@ -322,6 +322,13 @@ header .boardname:active{background:var(--panel2)}
 #ampelhof.an{animation:ampelhof .8s ease-out 1}
 /* Beim Ziehen steht er still statt bei jedem Reglerschritt neu anzulaufen. */
 #ampelhof.halten{opacity:1;transition:opacity .18s}
+/* Beim Einstellen liegt der Schein UEBER dem Blatt. Sein Zentrum sitzt bei
+   82 % der Hoehe, das Blatt beginnt bei 57 % - unter dem Blatt war er
+   also vollstaendig verdeckt und beim Einstellen nicht zu sehen (gemessen:
+   Zentrum y=692, Blattkante y=482, z-index 12 gegen 22). Im Spiel bleibt
+   er unten, dort ist kein Blatt offen. Unter dem Warnblitz (45) bleibt er
+   auch hier, und er faengt keine Beruehrung ab. */
+#ampelhof.vor{z-index:30}
 @keyframes ampelhof{0%{opacity:0}22%{opacity:1}58%{opacity:.34}100%{opacity:0}}
 @media (prefers-reduced-motion:reduce){#ampelhof.an{animation-duration:1.4s}}
 #ampelBlatt{position:fixed;left:0;right:0;bottom:0;z-index:22;background:var(--panel);border-radius:22px 22px 0 0;
@@ -335,6 +342,9 @@ header .boardname:active{background:var(--panel2)}
    Stufe fuer Gruen tut, nicht nur fuer die gerade brennende Farbe. */
 .aproben{display:flex;justify-content:center;gap:34px;padding:22px 0 18px}
 .aproben .aprobe{align-self:center}
+/* Die Proben blitzen beim Loslassen genauso wie das Ergebnislicht im
+   Spiel - dieselben Keyframes, also dieselbe Bewegung. */
+.aprobe.blitzt b.an{animation:blitz .5s ease-out 1}
 #ampelStufe{text-align:center;color:var(--brass2);font-size:15px;min-height:21px;margin-bottom:2px}
 #ampelRegler{-webkit-appearance:none;appearance:none;width:100%;height:34px;background:transparent;margin:0}
 #ampelRegler::-webkit-slider-runnable-track{height:6px;border-radius:3px;background:var(--line)}
@@ -493,7 +503,7 @@ header .boardname:active{background:var(--panel2)}
 
 <script>
 'use strict';
-const APP_VERSION='1.44';
+const APP_VERSION='1.45';
 /* =========================================================================
    Kern: Bretter, Züge, Symmetrien, Paritäts-Schranke, Solver
    (als Fabrik, damit derselbe Code im Web Worker läuft)
@@ -2083,14 +2093,39 @@ function ampelHofHalten(cls){
 function ampelBlattAuf(){
   ampelKraftSetzen(ampelStufe(),false);
   const e=$('ampelBlatt'); if(e) e.classList.add('on');
+  const h=$('ampelhof'); if(h) h.classList.add('vor');
+  /* Einmal vorfuehren, was gerade eingestellt ist - erst wenn das Blatt oben
+     ist, sonst laeuft die Probe hinter der Kante ab. */
+  setTimeout(ampelProbe,360);
 }
-function ampelBlattZu(){ const e=$('ampelBlatt'); if(e) e.classList.remove('on'); }
+function ampelBlattZu(){
+  const e=$('ampelBlatt'); if(e) e.classList.remove('on');
+  const h=$('ampelhof'); if(h) h.classList.remove('vor','an','halten');
+}
 $('ampelClose').addEventListener('click',ampelBlattZu);
+/* Zwei verschiedene Bilder, und beide werden gebraucht:
+   Beim ZIEHEN steht der Schein still, damit man seine Staerke vergleichen
+   kann - liefe er bei jedem Reglerschritt neu an, flackerte er nur.
+   Beim LOSLASSEN laeuft die volle Probe: die Ampel blitzt auf und der Schein
+   schwillt an und ab, also genau das, was im Spiel beim Ergebnis passiert.
+   Ohne die Probe sah Lutz beim Loslassen gar nichts mehr (15.09.2026) - der
+   Regler zeigte die Staerke, aber nicht die Bewegung. */
+let ampelProbeTimer=0;
+function ampelProbe(){
+  const p=document.querySelectorAll('.aprobe');
+  p.forEach(e=>e.classList.remove('blitzt'));
+  void document.body.offsetWidth;
+  p.forEach(e=>e.classList.add('blitzt'));
+  clearTimeout(ampelProbeTimer);
+  ampelProbeTimer=setTimeout(()=>p.forEach(e=>e.classList.remove('blitzt')),600);
+  ampelHof('ok');
+}
 $('ampelRegler').addEventListener('input',e=>{
   ampelKraftSetzen(+e.target.value,true);
-  /* Sofort sehen, was die Stufe tut - sonst ist der Name nur ein Wort. */
+  /* Sofort sehen, wie stark die Stufe ist - sonst ist der Name nur ein Wort. */
   ampelHofHalten('ok');
 });
+$('ampelRegler').addEventListener('change',ampelProbe);
 /* Langer Druck auf die Ampel. Ein Wisch darf ihn nicht ausloesen, deshalb
    bricht eine Bewegung ueber 10 px ab. */
 let ampelLang=false, ampelTimer=0, ampelStart=null;

@@ -1433,6 +1433,73 @@ function kurzfassungGleich(proben,voll,erwartet){
   ok('Bei Gruen kommt der Schein im Bild', ak.hofBeiGruen===true, String(ak.hofBeiGruen));
   ok('Ohne Ergebnis bleibt der Raum dunkel', ak.hofOhneErgebnis===false, String(ak.hofOhneErgebnis));
 
+  /* Beim Loslassen des Reglers laeuft die volle Probe: die Ampel blitzt auf
+     UND der Schein schwillt an und ab - genau wie im Spiel beim Ergebnis.
+     Lutz am 15.09.2026: "wenn ich's loslasse, sieht man aber nicht, wie die
+     Ampel blinkt ... und auch das Aufleuchten vom Hintergrund ist jetzt weg."
+     Beim ZIEHEN steht der Schein dagegen still, damit man seine Staerke
+     vergleichen kann - zwei verschiedene Bilder, beide gebraucht. */
+  abschnitt='Ampelprobe';
+  const apr=await page.evaluate(async()=>{
+    const erg={};
+    ampelKraftSetzen(8,false); ampelBlattAuf();
+    await new Promise(r=>setTimeout(r,700));
+    const hof=$('ampelhof'), blatt=$('ampelBlatt');
+    /* Der Schein sitzt bei 82 % der Hoehe, das Blatt beginnt bei rund 57 % -
+       ohne Hochheben waere er beim Einstellen vollstaendig verdeckt.
+       Gemessen: Zentrum y=692, Blattkante y=482, z-index 12 gegen 22. */
+    erg.blattOben=Math.round(blatt.getBoundingClientRect().top);
+    erg.scheinMitte=Math.round(window.innerHeight*0.82);
+    erg.waereVerdeckt=erg.scheinMitte>erg.blattOben;
+    erg.hofVorn=+getComputedStyle(hof).zIndex>+getComputedStyle(blatt).zIndex;
+    /* Ziehen: still halten, kein Anlaufen. */
+    hof.classList.remove('an','halten');
+    $('ampelRegler').value='9';
+    $('ampelRegler').dispatchEvent(new Event('input',{bubbles:true}));
+    await new Promise(r=>setTimeout(r,120));
+    erg.beimZiehen={halten:hof.classList.contains('halten'),an:hof.classList.contains('an')};
+    /* Loslassen: volle Probe. */
+    $('ampelRegler').dispatchEvent(new Event('change',{bubbles:true}));
+    await new Promise(r=>setTimeout(r,90));
+    erg.beimLoslassen={an:hof.classList.contains('an'),halten:hof.classList.contains('halten'),
+      blitzt:[...document.querySelectorAll('.aprobe')].every(e=>e.classList.contains('blitzt'))};
+    await new Promise(r=>setTimeout(r,1100));
+    erg.danach={an:hof.classList.contains('an'),
+      blitzt:[...document.querySelectorAll('.aprobe')].some(e=>e.classList.contains('blitzt'))};
+    /* Zugemacht muss der Schein weg sein - er gehoert zum Einstellen. */
+    ampelBlattZu();
+    await new Promise(r=>setTimeout(r,120));
+    erg.nachSchliessen={vor:hof.classList.contains('vor'),an:hof.classList.contains('an'),
+      halten:hof.classList.contains('halten')};
+    /* Auf der untersten Stufe gibt es nichts vorzufuehren. */
+    ampelKraftSetzen(0,false); ampelBlattAuf();
+    await new Promise(r=>setTimeout(r,700));
+    erg.stufeNullHof=hof.classList.contains('an')||hof.classList.contains('halten');
+    erg.stufeNullBlitzt=[...document.querySelectorAll('.aprobe')].some(e=>e.classList.contains('blitzt'));
+    ampelBlattZu(); ampelKraftSetzen(0,true);
+    return erg; });
+  console.log('INFO Ampelprobe: '+JSON.stringify(apr));
+  ok('Der Schein laege sonst unter dem Blatt',
+     apr.waereVerdeckt===true, 'Mitte y='+apr.scheinMitte+', Blattkante y='+apr.blattOben);
+  ok('Beim Einstellen liegt er deshalb vor dem Blatt', apr.hofVorn===true, String(apr.hofVorn));
+  ok('Beim Ziehen steht der Schein still',
+     apr.beimZiehen.halten===true&&apr.beimZiehen.an===false, JSON.stringify(apr.beimZiehen));
+  ok('Beim Loslassen blitzen die Proben',
+     apr.beimLoslassen.blitzt===true, String(apr.beimLoslassen.blitzt));
+  ok('Beim Loslassen schwillt der Schein an',
+     apr.beimLoslassen.an===true&&apr.beimLoslassen.halten===false, JSON.stringify(apr.beimLoslassen));
+  ok('Danach ist beides wieder ruhig',
+     apr.danach.an===false&&apr.danach.blitzt===false, JSON.stringify(apr.danach));
+  ok('Zugemacht bleibt kein Schein zurueck',
+     apr.nachSchliessen.vor===false&&apr.nachSchliessen.an===false&&apr.nachSchliessen.halten===false,
+     JSON.stringify(apr.nachSchliessen));
+  /* Blitzen soll die Probe auch auf Stufe 0 - nur der Schein im Bild bleibt
+     dort aus, den gibt es auf dieser Stufe nicht. */
+  ok('Auf der untersten Stufe bleibt der Raum dunkel',
+     apr.stufeNullHof===false, String(apr.stufeNullHof));
+  ok('Die Ampel blitzt trotzdem zur Probe',
+     apr.stufeNullBlitzt===true, String(apr.stufeNullBlitzt));
+
   /* Und die Frage, die zaehlt: waechst der Schein sichtbar mit der Stufe?
      Ein groesserer Weichzeichner allein macht ihn nur breiter und dabei
      flacher - gemessen sank die staerkste Abweichung dabei von 33 auf 23. */
