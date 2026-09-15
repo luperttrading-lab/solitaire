@@ -1500,6 +1500,72 @@ function kurzfassungGleich(proben,voll,erwartet){
   ok('Die Ampel blitzt trotzdem zur Probe',
      apr.stufeNullBlitzt===true, String(apr.stufeNullBlitzt));
 
+  /* Rot faerbt den GANZEN Bildschirm, Gruen und Gelb nur den Streifen unten
+     (Wunsch von Lutz, 15.09.2026: "bei Rot muss bitte der ganze Bildschirm
+     aufflackern"). Entscheidend ist die Form des Verlaufs: der rote wird nach
+     aussen STAERKER (wie der Warnblitz), der andere laeuft nach aussen aus.
+     Gemessen wird oben und unten getrennt - eine Pruefung auf die Klasse
+     allein saehe den Unterschied nicht. */
+  abschnitt='Ampelhof Rot';
+  await page.evaluate(()=>{ ampelBlattZu(); ampelKraftSetzen(10,false);
+    $('ampelhof').classList.remove('an','halten','rot','vor'); });
+  await sleep(350);
+  const rOben={x:0,y:0,width:390,height:200}, rUnten={x:0,y:640,width:390,height:200};
+  const rGO=PNG.sync.read(await page.screenshot({clip:rOben}));
+  const rGU=PNG.sync.read(await page.screenshot({clip:rUnten}));
+  const mittelAb=(a,g)=>{ let s=0; for(let k=0;k<a.data.length;k+=4)
+    s+=Math.abs(a.data[k]-g.data[k])+Math.abs(a.data[k+1]-g.data[k+1])+Math.abs(a.data[k+2]-g.data[k+2]);
+    return Math.round(s/(a.data.length/4)/3); };
+  async function hofMessen(fn){
+    await page.evaluate(fn); await sleep(150);
+    const o=PNG.sync.read(await page.screenshot({clip:rOben}));
+    const u=PNG.sync.read(await page.screenshot({clip:rUnten}));
+    const w={oben:mittelAb(o,rGO),unten:mittelAb(u,rGU)};
+    await page.evaluate(()=>{ $('ampelhof').classList.remove('an','halten');
+      $('warnblitz').classList.remove('an'); });
+    await sleep(320);
+    return w;
+  }
+  const hGruen=await hofMessen(()=>ampelHof('ok'));
+  const hGelb =await hofMessen(()=>ampelHof('warn'));
+  const hRot  =await hofMessen(()=>ampelHof('bad'));
+  const hWarn =await hofMessen(()=>{ settings.alarm=true; warnblitz(true); });
+  console.log('INFO Ampelhof Rot: gruen='+JSON.stringify(hGruen)+' gelb='+JSON.stringify(hGelb)
+    +' rot='+JSON.stringify(hRot)+' warnblitz='+JSON.stringify(hWarn));
+  ok('Gruen bleibt unten, oben passiert nichts',
+     hGruen.oben===0&&hGruen.unten>4, JSON.stringify(hGruen));
+  ok('Gelb bleibt unten, oben passiert nichts',
+     hGelb.oben===0&&hGelb.unten>4, JSON.stringify(hGelb));
+  ok('Rot faerbt auch den oberen Bildschirm',
+     hRot.oben>20, JSON.stringify(hRot));
+  /* Es soll sich anfuehlen wie der Warnblitz, den Lutz von frueher kennt. */
+  ok('Rot ist etwa so kraeftig wie der Warnblitz',
+     Math.abs(hRot.oben-hWarn.oben)<=hWarn.oben*0.4,
+     'rot oben '+hRot.oben+' gegen Warnblitz oben '+hWarn.oben);
+  const rKl=await page.evaluate(async()=>{
+    const e=$('ampelhof'), erg={};
+    ampelHof('bad'); erg.beiRot=e.classList.contains('rot');
+    await new Promise(r=>setTimeout(r,60));
+    e.classList.remove('an'); ampelHof('ok'); erg.beiGruen=e.classList.contains('rot');
+    e.classList.remove('an','halten');
+    /* Unterhalb der Einsatzstufe bleibt auch Rot aus - wer nichts einstellt,
+       merkt nichts, und der Warnblitz kommt dort ohnehin weiter. */
+    ampelKraftSetzen(1,false); ampelHof('bad');
+    erg.unterhalb=e.classList.contains('an')||e.classList.contains('halten');
+    /* Lief der Warnblitz gerade, tritt Rot weiter zurueck. */
+    ampelKraftSetzen(10,false); e.classList.remove('an','halten');
+    warnblitzZeit=Date.now(); ampelHof('bad');
+    erg.hinterWarnblitz=e.classList.contains('an');
+    warnblitzZeit=0; e.classList.remove('an','halten','rot');
+    ampelKraftSetzen(0,true);
+    return erg; });
+  console.log('INFO Ampelhof Rot Klassen: '+JSON.stringify(rKl));
+  ok('Die rote Form wird gesetzt und wieder abgelegt',
+     rKl.beiRot===true&&rKl.beiGruen===false, JSON.stringify(rKl));
+  ok('Unter der Einsatzstufe bleibt auch Rot aus', rKl.unterhalb===false, String(rKl.unterhalb));
+  ok('Nach einem Warnblitz tritt Rot weiterhin zurueck',
+     rKl.hinterWarnblitz===false, String(rKl.hinterWarnblitz));
+
   /* Und die Frage, die zaehlt: waechst der Schein sichtbar mit der Stufe?
      Ein groesserer Weichzeichner allein macht ihn nur breiter und dabei
      flacher - gemessen sank die staerkste Abweichung dabei von 33 auf 23. */

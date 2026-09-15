@@ -321,6 +321,15 @@ header .boardname:active{background:var(--panel2)}
   background:radial-gradient(ellipse 120% 55% at 50% 82%,var(--ahoffarbe,transparent) 0%,transparent 64%)}
 #ampelhof.an{animation:ampelhof .8s ease-out 1}
 /* Beim Ziehen steht er still statt bei jedem Reglerschritt neu anzulaufen. */
+/* ROT bekommt den ganzen Bildschirm, nicht den schmalen Streifen unten
+   (Wunsch von Lutz, 15.09.2026). Dieselbe Form und dieselbe Kurve wie der
+   Warnblitz - nach aussen STAERKER werdend, das ist es, was den Schirm
+   flackern laesst; der Hof von Gruen und Gelb laeuft dagegen nach aussen
+   aus und bleibt unten. Gruen und Gelb bleiben, wie sie sind. */
+#ampelhof.rot{background:radial-gradient(circle at 50% 62%,
+  var(--rot1,transparent) 0%,var(--rot2,transparent) 60%,var(--rot3,transparent) 100%)}
+#ampelhof.rot.an{animation:warnblitz .62s ease-out 1}
+@media (prefers-reduced-motion:reduce){#ampelhof.rot.an{animation-duration:1.1s}}
 #ampelhof.halten{opacity:1;transition:opacity .18s}
 /* Beim Einstellen liegt der Schein UEBER dem Blatt. Sein Zentrum sitzt bei
    82 % der Hoehe, das Blatt beginnt bei 57 % - unter dem Blatt war er
@@ -503,7 +512,7 @@ header .boardname:active{background:var(--panel2)}
 
 <script>
 'use strict';
-const APP_VERSION='1.45';
+const APP_VERSION='1.46';
 /* =========================================================================
    Kern: Bretter, Züge, Symmetrien, Paritäts-Schranke, Solver
    (als Fabrik, damit derselbe Code im Web Worker läuft)
@@ -1438,7 +1447,7 @@ function setStatus(text,cls,linkText,linkFn,note,kurz){
        Statuszeile: rote Meldungen wie "Dieser Stein kann nicht springen"
        duerfen den Raum nicht aufleuchten lassen. Bei Rot laesst er dem
        Warnblitz den Vortritt - der kommt aus derselben Bewertung. */
-    if(!(cls==='bad'&&warnblitzGleich())) ampelHof(AMPEL_FARBEN[cls]); }
+    ampelHof(cls); }
   const saeule=document.createElement('span'); saeule.className='saeule';
   const anker=document.createElement('span'); anker.className='anker'; anker.textContent=ankerText(); saeule.appendChild(anker);
   const k=document.createElement('span'); k.className='kurz'; k.textContent=kurzT;
@@ -2066,14 +2075,30 @@ function ampelKraftSetzen(n,speichern){
    Verstaerkung, sondern Matsch. */
 let ampelHofTimer=0;
 const AMPEL_FARBEN={bad:'224,87,74',warn:'217,167,44',ok:'63,174,106'};
+/* Die drei Stuetzstellen des roten Vollbilds - dieselben Verhaeltnisse wie
+   beim Warnblitz (0,30 / 0,55 / 0,75), mit der Staerke der Stufe skaliert. */
+const ROT_STUFEN=[0.30,0.55,0.75];
 function ampelHofFarbe(cls,staerke){
   const rgb=AMPEL_FARBEN[cls]||AMPEL_FARBEN.ok;
   return 'rgba('+rgb+','+(0.30*staerke).toFixed(3)+')';
 }
+/* Rot faerbt den ganzen Schirm, Gruen und Gelb nur den Streifen unten. */
+function ampelHofSetzen(e,cls,staerke){
+  const rot=cls==='bad';
+  e.classList.toggle('rot',rot);
+  if(rot) ROT_STUFEN.forEach((v,i)=>
+    e.style.setProperty('--rot'+(i+1),'rgba('+AMPEL_FARBEN.bad+','+(v*staerke).toFixed(3)+')'));
+  else e.style.setProperty('--ahoffarbe',ampelHofFarbe(cls,staerke));
+}
 function ampelHof(cls){
   const w=ampelWerte(ampelStufe()); if(!(w.bild>0)) return;
+  /* Die Sperre sitzt HIER und nicht an der Aufrufstelle: seit Rot den ganzen
+     Schirm faerbt, waeren zwei rote Vollbilder uebereinander wirklich Matsch,
+     und eine Sperre, die nur an einer Stelle steht, deckt nicht alle Wege ab
+     (gefunden, weil die Pruefung ampelHof direkt rief - v1.46). */
+  if(cls==='bad'&&warnblitzGleich()) return;
   const e=$('ampelhof'); if(!e) return;
-  e.style.setProperty('--ahoffarbe',ampelHofFarbe(cls,w.bild));
+  ampelHofSetzen(e,cls,w.bild);
   e.classList.remove('halten');
   e.classList.remove('an'); void e.offsetWidth; e.classList.add('an');
   clearTimeout(ampelHofTimer); ampelHofTimer=setTimeout(()=>e.classList.remove('an'),900);
@@ -2086,7 +2111,7 @@ function ampelHofHalten(cls){
   clearTimeout(ampelHofTimer);
   e.classList.remove('an');
   if(!(w.bild>0)){ e.classList.remove('halten'); return; }
-  e.style.setProperty('--ahoffarbe',ampelHofFarbe(cls,w.bild));
+  ampelHofSetzen(e,cls,w.bild);
   e.classList.add('halten');
   ampelHofTimer=setTimeout(()=>e.classList.remove('halten'),1100);
 }
