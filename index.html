@@ -331,11 +331,16 @@ header .boardname:active{background:var(--panel2)}
 #ampelhof.rot.an{animation:warnblitz .62s ease-out 1}
 @media (prefers-reduced-motion:reduce){#ampelhof.rot.an{animation-duration:1.1s}}
 #ampelhof.halten{opacity:1;transition:opacity .18s}
-/* Schon probierte Zuege: duenner als die volle Markierung (4 gegen 7 px)
-   und halb durchsichtig - sie sollen daneben bestehen, nicht mit ihr
-   konkurrieren. */
-.probiert{stroke:#e0574a;stroke-width:4;stroke-linecap:round;fill:none;opacity:.5;stroke-dasharray:9 7}
-.probiertZiel{fill:none;stroke:#e0574a;stroke-width:3;opacity:.42}
+/* Schon probierte Zuege. Die erste Fassung war mit opacity .5 und 4 px zu
+   vorsichtig - Lutz am 15.09.2026: "man kann sie kaum erkennen". Die Sorge,
+   sie koennten mit der vollen Markierung konkurrieren, war die falsche
+   Abwaegung: gegen ein Brett voller bunter Murmeln muss ein Hinweis sich
+   behaupten, und die Markierung steht ohnehin nur zwei Sekunden lang
+   daneben. Jetzt kraeftigeres Rot (#ff4436 statt #e0574a), 6 statt 4 px und
+   fast voll deckend; der gestrichelte Verlauf haelt sie trotzdem von der
+   durchgezogenen vollen Markierung unterscheidbar. */
+.probiert{stroke:#ff4436;stroke-width:6;stroke-linecap:round;fill:none;opacity:.92;stroke-dasharray:10 7}
+.probiertZiel{fill:none;stroke:#ff4436;stroke-width:4.5;opacity:.85}
 /* Beim Einstellen liegt der Schein UEBER dem Blatt. Sein Zentrum sitzt bei
    82 % der Hoehe, das Blatt beginnt bei 57 % - unter dem Blatt war er
    also vollstaendig verdeckt und beim Einstellen nicht zu sehen (gemessen:
@@ -518,7 +523,7 @@ header .boardname:active{background:var(--panel2)}
 
 <script>
 'use strict';
-const APP_VERSION='1.47';
+const APP_VERSION='1.48';
 /* =========================================================================
    Kern: Bretter, Züge, Symmetrien, Paritäts-Schranke, Solver
    (als Fabrik, damit derselbe Code im Web Worker läuft)

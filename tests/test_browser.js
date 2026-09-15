@@ -1742,13 +1742,24 @@ function kurzfassungGleich(proben,voll,erwartet){
     game.markAus=true; renderOverlay(); });
   await sleep(300);
   const pzJetzt=PNG.sync.read(await page.screenshot({clip:pzBox}));
-  let pzRot=0;
+  let pzRot=0, pzKraeftig=0, pzMax=0;
   for(let k=0;k<pzJetzt.data.length;k+=4){
     const dr=pzJetzt.data[k]-pzGrund.data[k];
-    if(dr>18&&pzJetzt.data[k]>pzJetzt.data[k+1]+30) pzRot++;
+    if(dr>18&&pzJetzt.data[k]>pzJetzt.data[k+1]+30){
+      pzRot++; if(dr>100) pzKraeftig++; if(dr>pzMax)pzMax=dr; }
   }
-  console.log('INFO Probierte Zuege sichtbar: '+pzRot+' rote Bildpunkte');
-  ok('Der Strich ist wirklich zu sehen', pzRot>120, pzRot+' rote Bildpunkte');
+  console.log('INFO Probierte Zuege sichtbar: '+pzRot+' rote Bildpunkte, davon '
+    +pzKraeftig+' kraeftig, staerkster '+pzMax);
+  ok('Der Strich ist wirklich zu sehen', pzRot>300, pzRot+' rote Bildpunkte');
+  /* Die Flaeche allein reicht als Pruefgroesse nicht: v1.47 hatte Striche in
+     der richtigen Groesse, nur mit opacity .5 - Lutz sah sie kaum. Der
+     MITTELWERT taugt auch nicht: er sinkt, sobald die Flaeche waechst, weil
+     mehr weiche Randpunkte hineinzaehlen (im Test 97 gegen 129 bei derselben
+     Farbe, nur mehr Strichen). Gezaehlt wird deshalb, wie viele Punkte
+     WIRKLICH kraeftig sind - bei der alten Fassung war der staerkste ueberhaupt
+     nur 84, also keiner ueber 100. */
+  ok('Und kraeftig genug, um aufzufallen',
+     pzKraeftig>200&&pzMax>=150, pzKraeftig+' kraeftige Punkte, staerkster '+pzMax);
   await page.evaluate(()=>{ settings.autoJump=true; newGame('english'); });
 
   abschnitt='Migration';
