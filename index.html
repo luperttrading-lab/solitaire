@@ -320,6 +320,8 @@ header .boardname:active{background:var(--panel2)}
 #ampelhof{position:fixed;inset:0;z-index:12;pointer-events:none;opacity:0;
   background:radial-gradient(ellipse 120% 55% at 50% 82%,var(--ahoffarbe,transparent) 0%,transparent 64%)}
 #ampelhof.an{animation:ampelhof .8s ease-out 1}
+/* Beim Ziehen steht er still statt bei jedem Reglerschritt neu anzulaufen. */
+#ampelhof.halten{opacity:1;transition:opacity .18s}
 @keyframes ampelhof{0%{opacity:0}22%{opacity:1}58%{opacity:.34}100%{opacity:0}}
 @media (prefers-reduced-motion:reduce){#ampelhof.an{animation-duration:1.4s}}
 #ampelBlatt{position:fixed;left:0;right:0;bottom:0;z-index:22;background:var(--panel);border-radius:22px 22px 0 0;
@@ -483,7 +485,7 @@ header .boardname:active{background:var(--panel2)}
       <span class="aprobe"><b class="r"></b><b class="g"></b><b class="gr an"></b></span>
     </div>
     <div id="ampelStufe"></div>
-    <input type="range" id="ampelRegler" min="0" max="4" step="1" value="0" aria-label="Leuchtstärke der Ampel">
+    <input type="range" id="ampelRegler" min="0" max="10" step="1" value="0" aria-label="Leuchtstärke der Ampel">
   </div>
   <div class="fuss"><button class="btn primary" id="ampelClose">Fertig</button></div>
 </div>
@@ -491,7 +493,7 @@ header .boardname:active{background:var(--panel2)}
 
 <script>
 'use strict';
-const APP_VERSION='1.43';
+const APP_VERSION='1.44';
 /* =========================================================================
    Kern: Bretter, Züge, Symmetrien, Paritäts-Schranke, Solver
    (als Fabrik, damit derselbe Code im Web Worker läuft)
@@ -772,7 +774,7 @@ const Store={
   set(k,v){ try{ localStorage.setItem('solitaire.'+k,JSON.stringify(v)); }catch(e){} },
   del(k){ try{ localStorage.removeItem('solitaire.'+k); }catch(e){} }
 };
-const settings=Object.assign({board:'english',theme:'glas',boardLook:'holz',pegStyle:'glas',pegColor:'bunt',autoJump:true,showTargets:true,freeStart:false,sound:true,trainer:true,marks:false,strategy:true,alarm:true,alarmTon:'gong',funkeln:true,ampelKraft:0},Store.get('settings',{}));
+const settings=Object.assign({board:'english',theme:'glas',boardLook:'holz',pegStyle:'glas',pegColor:'bunt',autoJump:true,showTargets:true,freeStart:false,sound:true,trainer:true,marks:false,strategy:true,alarm:true,alarmTon:'gong',funkeln:true,ampelKraft:0,ampelSkala:0},Store.get('settings',{}));
 function saveSettings(){ Store.set('settings',settings); }
 /* Einmalige Umstellung: Trainer und Strategie-Hinweise sind ab Werk an. Wer
    die App vorher installiert hatte, trug den alten Stand (strategy:false) in
@@ -2010,41 +2012,74 @@ statusEl.addEventListener('click',e=>{ /* Ein Druck auf eine Aktion ist keine Au
    selbst, dann der Hof darum, und die hoechste legt zusaetzlich einen Schein
    ueber das Bild. Den kennt Rot vom Warnblitz schon; hier bekommen ihn alle
    drei Farben, damit es einheitlich ist (Wunsch von Lutz, 15.09.2026). */
-/* Drei Groessen je Stufe, nicht eine. Ein groesserer Weichzeichner allein
-   macht den Schein nur BREITER und dabei flacher - gemessen: von Stufe 0 auf 4
-   sank die staerkste Abweichung von 33 auf 23, obwohl die Flaeche wuchs. Es
-   sah diffuser aus statt kraeftiger. "dicht" (der spread des Schattens) haelt
-   den Kern zusammen, "hof" ist der weite Schein darum. */
-const AMPEL_STUFEN=[
-  {schein:8,  dicht:0,   hof:0,  hintergrund:false, name:'Wie bisher'},
-  {schein:11, dicht:1.5, hof:8,  hintergrund:false, name:'Etwas kräftiger'},
-  {schein:15, dicht:3,   hof:16, hintergrund:false, name:'Kräftig'},
-  {schein:19, dicht:4.5, hof:26, hintergrund:false, name:'Sehr kräftig'},
-  {schein:24, dicht:6,   hof:36, hintergrund:true,  name:'Mit Schein im Bild'}
-];
-function ampelStufe(){ const n=settings.ampelKraft; return (n>=0&&n<AMPEL_STUFEN.length)?n:0; }
-function ampelKraftSetzen(n,speichern){
-  n=Math.max(0,Math.min(AMPEL_STUFEN.length-1,n|0));
-  settings.ampelKraft=n; if(speichern) saveSettings();
-  const st=AMPEL_STUFEN[n], w=document.documentElement.style;
-  w.setProperty('--aschein',st.schein+'px');
-  w.setProperty('--adicht',st.dicht+'px');
-  w.setProperty('--ahof',st.hof+'px');
-  const e=$('ampelStufe'); if(e) e.textContent=st.name;
-  const r=$('ampelRegler'); if(r&&+r.value!==n) r.value=String(n);
+/* Drei Groessen, fliessend gerechnet statt in festen Stufen (v1.44). Der
+   Regler hat elf Positionen; Lutz wollte den grossen Schein im Bild auch
+   SCHWAECHER haben, nicht nur an oder aus (15.09.2026).
+
+   Warum drei Groessen und nicht eine: Der erste Entwurf drehte nur am
+   Weichzeichner - und wurde dadurch breiter, aber FLACHER. Gemessen sank die
+   staerkste Abweichung von unten nach oben von 33 auf 23, obwohl die Flaeche
+   wuchs; es sah diffuser aus statt kraeftiger. "dicht" (der spread des
+   Schattens) haelt den Kern zusammen, "hof" ist der weite Schein darum. */
+const AMPEL_MAX=10;
+/* Der Schein im Bild setzt bei 3 von 10 ein und waechst von dort auf voll -
+   darunter bleibt der Raum dunkel, sonst flackert schon die kleinste Stufe
+   ueber den ganzen Bildschirm. */
+const AMPEL_HOF_AB=3;
+function ampelWerte(n){
+  n=Math.max(0,Math.min(AMPEL_MAX,n|0));
+  const t=n/AMPEL_MAX;
+  /* Bei AMPEL_HOF_AB soll schon etwas zu sehen sein, nicht erst eine Stufe
+     spaeter - deshalb +1 in Zaehler und Nenner. Mit (n-ab)/(max-ab) waere die
+     Einsatzstufe rechnerisch genau 0 und damit wirkungslos. */
+  const hofAn=n<AMPEL_HOF_AB?0:(n-AMPEL_HOF_AB+1)/(AMPEL_MAX-AMPEL_HOF_AB+1);
+  return {n:n, schein:8+16*t, dicht:6*t, hof:36*t, bild:hofAn};
 }
-/* Der Schein im Bild laeuft nur auf der hoechsten Stufe und nur zum Ergebnis.
-   Bei Rot tritt er hinter den Warnblitz zurueck - zwei rote Blitze
-   uebereinander waeren keine Verstaerkung, sondern Matsch. */
+function ampelName(n){
+  if(n===0) return 'Wie bisher';
+  const w=ampelWerte(n);
+  return 'Stufe '+n+' von '+AMPEL_MAX+(w.bild>0?' · Schein im Bild':'');
+}
+function ampelStufe(){ const n=settings.ampelKraft; return (n>=0&&n<=AMPEL_MAX)?(n|0):0; }
+function ampelKraftSetzen(n,speichern){
+  const w=ampelWerte(n);
+  settings.ampelKraft=w.n; if(speichern) saveSettings();
+  const st=document.documentElement.style;
+  st.setProperty('--aschein',w.schein.toFixed(1)+'px');
+  st.setProperty('--adicht',w.dicht.toFixed(1)+'px');
+  st.setProperty('--ahof',w.hof.toFixed(1)+'px');
+  const e=$('ampelStufe'); if(e) e.textContent=ampelName(w.n);
+  const r=$('ampelRegler'); if(r&&+r.value!==w.n) r.value=String(w.n);
+}
+/* Der Schein im Bild laeuft nur zum Ergebnis. Bei Rot tritt er hinter den
+   Warnblitz zurueck - zwei rote Blitze uebereinander waeren keine
+   Verstaerkung, sondern Matsch. */
 let ampelHofTimer=0;
-function ampelHof(farbe){
-  if(!AMPEL_STUFEN[ampelStufe()].hintergrund) return;
+const AMPEL_FARBEN={bad:'224,87,74',warn:'217,167,44',ok:'63,174,106'};
+function ampelHofFarbe(cls,staerke){
+  const rgb=AMPEL_FARBEN[cls]||AMPEL_FARBEN.ok;
+  return 'rgba('+rgb+','+(0.30*staerke).toFixed(3)+')';
+}
+function ampelHof(cls){
+  const w=ampelWerte(ampelStufe()); if(!(w.bild>0)) return;
   const e=$('ampelhof'); if(!e) return;
-  e.style.setProperty('--ahoffarbe',farbe);
+  e.style.setProperty('--ahoffarbe',ampelHofFarbe(cls,w.bild));
+  e.classList.remove('halten');
   e.classList.remove('an'); void e.offsetWidth; e.classList.add('an');
   clearTimeout(ampelHofTimer); ampelHofTimer=setTimeout(()=>e.classList.remove('an'),900);
 }
-const AMPEL_FARBEN={bad:'rgba(224,87,74,.30)',warn:'rgba(217,167,44,.28)',ok:'rgba(63,174,106,.28)'};
+/* Beim Ziehen steht der Schein STILL, statt bei jedem Reglerschritt neu
+   anzulaufen - sonst flackert er, und man sieht gerade nicht, wie stark er
+   ist. Losgelassen blendet er nach kurzer Zeit aus. */
+function ampelHofHalten(cls){
+  const w=ampelWerte(ampelStufe()), e=$('ampelhof'); if(!e) return;
+  clearTimeout(ampelHofTimer);
+  e.classList.remove('an');
+  if(!(w.bild>0)){ e.classList.remove('halten'); return; }
+  e.style.setProperty('--ahoffarbe',ampelHofFarbe(cls,w.bild));
+  e.classList.add('halten');
+  ampelHofTimer=setTimeout(()=>e.classList.remove('halten'),1100);
+}
 function ampelBlattAuf(){
   ampelKraftSetzen(ampelStufe(),false);
   const e=$('ampelBlatt'); if(e) e.classList.add('on');
@@ -2052,9 +2087,9 @@ function ampelBlattAuf(){
 function ampelBlattZu(){ const e=$('ampelBlatt'); if(e) e.classList.remove('on'); }
 $('ampelClose').addEventListener('click',ampelBlattZu);
 $('ampelRegler').addEventListener('input',e=>{
-  const n=+e.target.value; ampelKraftSetzen(n,true);
+  ampelKraftSetzen(+e.target.value,true);
   /* Sofort sehen, was die Stufe tut - sonst ist der Name nur ein Wort. */
-  if(AMPEL_STUFEN[n].hintergrund) ampelHof(AMPEL_FARBEN.ok);
+  ampelHofHalten('ok');
 });
 /* Langer Druck auf die Ampel. Ein Wisch darf ihn nicht ausloesen, deshalb
    bricht eine Bewegung ueber 10 px ab. */
@@ -2072,6 +2107,18 @@ statusEl.addEventListener('pointermove',e=>{
 });
 ['pointerup','pointercancel','pointerleave'].forEach(t=>
   statusEl.addEventListener(t,()=>{ clearTimeout(ampelTimer); ampelStart=null; }));
+/* v1.43 hatte fuenf Stufen, v1.44 hat elf. Ein gespeicherter Wert von
+   damals meint eine andere Helligkeit als dieselbe Zahl heute: aus 4 (voll)
+   wuerde sonst 4 von 10, also gut die Haelfte. Die Umrechnung laeuft genau
+   einmal, gemerkt in settings.ampelSkala.
+   ACHTUNG: Sie MUSS hinter AMPEL_MAX stehen. Oben bei den settings gesetzt
+   lief sie in die temporale Totzone der const-Deklaration - gemessen wurde
+   aus einer gespeicherten 4 dann eine 0, der Nutzer haette seine Einstellung
+   verloren, und im Log stand nichts davon. */
+if(settings.ampelSkala!==2){
+  if(settings.ampelKraft>0) settings.ampelKraft=Math.round(settings.ampelKraft*AMPEL_MAX/4);
+  settings.ampelSkala=2; saveSettings();
+}
 ampelKraftSetzen(ampelStufe(),false);
 $('sheet').querySelector('.handle').addEventListener('click',closeSheet);
 $('btnResetStats').addEventListener('click',()=>{ Store.del('stats'); buildSheet(); toast('Bestleistungen gelöscht.'); });

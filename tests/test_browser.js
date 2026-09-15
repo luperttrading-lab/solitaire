@@ -1365,24 +1365,28 @@ function kurzfassungGleich(proben,voll,erwartet){
     /* Ein Wisch ueber das Brett darf den Regler nicht aufziehen. */
     erg.gewischt=await druck(700,40);
     ampelBlattZu();
-    erg.stufen=AMPEL_STUFEN.length;
-    erg.standard=AMPEL_STUFEN[0].schein===8&&AMPEL_STUFEN[0].dicht===0&&AMPEL_STUFEN[0].hof===0
-                 &&AMPEL_STUFEN[0].hintergrund===false;
-    /* Nur die hoechste Stufe legt einen Schein ueber das Bild. */
-    erg.hintergrund=AMPEL_STUFEN.map(s2=>s2.hintergrund);
+    erg.stufen=AMPEL_MAX;
+    erg.reglerMax=$('ampelRegler').max;
+    const w0=ampelWerte(0);
+    erg.standard=w0.schein===8&&w0.dicht===0&&w0.hof===0&&w0.bild===0;
+    /* Der Schein im Bild ist kein Schalter mehr, sondern waechst mit
+       (Wunsch von Lutz, 15.09.2026: "auch ein bisschen weniger als jetzt,
+       trotzdem der grosse Schein"). */
+    erg.bild=[]; for(let n=0;n<=AMPEL_MAX;n++) erg.bild.push(+ampelWerte(n).bild.toFixed(3));
+    erg.namen=[ampelName(0),ampelName(2),ampelName(AMPEL_HOF_AB),ampelName(AMPEL_MAX)];
     /* Probe und echte Ampel muessen denselben Schein tragen. */
-    setStatus('1 Stein bleibt erreichbar','ok'); ampelKraftSetzen(3,false);
+    setStatus('1 Stein bleibt erreichbar','ok'); ampelKraftSetzen(7,false);
     $('ampelBlatt').classList.add('on');
     erg.echt=getComputedStyle(statusEl.querySelector('.dot b.gr')).boxShadow;
     erg.probe=getComputedStyle(document.querySelectorAll('.aprobe')[2].querySelector('b.gr')).boxShadow;
     $('ampelBlatt').classList.remove('on');
     /* Der Regler zeigt, wo er steht. */
-    ampelKraftSetzen(2,false); erg.name=$('ampelStufe').textContent; erg.regler=$('ampelRegler').value;
+    ampelKraftSetzen(6,false); erg.name=$('ampelStufe').textContent; erg.regler=$('ampelRegler').value;
     /* Gespeichert wird die Wahl. */
-    ampelKraftSetzen(3,true); erg.gemerkt=(Store.get('settings',{})||{}).ampelKraft;
+    ampelKraftSetzen(7,true); erg.gemerkt=(Store.get('settings',{})||{}).ampelKraft;
     /* Bei Rot tritt der Hof hinter den Warnblitz zurueck - zwei rote Blitze
        uebereinander waeren Matsch, keine Verstaerkung. */
-    ampelKraftSetzen(4,false);
+    ampelKraftSetzen(AMPEL_MAX,false);
     $('ampelhof').classList.remove('an'); warnblitzZeit=Date.now();
     blitzAusstehend=Date.now(); setStatus('Bestenfalls 2 Steine','bad');
     await new Promise(r=>setTimeout(r,120));
@@ -1402,15 +1406,28 @@ function kurzfassungGleich(proben,voll,erwartet){
   ok('Langer Druck auf die Ampel oeffnet den Regler', ak.lang===true, String(ak.lang));
   ok('Ein kurzer Druck oeffnet ihn nicht', ak.kurz===false, String(ak.kurz));
   ok('Ein Wisch bricht den langen Druck ab', ak.gewischt===false, String(ak.gewischt));
-  ok('Fuenf Stufen', ak.stufen===5, String(ak.stufen));
+  ok('Elf Reglerpositionen', ak.stufen===10&&ak.reglerMax==='10',
+     ak.stufen+' / Regler bis '+ak.reglerMax);
   ok('Die unterste Stufe ist genau der alte Zustand', ak.standard===true,
      'Schein 8, dicht 0, Hof 0, kein Schein im Bild');
-  ok('Nur die hoechste Stufe legt einen Schein ueber das Bild',
-     JSON.stringify(ak.hintergrund)==='[false,false,false,false,true]', JSON.stringify(ak.hintergrund));
+  /* Der Schein im Bild ist abgestuft, nicht an/aus: unten nichts, dann acht
+     wachsende Staerken bis zur vollen. */
+  ok('Der Schein im Bild bleibt unten aus',
+     ak.bild.slice(0,3).every(v=>v===0), JSON.stringify(ak.bild.slice(0,3)));
+  ok('Er setzt schon bei seiner ersten Stufe sichtbar ein',
+     ak.bild[3]>0.1&&ak.bild[3]<0.2, String(ak.bild[3]));
+  ok('Und waechst von dort Schritt fuer Schritt auf voll',
+     ak.bild.slice(3).every((v,i,a)=>i===0||v>a[i-1])&&ak.bild[10]===1,
+     JSON.stringify(ak.bild.slice(3)));
+  ok('Der Name nennt den Schein im Bild, sobald es ihn gibt',
+     ak.namen[0]==='Wie bisher'&&!/Schein/.test(ak.namen[1])
+     &&/Schein im Bild/.test(ak.namen[2])&&/Schein im Bild/.test(ak.namen[3]),
+     JSON.stringify(ak.namen));
   ok('Probe und echte Ampel tragen denselben Schein', ak.echt===ak.probe,
      ak.echt+'  gegen  '+ak.probe);
-  ok('Der Regler zeigt, wo er steht', ak.name==='Kräftig'&&ak.regler==='2', ak.name+' / '+ak.regler);
-  ok('Die Wahl wird gemerkt', ak.gemerkt===3, String(ak.gemerkt));
+  ok('Der Regler zeigt, wo er steht',
+     ak.name==='Stufe 6 von 10 · Schein im Bild'&&ak.regler==='6', ak.name+' / '+ak.regler);
+  ok('Die Wahl wird gemerkt', ak.gemerkt===7, String(ak.gemerkt));
   ok('Bei Rot tritt der Schein hinter den Warnblitz zurueck',
      ak.hofBeiRotMitBlitz===false, String(ak.hofBeiRotMitBlitz));
   ok('Bei Gruen kommt der Schein im Bild', ak.hofBeiGruen===true, String(ak.hofBeiGruen));
@@ -1430,7 +1447,7 @@ function kurzfassungGleich(proben,voll,erwartet){
     return PNG.sync.read(await page.screenshot({clip:akBox})); };
   const akGrund=await akBild(0);
   const akFlaeche=[], akSpitze=[];
-  for(const n of [1,2,3,4]){
+  for(const n of [2,4,7,10]){
     const bn=await akBild(n);
     let max=0,zahl=0;
     for(let k=0;k<bn.data.length;k+=4){
@@ -1447,6 +1464,47 @@ function kurzfassungGleich(proben,voll,erwartet){
      akFlaeche.every((v,i)=>i===0?v>200:v>akFlaeche[i-1]), JSON.stringify(akFlaeche));
   ok('Der Kern wird dabei nicht flauer',
      Math.min(...akSpitze)>=40, 'staerkste Abweichungen '+JSON.stringify(akSpitze));
+
+  /* Die Umstellung von der Fuenfer-Skala (v1.43) auf die Elfer (v1.44) MUSS
+     mit einem wirklich gespeicherten Wert geprueft werden, nicht nur mit dem
+     Standard. Genau daran haette es einmal gelegen: die Umrechnung stand
+     oben bei den settings, wo AMPEL_MAX noch in der temporalen Totzone
+     liegt. Mit Standardwert 0 laeuft die Zeile nie (der Filter davor ist
+     falsch) und alles wirkt heil - wer aber eine Stufe gespeichert hatte,
+     bekam "ReferenceError: Cannot access AMPEL_MAX before initialization"
+     und die App startete GAR NICHT. Gemessen, nicht vermutet. */
+  abschnitt='Ampelskala-Umstellung';
+  {
+    const pm=await browser.newPage();
+    const kaputt=[]; pm.on('pageerror',e=>kaputt.push(String(e).split('\n')[0]));
+    await pm.setViewport({width:390,height:844});
+    await pm.evaluateOnNewDocument(()=>{ try{ localStorage.setItem('solitaire.settings',
+      JSON.stringify({ampelKraft:4,anGestellt:true})); }catch(e){} });
+    await pm.goto('file://'+path.resolve(__dirname,'..','index.html'),{waitUntil:'load'});
+    await sleep(1800);
+    const m=await pm.evaluate(()=>({
+      laeuft:typeof game!=='undefined'&&!!game.board,
+      kraft:typeof settings!=='undefined'?settings.ampelKraft:null,
+      skala:typeof settings!=='undefined'?settings.ampelSkala:null
+    })).catch(()=>({laeuft:false,kraft:null,skala:null}));
+    console.log('INFO Ampelskala: '+JSON.stringify(m)+' Fehler: '+(kaputt[0]||'keine'));
+    ok('Die App startet auch mit einer gespeicherten alten Stufe',
+       m.laeuft===true&&kaputt.length===0, JSON.stringify(m)+' / '+(kaputt[0]||'keine'));
+    ok('Die alte Vollstufe 4 wird zur neuen Vollstufe 10', m.kraft===10, String(m.kraft));
+    ok('Die Umstellung merkt sich, dass sie gelaufen ist', m.skala===2, String(m.skala));
+    await pm.close();
+    /* Gegenprobe: wer schon auf der neuen Skala steht, wird nicht noch einmal
+       umgerechnet - sonst wanderte die Einstellung bei jedem Start hoch. */
+    const pm2=await browser.newPage();
+    await pm2.setViewport({width:390,height:844});
+    await pm2.evaluateOnNewDocument(()=>{ try{ localStorage.setItem('solitaire.settings',
+      JSON.stringify({ampelKraft:6,ampelSkala:2,anGestellt:true})); }catch(e){} });
+    await pm2.goto('file://'+path.resolve(__dirname,'..','index.html'),{waitUntil:'load'});
+    await sleep(1600);
+    const m2=await pm2.evaluate(()=>settings.ampelKraft).catch(()=>null);
+    ok('Eine schon umgestellte Einstellung bleibt, wo sie ist', m2===6, String(m2));
+    await pm2.close();
+  }
 
   abschnitt='Migration';
   /* Trainer und Strategie-Hinweise sind ab Werk an. Ein geaenderter Standard
