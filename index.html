@@ -340,7 +340,7 @@ header .boardname:active{background:var(--panel2)}
    fast voll deckend; der gestrichelte Verlauf haelt sie trotzdem von der
    durchgezogenen vollen Markierung unterscheidbar. */
 .probiert{stroke:#ff4436;stroke-width:6;stroke-linecap:round;fill:none;opacity:.92;stroke-dasharray:10 7}
-.probiertZiel{fill:none;stroke:#ff4436;stroke-width:4.5;opacity:.85}
+.probiertEnde{fill:#ff4436;opacity:.9}
 /* Beim Einstellen liegt der Schein UEBER dem Blatt. Sein Zentrum sitzt bei
    82 % der Hoehe, das Blatt beginnt bei 57 % - unter dem Blatt war er
    also vollstaendig verdeckt und beim Einstellen nicht zu sehen (gemessen:
@@ -523,7 +523,7 @@ header .boardname:active{background:var(--panel2)}
 
 <script>
 'use strict';
-const APP_VERSION='1.48';
+const APP_VERSION='1.49';
 /* =========================================================================
    Kern: Bretter, Züge, Symmetrien, Paritäts-Schranke, Solver
    (als Fabrik, damit derselbe Code im Web Worker läuft)
@@ -1091,6 +1091,10 @@ function occ(){ return game.pegAt.map(v=>v>=0?1:0); }
 function pegCount(){ let n=0; for(const v of game.pegAt) if(v>=0) n++; return n; }
 function legalMovesFrom(i){ const a=game.pegAt; return game.board.moves.filter(m=>m.from===i&&a[m.from]>=0&&a[m.over]>=0&&a[m.to]<0); }
 function anyLegalMove(){ const a=game.pegAt; return game.board.moves.some(m=>a[m.from]>=0&&a[m.over]>=0&&a[m.to]<0); }
+/* Ein Tipp je Stellung: denselben Zug zweimal zeigen zu lassen ist ein Tipp.
+   Gerufen von ueberall, wo ein konkreter Zug verraten wird - dem Tipp-Knopf,
+   "Zurueck & Zug zeigen" und der Fehlersuche. */
+function tippZaehlen(){ if(game.tippKeys) game.tippKeys.add(stateKey()); }
 function stateKey(){ const [lo,hi]=CORE.fromArray(occ()); return CORE.key(lo,hi); }
 // bekannte beste Fortsetzung für die aktuelle Stellung (aus Suche oder Eröffnungsbuch)
 function currentLine(){ const k=stateKey(); if(game.line&&game.line.key===k&&game.line.path.length) return game.line; if(game.bookLine&&game.bookLine.key===k&&game.bookLine.path.length) return game.bookLine; return null; }
@@ -1298,7 +1302,14 @@ function renderOverlay(){
     const pux=pdx/pL, puy=pdy/pL;
     overlayLayer.appendChild(el('path',{class:'probiert',
       d:`M${pa.x+pux*(R_HOLE+6)} ${pa.y+puy*(R_HOLE+6)} L${pc.x-pux*(R_PEG+6)} ${pc.y-puy*(R_PEG+6)}`}));
-    overlayLayer.appendChild(el('circle',{class:'probiertZiel',cx:pc.x,cy:pc.y,r:R_PEG+4}));
+    /* Kleine Punkte an BEIDEN Enden statt eines Rings um das Zielfeld
+       (Lutz, 16.09.2026): Der Ring mit R_PEG+4 war so gross, dass er den
+       Blick auf sich zog und das Feld einrahmte, statt es lesbar zu lassen -
+       "sehr dominant, wo man nicht hin springen darf". Ein Punkt sagt
+       dasselbe und verdeckt nichts; zwei davon zeigen ausserdem, WOHER der
+       Versuch kam, was der einzelne Ring am Ziel gar nicht verriet. */
+    overlayLayer.appendChild(el('circle',{class:'probiertEnde',cx:pa.x,cy:pa.y,r:6.5}));
+    overlayLayer.appendChild(el('circle',{class:'probiertEnde',cx:pc.x,cy:pc.y,r:6.5}));
   });
   if(game.lastMove&&!game.markAus){ const m=game.board.moves[game.lastMove.mi]; const undo=game.lastMove.dir==='undo';
     // Markierung zeigt immer den Zug selbst (Start gestrichelt, Ziel Ring, geschlagener Stein Punkt) – beim Zurück mit ↶
@@ -1734,7 +1745,7 @@ function fmtNum(n){ return n<1000000?n.toLocaleString('de-DE'):(n/1e6).toFixed(1
 function requestHint(again){
   if(game.searching||game.finished||game.phase==='choose'||game.animating||game.pauseAn) return;
   /* Ein Tipp je Stellung. Denselben Tipp nochmal ansehen ist kein zweiter. */
-  if(game.tippKeys) game.tippKeys.add(stateKey());
+  tippZaehlen();
   const ev=game.evalRes; if(!again&&!currentLine()&&ev&&ev.key===stateKey()&&ev.complete&&ev.path.length){ game.line={key:ev.key,best:ev.best,path:ev.path.slice(),complete:true,nodes:ev.nodes,lb:ev.lb,ms:ev.ms}; }
   if(!again&&currentLine()){ game.hintOn=true; describeHint(); renderOverlay(); return; }
   const arr=occ(); const count=pegCount(); const lb=CORE.parityLowerBound(game.board,arr);
@@ -1866,6 +1877,9 @@ function findMistake(){
       const later=path.slice(1).some(mi=>{ const m=game.board.moves[mi]; return m.from===culprit.from&&m.to===culprit.to; });
       let cat='Struktur'; if(later) cat='Reihenfolge'; else if(better.over===culprit.over||better.from===culprit.from) cat='Falsche Richtung';
       const txt='Der entscheidende Zug war Zug '+(k+1)+' von '+n+' ('+cat+'): '+moveWords(culprit,pegs[k])+'. Besser war: '+moveWords(better,pegs[k])+'.';
+      /* Die Fehlersuche nennt den besseren Zug beim Namen - das ist ein Tipp
+         und wird als solcher gezaehlt, sonst haette man ihn hier umsonst. */
+      tippZaehlen();
       setStatus(txt,'bad',[['Dorthin zurück & Zug zeigen',()=>rewindTo(k,path)]],'Danach war 1 Stein nicht mehr erreichbar.','Zug '+(k+1)+' war entscheidend'); };
     if(onBook){ report(book.slice(k)); return; }
     setStatus('Suche den Fehler… prüfe Zug '+(k+1)+' von '+n,'', 'Abbrechen',()=>{ stopped=true; if(mistakeCancel) mistakeCancel(); mistakeCancel=null; setStatus('Suche abgebrochen.'); });
@@ -1986,7 +2000,12 @@ function showTrainer(){
   if(Date.now()<hinweisBis){ setTimeout(showTrainer,hinweisBis-Date.now()+30); return; }
   const prev=game.prevEval;
   if(settings.strategy&&!game.hintOn){ const adv=strategyAdvice(prev,ev);
-    if(adv){ setStatus('Strategischer Fehler – '+adv.cat+'. '+adv.why+' Besser: '+adv.betterTxt+'.','bad',[['Zurück & Zug zeigen',()=>{ game.showBetter={path:adv.path.slice()}; undo(); }]],'Jetzt bestenfalls '+adv.best+' Steine, vorher war 1 erreichbar.',KURZ_KLASSE[adv.cat]||'Dieser Zug kostet die Lösung');
+    /* Der konkrete bessere Zug steht NICHT mehr im Text (Lutz, 16.09.2026):
+       Er ist faktisch ein Tipp und wurde trotzdem nicht mitgezaehlt - damit
+       war die Tipp-Zahl am Ende der Partie nicht ehrlich. Die Fehlerklasse
+       und die Begruendung bleiben, das ist Analyse, kein Zug. Wer den Zug
+       sehen will, holt ihn ueber die Aktion - und die zaehlt. */
+    if(adv){ setStatus('Strategischer Fehler – '+adv.cat+'. '+adv.why,'bad',[['Zurück & Zug zeigen',()=>{ tippZaehlen(); game.showBetter={path:adv.path.slice()}; undo(); }]],'Jetzt bestenfalls '+adv.best+' Steine, vorher war 1 erreichbar.',KURZ_KLASSE[adv.cat]||'Dieser Zug kostet die Lösung');
       /* Der Alarm beim Verlust der Loesung laeuft schon - der kurze Stups
          wuerde ihn nur zudecken. */
       if(Date.now()-alarmZuletzt>alarmDauer()) Sound.bad();
@@ -2010,8 +2029,8 @@ function showTrainer(){
   const adv=lost?strategyAdvice(prev,ev):null;
   const t='Trainer: ab hier bestenfalls '+ev.best+' Steine'+(nf>1?' ('+nf+' verschiedene Endbilder)':nf===1?' (ein einziges Endbild)':'')+'.'
     +(lost?' Der letzte Zug hat das gekostet.':'')
-    +(adv?' '+adv.cat+': '+adv.why+' Besser: '+adv.betterTxt+'.':'');
-  const aktion=adv?[['Zurück & Zug zeigen',()=>{ game.showBetter={path:adv.path.slice()}; undo(); }]]
+    +(adv?' '+adv.cat+': '+adv.why:'');
+  const aktion=adv?[['Zurück & Zug zeigen',()=>{ tippZaehlen(); game.showBetter={path:adv.path.slice()}; undo(); }]]
     :lost?[['Zurück',()=>undo()]]:[['Fehler suchen',()=>findMistake()]];
   setStatus(t,'bad',aktion,note,adv?(KURZ_KLASSE[adv.cat]||'Dieser Zug kostet die Lösung')
     :'Bestenfalls '+ev.best+' Steine'+(lost?' – Zug hat es gekostet':''));

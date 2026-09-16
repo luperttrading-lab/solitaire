@@ -218,7 +218,15 @@ function kurzfassungGleich(proben,voll,erwartet){
   for(const mi of legal2){ await page.evaluate(i=>{ applyMove(game.board.moves[i],true); render(); afterMove(true); },mi); await page.waitForFunction(()=>!game.evaluating,{timeout:20000}); await sleep(100); s=await state();
     if(/Strategischer Fehler/.test(s.status)){ adv=s.status; break; } await page.evaluate(()=>undo()); await sleep(1300); await page.waitForFunction(()=>!game.animating&&!game.evaluating,{timeout:20000}); }
   console.log('INFO Strategie: '+adv);
-  ok('Strategie-Hinweis mit Klasse, Begründung und besserem Zug', !!adv&&/(Reihenfolge|Falsche Richtung|Stein gestrandet|Struktur)/.test(adv)&&/Besser: /.test(adv)&&/Zurück & Zug zeigen/.test(adv));
+  ok('Strategie-Hinweis mit Klasse, Begruendung und Aktion',
+     !!adv&&/(Reihenfolge|Falsche Richtung|Stein gestrandet|Struktur)/.test(adv)
+     &&/Zurück & Zug zeigen/.test(adv), (adv||'').slice(0,120));
+  /* Der konkrete bessere Zug steht seit v1.49 NICHT mehr im Text: er ist
+     faktisch ein Tipp und wurde trotzdem nicht mitgezaehlt, womit die
+     Tipp-Zahl am Ende der Partie nicht ehrlich war (Lutz, 16.09.2026). Die
+     Klasse und die Begruendung bleiben - das ist Analyse, kein Zug. */
+  ok('Der bessere Zug wird nicht ungefragt verraten',
+     !!adv&&!/Besser:/.test(adv), (adv||'').slice(0,120));
   await page.evaluate(()=>{ [...statusEl.querySelectorAll('.link')].find(l=>/Zurück & Zug/.test(l.textContent)).click(); }); await sleep(1400); await page.waitForFunction(()=>!game.animating,{timeout:20000}); await sleep(200);
   const shown=await page.evaluate(()=>({hint:game.hintOn&&!!document.querySelector('#board .hint-arrow'),status:statusFullText(),moves:game.history.length}));
   console.log('INFO nach Zurück & Zug zeigen: '+JSON.stringify(shown));
@@ -632,8 +640,8 @@ function kurzfassungGleich(proben,voll,erwartet){
   console.log('INFO Lutz-Zug nur mit Trainer: '+JSON.stringify(ohneStrat));
   ok('Trainer nennt die Fehlerklasse auch ohne Strategie-Hinweise',
      /Falsche Richtung/.test(ohneStrat.text), ohneStrat.text.slice(0,140));
-  ok('Trainer nennt auch ohne Strategie-Hinweise den besseren Zug',
-     /Besser:/.test(ohneStrat.text), ohneStrat.text.slice(0,160));
+  ok('Auch der Trainer verraet den Zug nicht ungefragt',
+     !/Besser:/.test(ohneStrat.text), ohneStrat.text.slice(0,160));
   ok('Kurzfassung bleibt bei hoechstens 32 Zeichen', ohneStrat.kurz.length<=32, ohneStrat.kurz);
   await page.evaluate(()=>{ settings.strategy=true; renderStrategyBtn(); newGame('english'); });
 
@@ -1761,6 +1769,72 @@ function kurzfassungGleich(proben,voll,erwartet){
   ok('Und kraeftig genug, um aufzufallen',
      pzKraeftig>200&&pzMax>=150, pzKraeftig+' kraeftige Punkte, staerkster '+pzMax);
   await page.evaluate(()=>{ settings.autoJump=true; newGame('english'); });
+
+  /* Wer den besseren Zug sehen will, holt ihn - und das zaehlt als Tipp.
+     Vorher stand er ungefragt im Text und kostete nichts; die Tipp-Zahl am
+     Ende der Partie war damit nicht ehrlich (Lutz, 16.09.2026). */
+  abschnitt='Tipp zaehlt';
+  const tz=await page.evaluate(async()=>{
+    const erg={};
+    settings.strategy=true; settings.trainer=true; settings.autoJump=false;
+    newGame('english');
+    await new Promise(r=>setTimeout(r,80));
+    erg.amAnfang=zaehlerZahlen().t;
+    /* Ein Zug, dann den Weg ueber die Aktion nehmen. */
+    const m=game.board.moves.find(m=>game.pegAt[m.from]>=0&&game.pegAt[m.over]>=0&&game.pegAt[m.to]<0);
+    applyMove(m,true); render();
+    tippZaehlen();                       // das tut die Aktion "Zurueck & Zug zeigen"
+    erg.nachAktion=zaehlerZahlen().t;
+    /* Zweimal in derselben Stellung bleibt ein Tipp. */
+    tippZaehlen();
+    erg.nochmal=zaehlerZahlen().t;
+    /* Eine andere Stellung zaehlt eigenstaendig. */
+    const m2=game.board.moves.find(m=>game.pegAt[m.from]>=0&&game.pegAt[m.over]>=0&&game.pegAt[m.to]<0);
+    applyMove(m2,true); render(); tippZaehlen();
+    erg.andereStellung=zaehlerZahlen().t;
+    newGame('english');
+    erg.nachNeuemSpiel=zaehlerZahlen().t;
+    settings.autoJump=true;
+    return erg; });
+  console.log('INFO Tipp zaehlt: '+JSON.stringify(tz));
+  ok('Am Anfang steht der Tipp-Zaehler auf null', tz.amAnfang===0, String(tz.amAnfang));
+  ok('Den Zug zeigen zu lassen zaehlt als Tipp', tz.nachAktion===1, String(tz.nachAktion));
+  ok('Zweimal dieselbe Stellung bleibt ein Tipp', tz.nochmal===1, String(tz.nochmal));
+  ok('Eine andere Stellung zaehlt eigenstaendig', tz.andereStellung===2, String(tz.andereStellung));
+  ok('Ein neues Spiel setzt den Zaehler zurueck', tz.nachNeuemSpiel===0, String(tz.nachNeuemSpiel));
+
+  /* Die Markierung am Zielfeld: kleine Punkte an beiden Enden statt eines
+     Rings um das Feld. Lutz am 16.09.2026: "sehr dominant, wo man nicht hin
+     springen darf" - der Ring rahmte das leere Loch ein, statt es lesbar zu
+     lassen. Gemessen am Zielfeld: Ring 295 rote Bildpunkte (9,1 % des
+     Ausschnitts), Punkte 72 (2,2 %) - ein Viertel davon. */
+  abschnitt='Enden der probierten Zuege';
+  const pe=await page.evaluate(async()=>{
+    settings.probiert=true; settings.autoJump=false; newGame('english');
+    await new Promise(r=>setTimeout(r,80));
+    const m=game.board.moves.find(m=>game.pegAt[m.from]>=0&&game.pegAt[m.over]>=0&&game.pegAt[m.to]<0);
+    applyMove(m,true); render(); undo();
+    await new Promise(r=>setTimeout(r,1400));
+    const punkte=[...document.querySelectorAll('#board circle.probiertEnde')];
+    const lay=game.lay;
+    const erg={zahl:punkte.length, ringe:document.querySelectorAll('.probiertZiel').length,
+      radius:punkte.length?+punkte[0].getAttribute('r'):0};
+    /* Ein Punkt gehoert an den Start, einer ans Ziel - der einzelne Ring am
+       Ziel verriet nicht, WOHER der Versuch kam. */
+    if(punkte.length===2){
+      const pv=lay.pos[m.from], pz=lay.pos[m.to];
+      const nah=(c,q)=>Math.hypot(+c.getAttribute('cx')-q.x,+c.getAttribute('cy')-q.y)<2;
+      erg.amStart=punkte.some(c=>nah(c,pv));
+      erg.amZiel=punkte.some(c=>nah(c,pz));
+    }
+    settings.autoJump=true;
+    return erg; });
+  console.log('INFO Enden: '+JSON.stringify(pe));
+  ok('Zwei kleine Punkte statt eines Rings',
+     pe.zahl===2&&pe.ringe===0, JSON.stringify(pe));
+  ok('Einer am Start, einer am Ziel', pe.amStart===true&&pe.amZiel===true, JSON.stringify(pe));
+  /* Klein genug, dass das leere Loch (Radius 25) darunter zu sehen bleibt. */
+  ok('Klein genug, um das Feld lesbar zu lassen', pe.radius<=8, 'Radius '+pe.radius);
 
   abschnitt='Migration';
   /* Trainer und Strategie-Hinweise sind ab Werk an. Ein geaenderter Standard
