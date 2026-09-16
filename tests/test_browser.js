@@ -220,7 +220,7 @@ function kurzfassungGleich(proben,voll,erwartet){
   console.log('INFO Strategie: '+adv);
   ok('Strategie-Hinweis mit Klasse, Begruendung und Aktion',
      !!adv&&/(Reihenfolge|Falsche Richtung|Stein gestrandet|Struktur)/.test(adv)
-     &&/Zurück & Zug zeigen/.test(adv), (adv||'').slice(0,120));
+     &&/Zug zurück/.test(adv), (adv||'').slice(0,120));
   /* Der konkrete bessere Zug steht seit v1.49 NICHT mehr im Text: er ist
      faktisch ein Tipp und wurde trotzdem nicht mitgezaehlt, womit die
      Tipp-Zahl am Ende der Partie nicht ehrlich war (Lutz, 16.09.2026). Die
@@ -243,10 +243,32 @@ function kurzfassungGleich(proben,voll,erwartet){
   ok('Die Suchgegend nennt keinen Farbnamen', blatt.farbe.length===0, blatt.farbe.join(','));
   ok('Die Suchgegend nennt keine Richtung', !blatt.richtung, blatt.txt);
   await page.evaluate(()=>closeDetail());
-  await page.evaluate(()=>{ [...statusEl.querySelectorAll('.link')].find(l=>/Zurück & Zug/.test(l.textContent)).click(); }); await sleep(1400); await page.waitForFunction(()=>!game.animating,{timeout:20000}); await sleep(200);
-  const shown=await page.evaluate(()=>({hint:game.hintOn&&!!document.querySelector('#board .hint-arrow'),status:statusFullText(),moves:game.history.length}));
-  console.log('INFO nach Zurück & Zug zeigen: '+JSON.stringify(shown));
-  ok('Zurück & Zug zeigen: Zug zurück, besserer Zug als Pfeil', shown.hint&&shown.moves===12&&/bessere Zug ist markiert/.test(shown.status));
+  /* Umgekehrt in v1.53. Der Knopf hiess "Zurück & Zug zeigen" und markierte
+     gleich den besseren Zug - ein Tipp, den niemand angefordert hatte. Lutz
+     am 16.09.2026: "Den Tipp machen wir nicht durch diesen Button, sondern
+     nur durch den Tipp-Button - dann weiss man auch, wann man einen Tipp
+     wirklich verbraucht." Er nimmt jetzt nur zurueck; der eigene Zug steht
+     als rotes Richtungsdreieck da, und wer den besseren sehen will, holt
+     ihn ueber den Tipp-Knopf. Geprueft wird deshalb, dass KEIN Pfeil
+     erscheint und KEIN Tipp gezaehlt wird. */
+  const tippVorStrat=await page.evaluate(()=>game.tippKeys.size);
+  await page.evaluate(()=>{ [...statusEl.querySelectorAll('.link')].find(l=>/Zug zurück/.test(l.textContent)).click(); }); await sleep(1400); await page.waitForFunction(()=>!game.animating,{timeout:20000}); await sleep(200);
+  const shown=await page.evaluate(()=>({hint:game.hintOn&&!!document.querySelector('#board .hint-arrow'),status:statusFullText(),moves:game.history.length,tipps:game.tippKeys.size,dreiecke:document.querySelectorAll('#board path.probiert').length}));
+  console.log('INFO nach Zug zurück: '+JSON.stringify(shown));
+  ok('Zug zurück nimmt den Zug zurück', shown.moves===12, JSON.stringify(shown));
+  ok('Zug zurück zeigt den besseren Zug NICHT',
+     !shown.hint&&!/bessere Zug ist markiert/.test(shown.status), JSON.stringify(shown));
+  ok('Zug zurück kostet keinen Tipp', shown.tipps===tippVorStrat, shown.tipps+' statt '+tippVorStrat);
+  /* Was stattdessen dasteht: der eigene Versuch als rotes Richtungsdreieck. */
+  ok('Der zurückgenommene Zug bleibt als Dreieck stehen', shown.dreiecke>=1, String(shown.dreiecke));
+  /* Und der Tipp-Knopf liefert in dieser Stellung genau den besseren Zug -
+     adv.path stammt aus der Bewertung EBEN dieser Stellung, es geht also
+     nichts verloren, es wird nur ehrlich gezaehlt. */
+  await page.evaluate(()=>requestHint());
+  await page.waitForFunction(()=>!game.searching,{timeout:30000}); await sleep(300);
+  const nachTipp=await page.evaluate(()=>({hint:game.hintOn&&!!document.querySelector('#board .hint-arrow'),tipps:game.tippKeys.size}));
+  console.log('INFO Tipp danach: '+JSON.stringify(nachTipp));
+  ok('Der Tipp-Knopf zeigt ihn weiterhin - und zählt', nachTipp.hint&&nachTipp.tipps===tippVorStrat+1, JSON.stringify(nachTipp));
   ok('Strategie-Knopf sichtbar und an', await page.evaluate(()=>document.getElementById('btnStrategy').classList.contains('on')));
   // Guter Zug -> grüne Rückmeldung
   await page.evaluate(()=>{ const l=currentLine(); playMove(game.board.moves[l.path[0]]); }); await sleep(400); await page.waitForFunction(()=>!game.animating&&!game.evaluating,{timeout:20000}); await sleep(100);
@@ -581,9 +603,13 @@ function kurzfassungGleich(proben,voll,erwartet){
   ok('Fehlersuche gibt eine Suchgegend statt des Zuges', fsBlatt.txt.length>20&&!/nach (oben|unten|links|rechts)/.test(fsBlatt.txt), fsBlatt.txt);
   ok('Suchen allein kostet keinen Tipp', fsBlatt.tipps===tippVorher, fsBlatt.tipps+' statt '+tippVorher);
   await page.evaluate(()=>{ [...statusEl.querySelectorAll('.link')].find(l=>/Dorthin zurück/.test(l.textContent)).click(); }); await sleep(300);
-  ok('Erst der gezeigte Zug kostet einen Tipp', await page.evaluate(()=>game.tippKeys.size)===tippVorher+1);
-  const rw=await page.evaluate(()=>({moves:game.history.length,hint:game.hintOn&&!!document.querySelector('#board .hint-arrow'),future:game.future.length}));
-  ok('Zurückgespult auf Zug 12, besserer Zug markiert, Vor-Verlauf erhalten', rw.moves===12&&rw.hint&&rw.future===3, JSON.stringify(rw));
+  const rw=await page.evaluate(()=>({moves:game.history.length,hint:game.hintOn&&!!document.querySelector('#board .hint-arrow'),future:game.future.length,tipps:game.tippKeys.size,status:statusFullText()}));
+  console.log('INFO nach Dorthin zurück: '+JSON.stringify(rw));
+  ok('Zurückgespult auf Zug 12, Vor-Verlauf erhalten', rw.moves===12&&rw.future===3, JSON.stringify(rw));
+  /* Seit v1.53 zeigt auch dieser Weg den Zug nicht mehr - damit ist die
+     ganze Fehlersuche kostenlos, vom Suchen bis zum Zurueckspulen. */
+  ok('Dorthin zurück zeigt den Zug nicht', !rw.hint&&!/markiert/.test(rw.status), JSON.stringify(rw));
+  ok('Die ganze Fehlersuche kostet keinen Tipp', rw.tipps===tippVorher, rw.tipps+' statt '+tippVorher);
   await page.evaluate(()=>{ settings.strategy=false; renderStrategyBtn(); newGame('english'); });
   // Längste Farbnamen passen in eine Zeile
   const fit=await page.evaluate(()=>{ const names=Object.values(HEX_NAMES).sort((a,b)=>b.length-a.length); const L=names[0];
@@ -895,7 +921,7 @@ function kurzfassungGleich(proben,voll,erwartet){
       'Startloch gesetzt. Viel Erfolg.',
       'Das war nicht das Muster – die Endstellung stimmt nicht.',
       'Hintergrund-Rechner antwortet nicht – weiche aus.',
-      'Der bessere Zug ist markiert: Blau über Violett nach links.',
+      'Zurück auf Zug 12. Von hier aus ging es noch auf 1 Stein.',
       'Kein Zug gefunden, der die Lösung gekostet hat – die Stellung war nicht lösbar.',
       'Diese Stellung war in sechs Sekunden nicht zu Ende zu rechnen.',
       'Bis Zug 14 zurück geprüft: dort war 1 Stein schon nicht mehr erreichbar.',

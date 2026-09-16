@@ -28,7 +28,7 @@ const FAELLE=[
     document.documentElement.style.setProperty('--sab',sab+'px');
     const st=document.getElementById('status'); st.style.fontSize=fs+'px';
     stageShrink=0; statusReserveCache={w:-1,h:74}; fitStage();
-    setStatus(txt,'bad',[['Zurück & Zug zeigen',()=>{}]],note);
+    setStatus(txt,'bad',[['Zug zurück',()=>{}]],note);
     const tb=document.querySelector('.toolbar'), app=document.getElementById('app');
     const unten=app.getBoundingClientRect().bottom-parseFloat(getComputedStyle(app).paddingBottom||0);
     const tr=tb.getBoundingClientRect();
@@ -47,7 +47,7 @@ const FAELLE=[
       zeilenZahl:zeilen,
       textUeberlauf:Math.max(0,Math.ceil(st.scrollHeight-st.clientHeight)),
       leisteUeberRand:Math.round(Math.max(0,tr.bottom-unten)),
-      vollstaendig:statusFullText()===txt+note+'Zur\u00fcck & Zug zeigen',
+      vollstaendig:statusFullText()===txt+note+'Zug zur\u00fcck',
       // Ein falsch geschriebenes Sonderzeichen landet sonst als Buchstaben-
       // folge auf dem Bildschirm ("u00a0") - das faellt nur auf, wenn man den
       // sichtbaren Text selbst ansieht.
@@ -80,9 +80,9 @@ const FAELLE=[
    const br=()=>Math.round(document.getElementById('board').getBoundingClientRect().width);
    const folge=[];
    setStatus('27 Steine übrig.'); folge.push(br());
-   setStatus(txt,'bad',[['Zurück & Zug zeigen',()=>{}]],note); folge.push(br());
+   setStatus(txt,'bad',[['Zug zurück',()=>{}]],note); folge.push(br());
    setStatus('In Ordnung – 1 Stein ist weiterhin erreichbar.','ok'); folge.push(br());
-   setStatus(txt,'bad',[['Zurück & Zug zeigen',()=>{}]],note); folge.push(br());
+   setStatus(txt,'bad',[['Zug zurück',()=>{}]],note); folge.push(br());
    return folge;
  },TXT,NOTE);
  console.log('INFO Brettbreiten im Wechsel kurz/lang/kurz/lang: '+JSON.stringify(stabil));

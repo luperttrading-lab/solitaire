@@ -528,7 +528,7 @@ header .boardname:active{background:var(--panel2)}
 
 <script>
 'use strict';
-const APP_VERSION='1.52';
+const APP_VERSION='1.53';
 /* =========================================================================
    Kern: Bretter, Züge, Symmetrien, Paritäts-Schranke, Solver
    (als Fabrik, damit derselbe Code im Web Worker läuft)
@@ -1081,7 +1081,7 @@ const pegDefsCache=new Map();
    ========================================================================= */
 const boards={}; CORE.BOARD_DEFS.forEach(d=>boards[d.id]=CORE.buildBoard(d));
 const game={board:null,lay:null,pegAt:[],initial:[],history:[],future:[],selected:-1,phase:'play',startedAt:0,elapsedBefore:0,finished:false,
-  line:null,bookLine:null,hintOn:false,searching:false,animating:false,autoplay:false,startCount:0,evalRes:null,prevEval:null,prevPos:null,evaluating:false,pauseAn:false,lastMove:null,lesson:null,demo:false,showBetter:null,markAus:false,
+  line:null,bookLine:null,hintOn:false,searching:false,animating:false,autoplay:false,startCount:0,evalRes:null,prevEval:null,prevPos:null,evaluating:false,pauseAn:false,lastMove:null,lesson:null,demo:false,markAus:false,
   /* Je Stellung die Zuege, die von dort schon probiert und wieder
      zurueckgenommen wurden - Schluessel ist die Stellung, nicht die
      Zugnummer: wer weitergeht und spaeter zurueckkommt, findet seine
@@ -1215,8 +1215,6 @@ function undo(){
       ls.phase=p; ls.movesAtStart=ls.phaseStarts[p]||0; ls.expected=ls.phaseExpected?ls.phaseExpected[p]:null;
       const ph=L.phases[p]; $('lessonText').textContent=ph.text; }
     if(settings.trainer||settings.marks||settings.strategy) evaluatePosition();
-    if(game.showBetter){ const m0=game.board.moves[game.showBetter.path[0]]; if(m0&&game.pegAt[m0.from]>=0&&game.pegAt[m0.over]>=0&&game.pegAt[m0.to]<0){ game.line={key:stateKey(),path:game.showBetter.path.slice(),best:1,complete:true,nodes:0,lb:1}; game.hintOn=true; game.lastMove=null; renderOverlay(); setStatus('Der bessere Zug ist markiert: '+moveWords(m0,game.pegAt)+'.','hint'); } }
-    game.showBetter=null;
   },true,'slow',400);
 }
 function redo(){
@@ -1906,7 +1904,7 @@ function findMistake(){
          kostet das Suchen selbst auch keinen Tipp mehr - faellig wird er erst,
          wenn der Zug ueber den Knopf wirklich gezeigt wird. */
       setSuche(suchIdee(cat,better,culprit));
-      setStatus(txt,'bad',[['Dorthin zurück & Zug zeigen',()=>{ tippZaehlen(); rewindTo(k,path); }]],'Danach war 1 Stein nicht mehr erreichbar.','Zug '+(k+1)+' war entscheidend'); };
+      setStatus(txt,'bad',[['Dorthin zurück',()=>rewindTo(k)]],'Danach war 1 Stein nicht mehr erreichbar.','Zug '+(k+1)+' war entscheidend'); };
     if(onBook){ report(book.slice(k)); return; }
     setStatus('Suche den Fehler… prüfe Zug '+(k+1)+' von '+n,'', 'Abbrechen',()=>{ stopped=true; if(mistakeCancel) mistakeCancel(); mistakeCancel=null; setStatus('Suche abgebrochen.'); });
     const [lo,hi]=CORE.fromArray(arr); const lb=CORE.parityLowerBound(game.board,arr);
@@ -1917,13 +1915,16 @@ function findMistake(){
   };
   step();
 }
-function rewindTo(k,path){
+/* Spult bis vor Zug k zurueck - und zeigt dort NICHTS. Bis v1.52 markierte
+   die Funktion gleich den besseren Zug; das war ein Tipp, den niemand
+   angefordert hatte. Wer ihn sehen will, drueckt den Tipp-Knopf, und dann
+   zaehlt er auch (Lutz, 16.09.2026). Der Zug, der hierher gefuehrt hat,
+   steht ohnehin als rotes Richtungsdreieck auf dem Brett. */
+function rewindTo(k){
   if(game.animating) finishAnimation(); cancelEval();
   while(game.history.length>k){ const h=game.history.pop(); const m=game.board.moves[h.mi]; const a=game.pegAt; a[m.from]=a[m.to]; a[m.to]=-1; a[m.over]=h.jumped; game.future.unshift(h); }
   game.finished=false; game.selected=-1; game.lastMove=null; game.evalRes=null; game.prevEval=null; game.prevPos=null; hideModal('resultModal');
-  const m0=game.board.moves[path[0]];
-  if(m0&&game.pegAt[m0.from]>=0&&game.pegAt[m0.over]>=0&&game.pegAt[m0.to]<0){ game.line={key:stateKey(),path:path.slice(),best:1,complete:true,nodes:0,lb:1}; game.hintOn=true; }
-  render(); setStatus('Zurück auf Zug '+k+'. Der bessere Zug ist markiert: '+moveWords(m0,game.pegAt)+'.','hint');
+  render(); setStatus('Zurück auf Zug '+k+'. Von hier aus ging es noch auf 1 Stein.','hint',null,null,null,'Zurück auf Zug '+k);
 }
 
 /* ---------- Trainer: stille Bewertung nach jedem Zug ---------- */
@@ -2048,7 +2049,7 @@ function showTrainer(){
        war die Tipp-Zahl am Ende der Partie nicht ehrlich. Die Fehlerklasse
        und die Begruendung bleiben, das ist Analyse, kein Zug. Wer den Zug
        sehen will, holt ihn ueber die Aktion - und die zaehlt. */
-    if(adv){ setSuche(adv.suche); setStatus('Strategischer Fehler – '+adv.cat+'. '+adv.why,'bad',[['Zurück & Zug zeigen',()=>{ tippZaehlen(); game.showBetter={path:adv.path.slice()}; undo(); }]],'Jetzt bestenfalls '+adv.best+' Steine, vorher war 1 erreichbar.',KURZ_KLASSE[adv.cat]||'Dieser Zug kostet die Lösung');
+    if(adv){ setSuche(adv.suche); setStatus('Strategischer Fehler – '+adv.cat+'. '+adv.why,'bad',[['Zug zurück',()=>undo()]],'Jetzt bestenfalls '+adv.best+' Steine, vorher war 1 erreichbar.',KURZ_KLASSE[adv.cat]||'Dieser Zug kostet die Lösung');
       /* Der Alarm beim Verlust der Loesung laeuft schon - der kurze Stups
          wuerde ihn nur zudecken. */
       if(Date.now()-alarmZuletzt>alarmDauer()) Sound.bad();
@@ -2073,8 +2074,13 @@ function showTrainer(){
   const t='Trainer: ab hier bestenfalls '+ev.best+' Steine'+(nf>1?' ('+nf+' verschiedene Endbilder)':nf===1?' (ein einziges Endbild)':'')+'.'
     +(lost?' Der letzte Zug hat das gekostet.':'')
     +(adv?' '+adv.cat+': '+adv.why:'');
-  const aktion=adv?[['Zurück & Zug zeigen',()=>{ tippZaehlen(); game.showBetter={path:adv.path.slice()}; undo(); }]]
-    :lost?[['Zurück',()=>undo()]]:[['Fehler suchen',()=>findMistake()]];
+  /* Seit v1.53 nimmt der Knopf den Zug NUR zurueck. Lutz am 16.09.2026:
+     "eigentlich wuerde ich hier nur anbieten Zug zurueck, dann kommen wir
+     wieder aufs Spielfeld, der eben gezogene Zug ist noch mit dem roten
+     Dreieck markiert und wir versuchen selber weiter. Den Tipp machen wir
+     nicht durch diesen Button, sondern nur durch den Tipp-Button - dann
+     weiss man auch, wann man einen Tipp wirklich verbraucht." */
+  const aktion=(adv||lost)?[['Zug zurück',()=>undo()]]:[['Fehler suchen',()=>findMistake()]];
   if(adv) setSuche(adv.suche);
   setStatus(t,'bad',aktion,note,adv?(KURZ_KLASSE[adv.cat]||'Dieser Zug kostet die Lösung')
     :'Bestenfalls '+ev.best+' Steine'+(lost?' – Zug hat es gekostet':''));
