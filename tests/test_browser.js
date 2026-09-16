@@ -1802,122 +1802,89 @@ function kurzfassungGleich(proben,voll,erwartet){
      nur 84, also keiner ueber 100. */
   ok('Und kraeftig genug, um aufzufallen',
      pzKraeftig>200&&pzMax>=150, pzKraeftig+' kraeftige Punkte, staerkster '+pzMax);
-  /* Und die zweite Frage: ist zwischen Punkt und Strich wirklich Farbe?
-     Der Spalt oben wird aus der Geometrie gerechnet - hier wird nachgesehen,
-     ob in dem Streifen, der bis v1.49 leer war, auch Bildpunkte ankommen.
-     Gemessen in v1.49: 7 von 45 am Start (nur der weiche Rand des Punktes),
-     7 von 63 am Ziel. */
-  const pzStreifen=await page.evaluate(box=>{
-    const pk=[...document.querySelectorAll('#board circle.probiertEnde')];
+  /* Und die zweite Frage - die eigentliche seit v1.52: SIEHT man die
+     Richtung? Ein Dreieck, das seine Richtung nur im SVG hat, waere derselbe
+     Fehlertyp wie der unsichtbare Glanz in v1.39: richtig gemessen, falsche
+     Frage. Gemessen wird deshalb die rote Breite QUER zur Zugrichtung, einmal
+     nahe am Start und einmal nahe am Ziel. Beim Strich mit zwei gleichen
+     Punkten waeren beide gleich; beim Dreieck muss die vordere deutlich
+     schmaler sein. */
+  const pzQuer=await page.evaluate(box=>{
     const pfad=document.querySelector('#board path.probiert');
-    if(!pfad||pk.length!==2) return null;
-    const ctm=pk[0].getScreenCTM();
-    const um=p=>({x:ctm.a*p.x+ctm.c*p.y+ctm.e-box.x, y:ctm.b*p.x+ctm.d*p.y+ctm.f-box.y});
-    const c=pk.map(k=>({x:+k.getAttribute('cx'),y:+k.getAttribute('cy')}));
-    const dx=c[1].x-c[0].x, dy=c[1].y-c[0].y, L=Math.hypot(dx,dy);
-    const ux=dx/L, uy=dy/L;
-    /* Der frueher leere Streifen: vom Rand des Punktes (9) bis zum alten
-       Strichanfang (R_HOLE+6=31) bzw. am Ziel von 160 bis 191. */
-    const probe=(a,b)=>{ const pts=[];
-      for(let i=0;i<=30;i++){ const t=a+(b-a)*i/30;
-        pts.push(um({x:c[0].x+ux*t, y:c[0].y+uy*t})); }
+    if(!pfad) return null;
+    const z=pfad.getAttribute('d').match(/-?\d+(\.\d+)?/g).map(Number);
+    const A={x:z[0],y:z[1]}, B={x:z[2],y:z[3]}, C={x:z[4],y:z[5]};
+    const pa={x:(A.x+B.x)/2, y:(A.y+B.y)/2};          // Mitte der Basis = Startfeld
+    const dx=C.x-pa.x, dy=C.y-pa.y, L=Math.hypot(dx,dy);
+    const ux=dx/L, uy=dy/L, nx=-uy, ny=ux;
+    const ctm=pfad.getScreenCTM();
+    const um=q=>({x:ctm.a*q.x+ctm.c*q.y+ctm.e-box.x, y:ctm.b*q.x+ctm.d*q.y+ctm.f-box.y});
+    /* Ein Querschnitt bei Anteil t der Strecke, 41 Proben ueber +-40 Einheiten. */
+    const quer=t=>{ const m={x:pa.x+ux*L*t, y:pa.y+uy*L*t}; const pts=[];
+      for(let i=-20;i<=20;i++){ const d=i*2;
+        pts.push(um({x:m.x+nx*d, y:m.y+ny*d})); }
       return pts; };
-    return {start:probe(9,31), ziel:probe(L-31,L-9), skala:Math.hypot(ctm.a,ctm.b)};
+    return {nahStart:quer(0.18), nahZiel:quer(0.82),
+            basis:Math.round(Math.hypot(A.x-B.x,A.y-B.y)), laenge:Math.round(L)};
   },pzBox);
   const rotDa=(png,p)=>{ const i=((Math.round(p.y*2)*png.width)+Math.round(p.x*2))*4;
+    if(i<0||i+2>=png.data.length) return false;
     return png.data[i]-png.data[i+1]>60; };
-  const stStart=pzStreifen.start.filter(p=>rotDa(pzJetzt,p)).length;
-  const stZiel=pzStreifen.ziel.filter(p=>rotDa(pzJetzt,p)).length;
-  console.log('INFO Streifen zwischen Punkt und Strich: Start '+stStart+'/31, Ziel '+stZiel+'/31');
-  ok('Zwischen Punkt und Strich kommt Farbe an',
-     stStart>=20&&stZiel>=20, 'Start '+stStart+'/31, Ziel '+stZiel+'/31');
-  await page.evaluate(()=>{ settings.autoJump=true; newGame('english'); });
+  const qStart=pzQuer.nahStart.filter(p=>rotDa(pzJetzt,p)).length;
+  const qZiel=pzQuer.nahZiel.filter(p=>rotDa(pzJetzt,p)).length;
+  console.log('INFO Querschnitte: nah am Start '+qStart+' von 41, nah am Ziel '
+    +qZiel+' von 41 (Basis '+pzQuer.basis+', Laenge '+pzQuer.laenge+')');
+  ok('Am Ausgangsfeld ist das Dreieck breit', qStart>=7, qStart+' von 41 Proben rot');
+  ok('Zum Zielfeld hin wird es schmaler', qZiel>=1&&qZiel*2<=qStart,
+     'Start '+qStart+', Ziel '+qZiel);
+  /* Die Basis ist halb so breit wie ein Spielstein (Vorgabe aus Lutz' Entwurf):
+     Murmelradius 34, also 68 breit - die Basis misst 34. */
+  ok('Die Basis ist halb so breit wie ein Spielstein', pzQuer.basis===34, String(pzQuer.basis));
 
-  /* Wer den besseren Zug sehen will, holt ihn - und das zaehlt als Tipp.
-     Vorher stand er ungefragt im Text und kostete nichts; die Tipp-Zahl am
-     Ende der Partie war damit nicht ehrlich (Lutz, 16.09.2026). */
-  abschnitt='Tipp zaehlt';
-  const tz=await page.evaluate(async()=>{
-    const erg={};
-    settings.strategy=true; settings.trainer=true; settings.autoJump=false;
-    newGame('english');
-    await new Promise(r=>setTimeout(r,80));
-    erg.amAnfang=zaehlerZahlen().t;
-    /* Ein Zug, dann den Weg ueber die Aktion nehmen. */
-    const m=game.board.moves.find(m=>game.pegAt[m.from]>=0&&game.pegAt[m.over]>=0&&game.pegAt[m.to]<0);
-    applyMove(m,true); render();
-    tippZaehlen();                       // das tut die Aktion "Zurueck & Zug zeigen"
-    erg.nachAktion=zaehlerZahlen().t;
-    /* Zweimal in derselben Stellung bleibt ein Tipp. */
-    tippZaehlen();
-    erg.nochmal=zaehlerZahlen().t;
-    /* Eine andere Stellung zaehlt eigenstaendig. */
-    const m2=game.board.moves.find(m=>game.pegAt[m.from]>=0&&game.pegAt[m.over]>=0&&game.pegAt[m.to]<0);
-    applyMove(m2,true); render(); tippZaehlen();
-    erg.andereStellung=zaehlerZahlen().t;
-    newGame('english');
-    erg.nachNeuemSpiel=zaehlerZahlen().t;
-    settings.autoJump=true;
-    return erg; });
-  console.log('INFO Tipp zaehlt: '+JSON.stringify(tz));
-  ok('Am Anfang steht der Tipp-Zaehler auf null', tz.amAnfang===0, String(tz.amAnfang));
-  ok('Den Zug zeigen zu lassen zaehlt als Tipp', tz.nachAktion===1, String(tz.nachAktion));
-  ok('Zweimal dieselbe Stellung bleibt ein Tipp', tz.nochmal===1, String(tz.nochmal));
-  ok('Eine andere Stellung zaehlt eigenstaendig', tz.andereStellung===2, String(tz.andereStellung));
-  ok('Ein neues Spiel setzt den Zaehler zurueck', tz.nachNeuemSpiel===0, String(tz.nachNeuemSpiel));
-
-  /* Die Markierung am Zielfeld: kleine Punkte an beiden Enden statt eines
-     Rings um das Feld. Lutz am 16.09.2026: "sehr dominant, wo man nicht hin
-     springen darf" - der Ring rahmte das leere Loch ein, statt es lesbar zu
-     lassen. Gemessen am Zielfeld: Ring 295 rote Bildpunkte (9,1 % des
-     Ausschnitts), Punkte 72 (2,2 %) - ein Viertel davon. */
-  abschnitt='Enden der probierten Zuege';
+  abschnitt='Form des probierten Zuges';
+  /* Seit v1.52 EIN Dreieck statt Strich plus zwei Punkte. Geprueft wird die
+     Geometrie: drei Ecken, die Basis quer ueber dem Ausgangsfeld, die Spitze
+     genau im Zielfeld - und keine Punkte mehr. Die Richtung selbst wird oben
+     an den Bildpunkten gemessen, denn die Zahl der Ecken sagt darueber nichts. */
   const pe=await page.evaluate(async()=>{
     settings.probiert=true; settings.autoJump=false; newGame('english');
     await new Promise(r=>setTimeout(r,80));
     const m=game.board.moves.find(m=>game.pegAt[m.from]>=0&&game.pegAt[m.over]>=0&&game.pegAt[m.to]<0);
     applyMove(m,true); render(); undo();
     await new Promise(r=>setTimeout(r,1400));
-    const punkte=[...document.querySelectorAll('#board circle.probiertEnde')];
     const lay=game.lay;
-    const erg={zahl:punkte.length, ringe:document.querySelectorAll('.probiertZiel').length,
-      radius:punkte.length?+punkte[0].getAttribute('r'):0};
-    /* Der Spalt zwischen Strichende und Punkt - Lutz am 16.09.2026: "Der rote
-       ist nicht durchgaengig bis zum Strich". Gemessen in Brett-Einheiten:
-       Abstand des Strichendes zum Punktmittelpunkt minus Punktradius. In
-       v1.49 waren das 24,5 am Start und 33,5 am Ziel. */
+    const erg={punkte:document.querySelectorAll('#board circle.probiertEnde').length,
+               ringe:document.querySelectorAll('.probiertZiel').length,
+               dreiecke:document.querySelectorAll('#board path.probiert').length};
     const pfad=document.querySelector('#board path.probiert');
-    if(pfad&&punkte.length===2){
-      const z=pfad.getAttribute('d').match(/-?\d+(\.\d+)?/g).map(Number);
-      const enden=[{x:z[0],y:z[1]},{x:z[2],y:z[3]}];
-      const spalt=k=>{ const c={x:+k.getAttribute('cx'),y:+k.getAttribute('cy')};
-        return Math.min(...enden.map(e=>Math.hypot(e.x-c.x,e.y-c.y)))-erg.radius; };
-      erg.spalt=punkte.map(k=>+spalt(k).toFixed(2));
-    }
-    /* Ein Punkt gehoert an den Start, einer ans Ziel - der einzelne Ring am
-       Ziel verriet nicht, WOHER der Versuch kam. */
-    if(punkte.length===2){
+    if(pfad){
+      const d=pfad.getAttribute('d');
+      erg.geschlossen=/Z\s*$/.test(d.trim());
+      const z=d.match(/-?\d+(\.\d+)?/g).map(Number);
+      erg.ecken=z.length/2;
+      const A={x:z[0],y:z[1]}, B={x:z[2],y:z[3]}, C={x:z[4],y:z[5]};
       const pv=lay.pos[m.from], pz=lay.pos[m.to];
-      const nah=(c,q)=>Math.hypot(+c.getAttribute('cx')-q.x,+c.getAttribute('cy')-q.y)<2;
-      erg.amStart=punkte.some(c=>nah(c,pv));
-      erg.amZiel=punkte.some(c=>nah(c,pz));
+      /* Die Basismitte liegt im Ausgangsfeld, die Spitze im Zielfeld. */
+      erg.basisMitte=+Math.hypot((A.x+B.x)/2-pv.x,(A.y+B.y)/2-pv.y).toFixed(2);
+      erg.spitzeImZiel=+Math.hypot(C.x-pz.x,C.y-pz.y).toFixed(2);
+      erg.basis=+Math.hypot(A.x-B.x,A.y-B.y).toFixed(1);
+      /* Die Basis steht senkrecht auf der Zugrichtung - sonst waere das
+         Dreieck verzogen und zeigte schief. */
+      const bx=B.x-A.x, by=B.y-A.y, ux=pz.x-pv.x, uy=pz.y-pv.y;
+      erg.senkrecht=+Math.abs((bx*ux+by*uy)/(Math.hypot(bx,by)*Math.hypot(ux,uy))).toFixed(3);
     }
     settings.autoJump=true;
     return erg; });
-  console.log('INFO Enden: '+JSON.stringify(pe));
-  ok('Zwei kleine Punkte statt eines Rings',
-     pe.zahl===2&&pe.ringe===0, JSON.stringify(pe));
-  ok('Einer am Start, einer am Ziel', pe.amStart===true&&pe.amZiel===true, JSON.stringify(pe));
-  /* Klein genug, dass das leere Loch (Radius 25) darunter zu sehen bleibt -
-     aber gross genug, um als Ende gelesen zu werden (Lutz wollte sie
-     "ein bisschen groesser"): Radius 9 gegen 25 sind 13 % der Lochflaeche. */
-  ok('Klein genug, um das Feld lesbar zu lassen', pe.radius<=10, 'Radius '+pe.radius);
-  ok('Gross genug, um als Ende gelesen zu werden', pe.radius>=8, 'Radius '+pe.radius);
-  /* Kein Spalt zwischen Strich und Punkten. Die Zahl der Elemente sagt
-     nichts darueber - in v1.49 waren Strich und Punkte beide da und
-     trotzdem lag zwischen ihnen nichts. */
-  ok('Der Strich laeuft bis in die Punkte hinein',
-     !!pe.spalt&&pe.spalt.every(v=>v<=0), JSON.stringify(pe.spalt));
+  console.log('INFO Form: '+JSON.stringify(pe));
+  ok('Ein Dreieck mit drei Ecken', pe.dreiecke===1&&pe.ecken===3&&pe.geschlossen===true, JSON.stringify(pe));
+  ok('Keine Punkte und kein Ring mehr', pe.punkte===0&&pe.ringe===0, JSON.stringify(pe));
+  ok('Die Basis liegt im Ausgangsfeld', pe.basisMitte<0.5, String(pe.basisMitte));
+  ok('Die Spitze sitzt im Zielfeld', pe.spitzeImZiel<0.5, String(pe.spitzeImZiel));
+  ok('Die Basis steht senkrecht zur Zugrichtung', pe.senkrecht<0.01, String(pe.senkrecht));
+  /* Die Spitze laeuft auf null zusammen, das leere Loch (Radius 25) bleibt
+     also lesbar - das war der Grund, aus dem v1.49 den Ring abgeloest hat. */
+  ok('Am Ziel verdeckt nichts das leere Feld', pe.basis>20&&pe.spitzeImZiel<0.5,
+     'Basis '+pe.basis+', Spitze genau im Feld');
 
   abschnitt='Migration';
   /* Trainer und Strategie-Hinweise sind ab Werk an. Ein geaenderter Standard

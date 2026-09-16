@@ -340,8 +340,11 @@ header .boardname:active{background:var(--panel2)}
    daneben. Jetzt kraeftigeres Rot (#ff4436 statt #e0574a), 6 statt 4 px und
    fast voll deckend; der gestrichelte Verlauf haelt sie trotzdem von der
    durchgezogenen vollen Markierung unterscheidbar. */
-.probiert{stroke:#ff4436;stroke-width:6;stroke-linecap:round;fill:none;opacity:.92;stroke-dasharray:10 7}
-.probiertEnde{fill:#ff4436;opacity:.9}
+/* Seit v1.52 ein Richtungsdreieck statt eines Strichs mit zwei gleichen
+   Punkten (Entwurf von Lutz, 16.09.2026): breit am Ausgangsfeld, spitz im
+   Zielfeld. Zwei gleiche Punkte sagen WO, die Verjuengung sagt WOHIN - und
+   zwar ohne Pfeilkopf, der wie die volle Markierung ausgesehen haette. */
+.probiert{fill:#ff4436;stroke:none;opacity:.92}
 /* Beim Einstellen liegt der Schein UEBER dem Blatt. Sein Zentrum sitzt bei
    82 % der Hoehe, das Blatt beginnt bei 57 % - unter dem Blatt war er
    also vollstaendig verdeckt und beim Einstellen nicht zu sehen (gemessen:
@@ -525,7 +528,7 @@ header .boardname:active{background:var(--panel2)}
 
 <script>
 'use strict';
-const APP_VERSION='1.51';
+const APP_VERSION='1.52';
 /* =========================================================================
    Kern: Bretter, Züge, Symmetrien, Paritäts-Schranke, Solver
    (als Fabrik, damit derselbe Code im Web Worker läuft)
@@ -940,7 +943,10 @@ const P=100, MARG=70, R_PEG=34, R_HOLE=25;
 /* Radius der Punkte an den Enden probierter Zuege - zugleich die Stelle,
    an der der Strich beginnt und endet, damit kein Spalt bleibt. 9 gegen
    das leere Loch mit 25: der Spielstand bleibt darunter lesbar. */
-const R_PENDE=9;
+/* Halbe Basisbreite des Richtungsdreiecks. R_PEG ist der Murmelradius (34),
+   die Murmel also 68 breit - eine Basis von 2*17=34 ist damit genau halb so
+   breit wie ein Spielstein (Vorgabe von Lutz aus seinem Entwurf). */
+const P_BASIS=R_PEG/2;
 const svgNS='http://www.w3.org/2000/svg';
 function el(tag,attrs,children){ const e=document.createElementNS(svgNS,tag); if(attrs) for(const k in attrs) e.setAttribute(k,attrs[k]); if(children) children.forEach(c=>e.appendChild(c)); return e; }
 function layoutBoard(board){
@@ -1306,21 +1312,19 @@ function renderOverlay(){
     const pa=lay.pos[pm.from], pc=lay.pos[pm.to];
     const pdx=pc.x-pa.x, pdy=pc.y-pa.y, pL=Math.hypot(pdx,pdy);
     const pux=pdx/pL, puy=pdy/pL;
-    /* Der Strich laeuft bis IN die Punkte hinein (R_PENDE statt R_HOLE+6
-       bzw. R_PEG+6). Vorher begann er 31 Einheiten vom Startzentrum und
-       endete 40 vor dem Ziel, die Punkte sassen aber in den Feldmitten mit
-       Radius 6,5 - dazwischen klafften 24,5 bzw. 33,5 Einheiten Nichts.
-       Lutz am 16.09.2026: "Der rote ist nicht durchgaengig bis zum Strich". */
+    /* Richtungsdreieck: Basis quer ueber das Ausgangsfeld, Spitze genau im
+       Zielfeld. Bis v1.51 war es ein gestrichelter Strich mit einem gleich
+       grossen Punkt an jedem Ende - der sagte, WO gesprungen wurde, aber
+       nicht, WOHIN. Lutz am 16.09.2026 mit einem eigenen Entwurf: "dann sieht
+       man von wo man nach wo man gesprungen ist, und nicht als Pfeil, sondern
+       nur so quasi als Richtungsdreieck."
+       Bewusst KEINE Pfeilspitze: die volle Markierung des letzten Zuges ist
+       ein Pfeil, und zwei Pfeilarten nebeneinander waeren nicht zu trennen.
+       Die Spitze verdeckt das leere Zielfeld fast nicht, weil sie dort auf
+       null zusammenlaeuft - anders als der Ring, den v1.49 abgeloest hat. */
+    const pnx=-puy, pny=pux;
     overlayLayer.appendChild(el('path',{class:'probiert',
-      d:`M${pa.x+pux*R_PENDE} ${pa.y+puy*R_PENDE} L${pc.x-pux*R_PENDE} ${pc.y-puy*R_PENDE}`}));
-    /* Kleine Punkte an BEIDEN Enden statt eines Rings um das Zielfeld
-       (Lutz, 16.09.2026): Der Ring mit R_PEG+4 war so gross, dass er den
-       Blick auf sich zog und das Feld einrahmte, statt es lesbar zu lassen -
-       "sehr dominant, wo man nicht hin springen darf". Ein Punkt sagt
-       dasselbe und verdeckt nichts; zwei davon zeigen ausserdem, WOHER der
-       Versuch kam, was der einzelne Ring am Ziel gar nicht verriet. */
-    overlayLayer.appendChild(el('circle',{class:'probiertEnde',cx:pa.x,cy:pa.y,r:R_PENDE}));
-    overlayLayer.appendChild(el('circle',{class:'probiertEnde',cx:pc.x,cy:pc.y,r:R_PENDE}));
+      d:`M${pa.x+pnx*P_BASIS} ${pa.y+pny*P_BASIS} L${pa.x-pnx*P_BASIS} ${pa.y-pny*P_BASIS} L${pc.x} ${pc.y} Z`}));
   });
   if(game.lastMove&&!game.markAus){ const m=game.board.moves[game.lastMove.mi]; const undo=game.lastMove.dir==='undo';
     // Markierung zeigt immer den Zug selbst (Start gestrichelt, Ziel Ring, geschlagener Stein Punkt) – beim Zurück mit ↶
