@@ -17,6 +17,17 @@ Unverändert wichtig:
  - Jede Nachricht wird EINMAL gezählt (nach message.id entdoppeln).
  - „Letzte Frage" = alle Antworten ab dem letzten ECHTEN Nutzerbeitrag;
    Werkzeugergebnisse stehen im Protokoll ebenfalls als `user`.
+
+Korrektur vom 16.09.2026 (gefunden von Lutz):
+ 4. Nicht jeder `user`-Eintrag mit Text ist eine Frage von Lutz. Hintergrund-
+    Benachrichtigungen (`<task-notification>`), System-Erinnerungen und die
+    Meldung beim Zusammenfassen der Sitzung („This session is being
+    continued…") sehen im Protokoll genauso aus und setzten den Zähler
+    „Frage" zurück. Gemessen am 16.09.2026: um 08:49 Uhr stand „Frage 0,79 ·
+    heute 12,14", obwohl die 12,14 zur selben Antwort gehörten – die
+    Benachrichtigung dazwischen hatte den Schnitt gesetzt. Deshalb zählt ein
+    Eintrag nur, wenn mindestens ein Textblock nicht mit `<` oder `[`
+    beginnt.
 """
 import json, os, glob, collections, datetime, sys
 
@@ -45,6 +56,17 @@ if not files:
     sys.exit(1)
 f = max(files, key=os.path.getmtime)
 
+def echt(text):
+    """Wahr, wenn der Textblock von Lutz stammt und nicht vom Gerüst.
+
+    Benachrichtigungen und Erinnerungen beginnen mit `<` (`<task-notification>`,
+    `<system-reminder>`, `<wake …>`) oder mit `[` (`[SYSTEM NOTIFICATION …]`);
+    die Meldung beim Zusammenfassen beginnt mit ihrem eigenen Satz."""
+    t = (text or '').strip()
+    return bool(t) and t[0] not in '<[' and not t.startswith(
+        'This session is being continued')
+
+
 seen, last_user = {}, None
 for line in open(f):
     try: d = json.loads(line)
@@ -52,9 +74,12 @@ for line in open(f):
     t, m = d.get('type'), d.get('message', {})
     if t == 'user':                              # nur echte Nutzerfragen
         c = m.get('content')
-        if isinstance(c, str) or (isinstance(c, list)
-                and any(b.get('type') == 'text' for b in c if isinstance(b, dict))
-                and not any(b.get('type') == 'tool_result' for b in c if isinstance(b, dict))):
+        bloecke = ([c] if isinstance(c, str) else
+                   [b.get('text', '') for b in c if isinstance(b, dict) and b.get('type') == 'text']
+                   if isinstance(c, list) else [])
+        werkzeug = isinstance(c, list) and any(
+            b.get('type') == 'tool_result' for b in c if isinstance(b, dict))
+        if bloecke and not werkzeug and any(echt(b) for b in bloecke):
             last_user = d.get('timestamp')
     if t == 'assistant' and m.get('usage'):      # je Nachricht nur die letzte Fassung
         seen[m.get('id') or d.get('uuid')] = (d.get('timestamp', ''), m.get('model'), m['usage'])
