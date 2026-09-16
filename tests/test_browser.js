@@ -1768,6 +1768,35 @@ function kurzfassungGleich(proben,voll,erwartet){
      nur 84, also keiner ueber 100. */
   ok('Und kraeftig genug, um aufzufallen',
      pzKraeftig>200&&pzMax>=150, pzKraeftig+' kraeftige Punkte, staerkster '+pzMax);
+  /* Und die zweite Frage: ist zwischen Punkt und Strich wirklich Farbe?
+     Der Spalt oben wird aus der Geometrie gerechnet - hier wird nachgesehen,
+     ob in dem Streifen, der bis v1.49 leer war, auch Bildpunkte ankommen.
+     Gemessen in v1.49: 7 von 45 am Start (nur der weiche Rand des Punktes),
+     7 von 63 am Ziel. */
+  const pzStreifen=await page.evaluate(box=>{
+    const pk=[...document.querySelectorAll('#board circle.probiertEnde')];
+    const pfad=document.querySelector('#board path.probiert');
+    if(!pfad||pk.length!==2) return null;
+    const ctm=pk[0].getScreenCTM();
+    const um=p=>({x:ctm.a*p.x+ctm.c*p.y+ctm.e-box.x, y:ctm.b*p.x+ctm.d*p.y+ctm.f-box.y});
+    const c=pk.map(k=>({x:+k.getAttribute('cx'),y:+k.getAttribute('cy')}));
+    const dx=c[1].x-c[0].x, dy=c[1].y-c[0].y, L=Math.hypot(dx,dy);
+    const ux=dx/L, uy=dy/L;
+    /* Der frueher leere Streifen: vom Rand des Punktes (9) bis zum alten
+       Strichanfang (R_HOLE+6=31) bzw. am Ziel von 160 bis 191. */
+    const probe=(a,b)=>{ const pts=[];
+      for(let i=0;i<=30;i++){ const t=a+(b-a)*i/30;
+        pts.push(um({x:c[0].x+ux*t, y:c[0].y+uy*t})); }
+      return pts; };
+    return {start:probe(9,31), ziel:probe(L-31,L-9), skala:Math.hypot(ctm.a,ctm.b)};
+  },pzBox);
+  const rotDa=(png,p)=>{ const i=((Math.round(p.y*2)*png.width)+Math.round(p.x*2))*4;
+    return png.data[i]-png.data[i+1]>60; };
+  const stStart=pzStreifen.start.filter(p=>rotDa(pzJetzt,p)).length;
+  const stZiel=pzStreifen.ziel.filter(p=>rotDa(pzJetzt,p)).length;
+  console.log('INFO Streifen zwischen Punkt und Strich: Start '+stStart+'/31, Ziel '+stZiel+'/31');
+  ok('Zwischen Punkt und Strich kommt Farbe an',
+     stStart>=20&&stZiel>=20, 'Start '+stStart+'/31, Ziel '+stZiel+'/31');
   await page.evaluate(()=>{ settings.autoJump=true; newGame('english'); });
 
   /* Wer den besseren Zug sehen will, holt ihn - und das zaehlt als Tipp.
@@ -1819,6 +1848,18 @@ function kurzfassungGleich(proben,voll,erwartet){
     const lay=game.lay;
     const erg={zahl:punkte.length, ringe:document.querySelectorAll('.probiertZiel').length,
       radius:punkte.length?+punkte[0].getAttribute('r'):0};
+    /* Der Spalt zwischen Strichende und Punkt - Lutz am 16.09.2026: "Der rote
+       ist nicht durchgaengig bis zum Strich". Gemessen in Brett-Einheiten:
+       Abstand des Strichendes zum Punktmittelpunkt minus Punktradius. In
+       v1.49 waren das 24,5 am Start und 33,5 am Ziel. */
+    const pfad=document.querySelector('#board path.probiert');
+    if(pfad&&punkte.length===2){
+      const z=pfad.getAttribute('d').match(/-?\d+(\.\d+)?/g).map(Number);
+      const enden=[{x:z[0],y:z[1]},{x:z[2],y:z[3]}];
+      const spalt=k=>{ const c={x:+k.getAttribute('cx'),y:+k.getAttribute('cy')};
+        return Math.min(...enden.map(e=>Math.hypot(e.x-c.x,e.y-c.y)))-erg.radius; };
+      erg.spalt=punkte.map(k=>+spalt(k).toFixed(2));
+    }
     /* Ein Punkt gehoert an den Start, einer ans Ziel - der einzelne Ring am
        Ziel verriet nicht, WOHER der Versuch kam. */
     if(punkte.length===2){
@@ -1833,8 +1874,16 @@ function kurzfassungGleich(proben,voll,erwartet){
   ok('Zwei kleine Punkte statt eines Rings',
      pe.zahl===2&&pe.ringe===0, JSON.stringify(pe));
   ok('Einer am Start, einer am Ziel', pe.amStart===true&&pe.amZiel===true, JSON.stringify(pe));
-  /* Klein genug, dass das leere Loch (Radius 25) darunter zu sehen bleibt. */
-  ok('Klein genug, um das Feld lesbar zu lassen', pe.radius<=8, 'Radius '+pe.radius);
+  /* Klein genug, dass das leere Loch (Radius 25) darunter zu sehen bleibt -
+     aber gross genug, um als Ende gelesen zu werden (Lutz wollte sie
+     "ein bisschen groesser"): Radius 9 gegen 25 sind 13 % der Lochflaeche. */
+  ok('Klein genug, um das Feld lesbar zu lassen', pe.radius<=10, 'Radius '+pe.radius);
+  ok('Gross genug, um als Ende gelesen zu werden', pe.radius>=8, 'Radius '+pe.radius);
+  /* Kein Spalt zwischen Strich und Punkten. Die Zahl der Elemente sagt
+     nichts darueber - in v1.49 waren Strich und Punkte beide da und
+     trotzdem lag zwischen ihnen nichts. */
+  ok('Der Strich laeuft bis in die Punkte hinein',
+     !!pe.spalt&&pe.spalt.every(v=>v<=0), JSON.stringify(pe.spalt));
 
   abschnitt='Migration';
   /* Trainer und Strategie-Hinweise sind ab Werk an. Ein geaenderter Standard

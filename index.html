@@ -523,7 +523,7 @@ header .boardname:active{background:var(--panel2)}
 
 <script>
 'use strict';
-const APP_VERSION='1.49';
+const APP_VERSION='1.50';
 /* =========================================================================
    Kern: Bretter, Züge, Symmetrien, Paritäts-Schranke, Solver
    (als Fabrik, damit derselbe Code im Web Worker läuft)
@@ -935,6 +935,10 @@ function alarmDauer(){ const a=alarmWahl();
    Layout & SVG-Rendering
    ========================================================================= */
 const P=100, MARG=70, R_PEG=34, R_HOLE=25;
+/* Radius der Punkte an den Enden probierter Zuege - zugleich die Stelle,
+   an der der Strich beginnt und endet, damit kein Spalt bleibt. 9 gegen
+   das leere Loch mit 25: der Spielstand bleibt darunter lesbar. */
+const R_PENDE=9;
 const svgNS='http://www.w3.org/2000/svg';
 function el(tag,attrs,children){ const e=document.createElementNS(svgNS,tag); if(attrs) for(const k in attrs) e.setAttribute(k,attrs[k]); if(children) children.forEach(c=>e.appendChild(c)); return e; }
 function layoutBoard(board){
@@ -1300,16 +1304,21 @@ function renderOverlay(){
     const pa=lay.pos[pm.from], pc=lay.pos[pm.to];
     const pdx=pc.x-pa.x, pdy=pc.y-pa.y, pL=Math.hypot(pdx,pdy);
     const pux=pdx/pL, puy=pdy/pL;
+    /* Der Strich laeuft bis IN die Punkte hinein (R_PENDE statt R_HOLE+6
+       bzw. R_PEG+6). Vorher begann er 31 Einheiten vom Startzentrum und
+       endete 40 vor dem Ziel, die Punkte sassen aber in den Feldmitten mit
+       Radius 6,5 - dazwischen klafften 24,5 bzw. 33,5 Einheiten Nichts.
+       Lutz am 16.09.2026: "Der rote ist nicht durchgaengig bis zum Strich". */
     overlayLayer.appendChild(el('path',{class:'probiert',
-      d:`M${pa.x+pux*(R_HOLE+6)} ${pa.y+puy*(R_HOLE+6)} L${pc.x-pux*(R_PEG+6)} ${pc.y-puy*(R_PEG+6)}`}));
+      d:`M${pa.x+pux*R_PENDE} ${pa.y+puy*R_PENDE} L${pc.x-pux*R_PENDE} ${pc.y-puy*R_PENDE}`}));
     /* Kleine Punkte an BEIDEN Enden statt eines Rings um das Zielfeld
        (Lutz, 16.09.2026): Der Ring mit R_PEG+4 war so gross, dass er den
        Blick auf sich zog und das Feld einrahmte, statt es lesbar zu lassen -
        "sehr dominant, wo man nicht hin springen darf". Ein Punkt sagt
        dasselbe und verdeckt nichts; zwei davon zeigen ausserdem, WOHER der
        Versuch kam, was der einzelne Ring am Ziel gar nicht verriet. */
-    overlayLayer.appendChild(el('circle',{class:'probiertEnde',cx:pa.x,cy:pa.y,r:6.5}));
-    overlayLayer.appendChild(el('circle',{class:'probiertEnde',cx:pc.x,cy:pc.y,r:6.5}));
+    overlayLayer.appendChild(el('circle',{class:'probiertEnde',cx:pa.x,cy:pa.y,r:R_PENDE}));
+    overlayLayer.appendChild(el('circle',{class:'probiertEnde',cx:pc.x,cy:pc.y,r:R_PENDE}));
   });
   if(game.lastMove&&!game.markAus){ const m=game.board.moves[game.lastMove.mi]; const undo=game.lastMove.dir==='undo';
     // Markierung zeigt immer den Zug selbst (Start gestrichelt, Ziel Ring, geschlagener Stein Punkt) – beim Zurück mit ↶
