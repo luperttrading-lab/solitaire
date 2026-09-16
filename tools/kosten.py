@@ -67,11 +67,19 @@ def echt(text):
         'This session is being continued')
 
 
-seen, last_user = {}, None
+seen, last_user, faltungen = {}, None, 0
 for line in open(f):
     try: d = json.loads(line)
     except: continue
     t, m = d.get('type'), d.get('message', {})
+    if t == 'user':                              # Zusammenfassungen mitzählen
+        cc = m.get('content')
+        for b in ([cc] if isinstance(cc, str) else
+                  [x.get('text', '') for x in cc
+                   if isinstance(x, dict) and x.get('type') == 'text']
+                  if isinstance(cc, list) else []):
+            if (b or '').strip().startswith('This session is being continued'):
+                faltungen += 1
     if t == 'user':                              # nur echte Nutzerfragen
         c = m.get('content')
         bloecke = ([c] if isinstance(c, str) else
@@ -112,6 +120,20 @@ frage = sum(cost(mo, u) for ts, mo, u in seen.values() if last_user and ts >= la
 de = lambda x: f'{x:.2f}'.replace('.', ',')
 print(f"<sub>{jetzt.strftime('%d.%m. %H:%M')} Uhr · Frage {de(frage)} · "
       f"heute {de(heute)} · ges. {de(tot)} $</sub>")
+
+# Wann ein neuer Chat fällig ist. Die Zusammenfassung ist das harte Signal:
+# ab da ist der Kontext voll, sie wiederholt sich und kostet jedes Mal erneut
+# (am 16.09.2026 gemessen: 5,77 $ für eine einzige Faltung). Der Hinweis geht
+# auf stderr, damit die Kostenzeile auf stdout die eine Zeile bleibt, die
+# unter die Antwort gehört.
+GRENZE_GESAMT = 50.0
+if faltungen or tot > GRENZE_GESAMT:
+    grund = (f'{faltungen}. Zusammenfassung der Sitzung' if faltungen
+             else f'Sitzung über {GRENZE_GESAMT:.0f} $')
+    print(f'HINWEIS AN CLAUDE (nicht an die Antwort anhängen): {grund}, '
+          f'bisher {de(tot)} $ gesamt. Neuen Chat empfehlen – aber nur, wenn '
+          f'die Zahl der Zusammenfassungen seit der letzten Empfehlung '
+          f'gestiegen ist. Faltungen={faltungen}', file=sys.stderr)
 
 if '-v' in sys.argv:
     days, mods = collections.Counter(), collections.Counter()

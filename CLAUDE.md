@@ -134,6 +134,22 @@ Autor/Product Owner: Lutz („Neo"). Sprache im Chat und in der App: Deutsch, pe
 - Nichts raten, was Lutz in wenigen Handgriffen prüfen kann; Diagnosen in die Ausgabe schreiben; Tests dürfen nicht dieselbe Annahme treffen wie der Code (Literaturwerte, unabhängige BFS).
 - Keine Zustimmungsfloskeln; Widerspruch mit Grund.
 
+## Wann ein neuer Chat fällig ist
+
+**Regel von Lutz (16.09.2026):** „Wir sollten irgendwie einbauen, wann du mir einen Ratschlag gibst, einen neuen Chat aufzumachen."
+
+**Der Auslöser ist die Zusammenfassung der Sitzung, nicht ein Gefühl.** Wird der Chat zu lang, faltet Claude Code ihn selbsttätig zusammen („This session is being continued…"). Das ist ein objektives Ereignis im Protokoll, und `tools/kosten.py` zählt es mit: Bei jedem Lauf schreibt es auf **stderr** eine Zeile `HINWEIS AN CLAUDE …` mit der Zahl der Faltungen. Die Kostenzeile auf stdout bleibt davon unberührt – sie ist weiterhin die eine Zeile, die unter die Antwort gehört. Der Hinweis wird **nie** an die Antwort angehängt.
+
+**Gemeldet wird einmal je neuer Faltung**, nicht bei jeder Antwort – sonst ist es Gemecker. Steigt die Zahl (zweite, dritte Faltung), ist das ein neuer Anlass und wird erneut genannt, dann dringlicher.
+
+**Die Begründung ist der mitgeschleppte Kontext, nicht die Faltung selbst.** Am 16.09.2026 nachgerechnet, nachdem ich zuerst falsch zugeordnet hatte: Eine Faltung kostet rund **1 $** – die 5,77 $, die ich ihr zugeschrieben hatte, waren die Arbeit *danach*. Teuer ist etwas anderes: Bei jedem einzelnen Modellaufruf wurden **230.000 Token** Kontext mitgelesen. An diesem Tag summierte sich das auf **25,8 Mio. Token = 12,91 $ von 24,45 $** – **über die Hälfte der Tageskosten war reines Mitschleppen.** Ein frischer Chat startet bei rund 20.000 Token, also mit dem Elffachen an Luft.
+
+**Was der Wechsel NICHT bringt: Tempo.** Die Wartezeit steckt in `npm test` und im Pages-Build, nicht in der Chatlänge. Das ehrlich dazusagen, sonst ist die Erwartung falsch.
+
+**Was mitgenommen werden muss:** nichts aus dem Chat – `CLAUDE.md` ist das Gedächtnis und liegt im Repo. Offene Entscheidungen gehören deshalb **vor** dem Wechsel unter „Offene Ideen", sonst gehen sie verloren.
+
+**Für alle Sitzungen, nicht nur dieses Projekt:** Diese Datei gilt nur für `solitaire`, und `~/.claude/CLAUDE.md` überlebt einen frischen Cloud-Container nicht verlässlich (das Verzeichnis wird beim Start neu aufgesetzt). Sitzungsübergreifend wirken nur Lutz’ **persönliche Präferenzen in den Claude-Einstellungen**; der Textbaustein dafür steht in `NEUER-CHAT.md`.
+
 ## Kostenanzeige
 
 Unter **jeder** Antwort steht die Ausgabe von `tools/kosten.py`, wörtlich als letzte Zeile – nichts dahinter, nicht umformatiert, nicht geschätzt. Ablauf: `python3 tools/kosten.py` ausführen, Ausgabe anhängen. Ohne Ausnahme, auch bei kurzen Antworten. Läuft das Skript nicht (kein Sitzungsprotokoll, andere Umgebung), das offen sagen statt eine Zahl zu erfinden.
@@ -147,7 +163,11 @@ Diese Fassung (`KOSTENZEILE.md`, 15.09.2026) **ersetzt** die Tabelle (`KOSTENTAB
 Zwei weitere Fallstricke, die das Skript abfängt: Cloud-Sitzungen laufen mit dem **Stunden-Cache** (doppelter Schreibpreis, `--ttl5` rechnet mit fünf Minuten), und Modellnamen im Protokoll tragen ein Datum – deshalb Präfix-Vergleich, sonst greift der Rückfallpreis (bei Haiku das Fünffache). Die Token der gerade entstehenden Antwort fehlen noch und tauchen erst beim nächsten Mal auf. Fremde Dienste (Bildgenerierung, Hosting) rechnet diese Fassung **nicht** mit – solche Beträge gehören zusätzlich in den Text.
 
 ## Tests (headless Chromium via Puppeteer, einmal `npm install`)
-- `npm test` – alle sieben Suiten nacheinander; jede meldet Fehler über den Exit-Code. Einzeln z. B. `npm run test:browser`.
+- `npm test` – alle sieben Suiten **nebenläufig** (`tools/tests_parallel.js`), höchstens **drei gleichzeitig**; jede meldet Fehler über den Exit-Code. Einzeln z. B. `npm run test:browser`, nacheinander als Rückfall `npm run test:seq`.
+- **Gemessen am 16.09.2026: 474 s nacheinander gegen 228 s nebenläufig** – 52 % weniger Wartezeit bei 477 s Rechenzeit. Wunsch von Lutz: „Wenn das das gleiche Aufwand ist, sollten wir das parallel machen um die Zeit zu verkürzen."
+  **Drei gleichzeitig, nicht sieben** – und das ist gerechnet, nicht geschätzt: `test_browser` braucht allein **226 s**, die sechs anderen zusammen **248 s**. Auf zwei freien Spuren neben `test_browser` sind das 124 s, also weit unter dessen 226 s. `test_browser` ist damit der Deckel; mehr Nebenläufigkeit verkürzt **nichts** und belastet die Maschine nur zusätzlich. Wer noch schneller will, muss `test_browser` selbst aufteilen.
+  **Warum die Grenze überhaupt zählt: mehrere Suiten MESSEN Zeit** – `test_motion` die Animationsdauern (Zug 230 ms, Spulen 400 + 650 ms), `test_browser` und `test_layout` den Gleichtakt von Ampel und Band (0,96 s). Läuft die Maschine am Anschlag, werden diese Messungen langsamer und die Prüfungen wackeln. **Eine parallele Testinfrastruktur, die die Messungen verfälscht, ist schlimmer als eine langsame.** Deshalb beide Läufe verglichen: Zug 239 gegen 239 ms, Spulen 1076 gegen 1073 ms, Gleichtakt 0,96/0,96 in beiden, Glanz 2496 gegen 2498 Bildpunkte, `test_browser` 227 gegen 226 s. Kein messbarer Einfluss – aber bei jeder Erhöhung der Grenze **neu prüfen**.
+  Die Ausgabe wird **je Suite gesammelt** und am Stück gedruckt, nicht verschränkt – gerade die Diagnosen in der Ausgabe sind ihr Zweck. Die Nebenläufigkeit lässt sich über `TEST_PARALLEL=<n>` ändern. Keine Namenskollision bei den Screenshots geprüft: `test_browser` schreibt `shot_splash/game/hint/result/spool/sheet/board_*/theme_*`, `test_lessons` nur `shot_menu_lessons` und `shot_lesson5`.
 - `node tests/test_browser.js` – 275 Prüfungen (Spiel, Tipp, Trainer, Markierung, Strategie, Fehlersuche, Spulen, Textbreiten, Alarmtöne, Update-Hinweis).
 - `node tests/test_lessons.js`, `node tests/test_worker.js` (Worker-Ausfallszenarien), `node tests/test_full.js` (everEmpty gegen BFS), `node tests/test_table.js` (Exaktheit gegen Stellungszählung), `node tests/test_motion.js` (Animationsdauern: Zug 230 ms, Spulen 400 ms Vorlauf + 650 ms), `node tests/test_layout.js` (nichts verschwindet hinter der Fußleiste, über sechs Geräte- und Schriftgrößen; Brett springt nicht; Ampel ≥ 20 px und ihre Lichter mittig, Knopf ≥ 30 px, keine Zeichenreste im sichtbaren Text, Steinzahl steht fest und wandert beim Wechsel der Meldungen nicht, untere Zeile bleibt einzeilig, Ampel und Band laufen beim Rechnen im selben Takt und stehen danach still, dabei nie ganz dunkel; Ergebnislicht blitzt genau einmal).
 - Werkzeuge: `tools/gen_book2.js` (Eröffnungsbuch neu rechnen), `tools/purge_find.js`/`purge_find2.js`/`purge_plan2.js` (Purge-Muster und Partie-Plan), `tools/count_pos2.js` (Stellungen zählen), `tools/exp_parity.js` (Paritätsschranke prüfen). Ergebnisse liegen als `tools/patterns.json` (Purge-Muster) und `tools/plan.json` (Partie als Purge-Folge) daneben.
