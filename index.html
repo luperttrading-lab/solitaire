@@ -194,6 +194,7 @@ header .boardname:active{background:var(--panel2)}
 #detail.bad .kopf .dot{background:#e0574a}
 #detail.hint .kopf .dot{background:var(--brass2)}
 #detail .text{font-size:15px;line-height:1.45;color:var(--ink)}
+#detail .suche{font-size:15px;line-height:1.45;color:var(--ink);margin-top:12px;padding:10px 12px;border-left:3px solid var(--brass);background:rgba(255,255,255,.05);border-radius:0 8px 8px 0}
 #detail .zusatz{font-size:13px;color:var(--muted);margin-top:8px}
 #detail .aktionen{display:flex;flex-direction:column;gap:8px;margin:16px 0 6px}
 #status.hint{color:var(--brass2)}
@@ -496,6 +497,7 @@ header .boardname:active{background:var(--panel2)}
   <div class="scroll">
     <div class="kopf"><span class="dot"></span><span id="detailTitel"></span></div>
     <div class="text" id="detailText"></div>
+    <div class="suche" id="detailSuche"></div>
     <div class="zusatz" id="detailZusatz"></div>
     <div class="aktionen" id="detailAktionen"></div>
   </div>
@@ -523,7 +525,7 @@ header .boardname:active{background:var(--panel2)}
 
 <script>
 'use strict';
-const APP_VERSION='1.50';
+const APP_VERSION='1.51';
 /* =========================================================================
    Kern: Bretter, Züge, Symmetrien, Paritäts-Schranke, Solver
    (als Fabrik, damit derselbe Code im Web Worker läuft)
@@ -1507,7 +1509,14 @@ function zeigeRechnet(an){ if(rechnet===an) return; rechnet=an;
   /* Das Ergebnis kommt gleich nach dem Abschalten per setStatus; die naechste
      farbige Meldung darf einmal aufblitzen. Kommt keine, verfaellt das. */
   if(!an){ blitzAusstehend=Date.now(); } }
+/* Die Suchidee steht NUR im Blatt hinter dem Pfeil - die Statuszeile ist hart
+   einzeilig und haette sie ohnehin abgeschnitten. Sie gilt genau fuer die
+   naechste Meldung und wird von setStatus verbraucht, damit sie nicht an der
+   uebernaechsten haengen bleibt. */
+let statusSuche='';
+function setSuche(t){ statusSuche=t||''; }
 function setStatus(text,cls,linkText,linkFn,note,kurz){
+  const suche=statusSuche; statusSuche='';
   const isArr=Array.isArray(linkText);
   const links=isArr?linkText:(linkText?[[linkText,linkFn]]:[]);
   const noteText=isArr?linkFn:note;
@@ -1518,8 +1527,8 @@ function setStatus(text,cls,linkText,linkFn,note,kurz){
   const nurZahl=/^\d+ Steine? übrig\.?$/.test(text.trim());
   if(nurZahl){ kurzT=''; }
   statusEl.className=cls||''; statusEl.textContent='';
-  const mehr=links.length>0||!!noteText||(kurzT!==text&&!nurZahl);
-  statusDetail=mehr?{text:text,cls:cls||'',note:noteText||'',links:links,kurz:kurzT||text}:null;
+  const mehr=links.length>0||!!noteText||!!suche||(kurzT!==text&&!nurZahl);
+  statusDetail=mehr?{text:text,cls:cls||'',note:noteText||'',suche:suche,links:links,kurz:kurzT||text}:null;
 
   const dot=document.createElement('span'); dot.className='dot';
   dot.innerHTML='<b class="r"></b><b class="g"></b><b class="gr"></b>';
@@ -1568,6 +1577,8 @@ function openDetail(){
   const d=$('detail'); d.className=statusDetail.cls||'';
   $('detailTitel').textContent=statusDetail.kurz;
   $('detailText').textContent=statusDetail.text;
+  $('detailSuche').textContent=statusDetail.suche||'';
+  $('detailSuche').hidden=!statusDetail.suche;
   $('detailZusatz').textContent=statusDetail.note||'';
   $('detailZusatz').hidden=!statusDetail.note;
   const box=$('detailAktionen'); box.textContent='';
@@ -1885,11 +1896,13 @@ function findMistake(){
     const report=(path)=>{ mistakeCancel=null; const culprit=game.board.moves[hist[k].mi]; const better=game.board.moves[path[0]];
       const later=path.slice(1).some(mi=>{ const m=game.board.moves[mi]; return m.from===culprit.from&&m.to===culprit.to; });
       let cat='Struktur'; if(later) cat='Reihenfolge'; else if(better.over===culprit.over||better.from===culprit.from) cat='Falsche Richtung';
-      const txt='Der entscheidende Zug war Zug '+(k+1)+' von '+n+' ('+cat+'): '+moveWords(culprit,pegs[k])+'. Besser war: '+moveWords(better,pegs[k])+'.';
-      /* Die Fehlersuche nennt den besseren Zug beim Namen - das ist ein Tipp
-         und wird als solcher gezaehlt, sonst haette man ihn hier umsonst. */
-      tippZaehlen();
-      setStatus(txt,'bad',[['Dorthin zurück & Zug zeigen',()=>rewindTo(k,path)]],'Danach war 1 Stein nicht mehr erreichbar.','Zug '+(k+1)+' war entscheidend'); };
+      const txt='Der entscheidende Zug war Zug '+(k+1)+' von '+n+' ('+cat+'): '+moveWords(culprit,pegs[k])+'.';
+      /* Seit v1.51 nennt die Fehlersuche den besseren Zug NICHT mehr: sie soll
+         die Stelle finden, nicht die Loesung verraten (Lutz, 16.09.2026). Damit
+         kostet das Suchen selbst auch keinen Tipp mehr - faellig wird er erst,
+         wenn der Zug ueber den Knopf wirklich gezeigt wird. */
+      setSuche(suchIdee(cat,better,culprit));
+      setStatus(txt,'bad',[['Dorthin zurück & Zug zeigen',()=>{ tippZaehlen(); rewindTo(k,path); }]],'Danach war 1 Stein nicht mehr erreichbar.','Zug '+(k+1)+' war entscheidend'); };
     if(onBook){ report(book.slice(k)); return; }
     setStatus('Suche den Fehler… prüfe Zug '+(k+1)+' von '+n,'', 'Abbrechen',()=>{ stopped=true; if(mistakeCancel) mistakeCancel(); mistakeCancel=null; setStatus('Suche abgebrochen.'); });
     const [lo,hi]=CORE.fromArray(arr); const lb=CORE.parityLowerBound(game.board,arr);
@@ -1983,6 +1996,23 @@ function evaluatePosition(){
 function dirWord(m){ const a=game.board.cells[m.from], b=game.board.cells[m.to]; const dr=b.r-a.r, dc=b.c-a.c; if(game.board.def.type==='tri') return dc>0&&dr===0?'nach rechts':dc<0&&dr===0?'nach links':dr>0?'nach unten':'nach oben'; return dr>0?'nach unten':dr<0?'nach oben':dc>0?'nach rechts':'nach links'; }
 function moveWords(m,pegAt){ const j=pegName(pegAt[m.from]!==undefined&&pegAt[m.from]>=0?pegAt[m.from]:-1), o=pegName(pegAt[m.over]>=0?pegAt[m.over]:-1); return (j||'Stein')+' über '+(o||'den Nachbarn')+' '+dirWord(m); }
 function regionWord(i){ const c=game.board.cells[i]; if(game.board.def.type!=='grid') return ''; const R=game.board.def.rows.length; const mid=(R-1)/2; if(Math.abs(c.r-mid)<=1&&Math.abs(c.c-mid)<=1) return ' in der Mitte'; if(c.r<mid-1) return ' im oberen Arm'; if(c.r>mid+1) return ' im unteren Arm'; if(c.c<mid-1) return ' im linken Arm'; return ' im rechten Arm'; }
+/* Wo suchen, ohne den Zug zu verraten (Lutz, 16.09.2026): "keine exakte
+   Vorgabe, sondern eine Idee, wo ich nach einem richtigen Zug suchen sollte".
+   Genannt wird deshalb hoechstens eine REGION (regionWord fasst 6-9 Felder
+   zusammen) oder eine Menge von Kandidaten - nie Feld, Farbe und Richtung
+   zusammen, denn das waere der Zug. */
+function suchIdee(cat,better,played){
+  const reg=regionWord(better.from);   /* '' auf dem Dreieck - dann ohne Ort */
+  if(cat==='Reihenfolge') return reg?'Such den Zug, der vorher an der Reihe war – er beginnt'+reg+'.'
+                                    :'Such den Zug, der vorher an der Reihe war.';
+  if(cat==='Falsche Richtung'){
+    if(better.over===played.over) return 'Der geschlagene Stein war richtig. Schau dir seine anderen Nachbarn an – einer von ihnen musste springen.';
+    if(better.from===played.from) return 'Der Stein war richtig. Er hatte noch andere Sprünge – geh sie durch.';
+    return 'Das Loch war richtig. Schau, wer es sonst noch hätte füllen können.';
+  }
+  if(cat==='Stein gestrandet') return 'Such einen Zug, der diesen Steinen einen Nachbarn zum Überspringen lässt.';
+  return reg?'Der bessere Zug beginnt'+reg+'.':'Der bessere Zug lag an einer anderen Stelle.';
+}
 function strategyAdvice(prev,ev){
   // prev: Bewertung der Stellung vor dem Zug (mit bester Linie), ev: Bewertung danach. Nur wenn der Zug den Beweis-Stand verschlechtert hat.
   if(!prev||!prev.complete||!ev.complete||!(prev.best<ev.best)||!prev.path||!prev.path.length) return null;
@@ -1997,12 +2027,12 @@ function strategyAdvice(prev,ev){
   /* Dasselbe Loch, aber von der falschen Seite gefuellt. Diese Klasse fehlte:
      Lutz' Zug am 13.09. (gruen von rechts statt rot von oben in dieselbe
      Luecke) landete bei "Struktur" und war damit nicht zu verstehen. */
-  else if(better.to===played.to){ cat='Falsche Richtung'; why='Das Loch war das richtige – aber der Sprung hinein musste '+dirWord(better)+' gehen, nicht '+dirWord(played)+'.'; }
+  else if(better.to===played.to){ cat='Falsche Richtung'; why='Das Loch war das richtige – aber es musste von einer anderen Seite gefüllt werden.'; }
   else { let stranded=[]; if(ev.optFinal){ for(let i=0;i<b.n;i++){ if(game.pegAt[i]>=0&&((i<32?(ev.optFinal.mask[0]>>>i):(ev.optFinal.mask[1]>>>(i-32)))&1)) stranded.push(i); } }
     if(stranded.length){ cat='Stein gestrandet'; why=stranded.slice(0,2).map(i=>(pegName(game.pegAt[i])||'Ein Stein')+regionWord(i)).join(' und ')+(stranded.length>2?' und weitere':'')+' bleib'+(stranded.length===1?'t':'en')+' in jeder guten Fortsetzung stehen – kein Nachbar kann sie noch überspringen.'; }
     else { cat='Struktur'; why='Nach dem Zug fehlt ein Stein an der Stelle, an der später ein Sprung gebraucht wird.'; } }
   const betterTxt=moveWords(better,before);
-  return {cat,why,betterTxt,best:ev.best,path:prev.path};
+  return {cat,why,betterTxt,suche:suchIdee(cat,better,played),best:ev.best,path:prev.path};
 }
 function showTrainer(){
   const ev=game.evalRes; if(!ev||ev.key!==stateKey()) return;
@@ -2014,7 +2044,7 @@ function showTrainer(){
        war die Tipp-Zahl am Ende der Partie nicht ehrlich. Die Fehlerklasse
        und die Begruendung bleiben, das ist Analyse, kein Zug. Wer den Zug
        sehen will, holt ihn ueber die Aktion - und die zaehlt. */
-    if(adv){ setStatus('Strategischer Fehler – '+adv.cat+'. '+adv.why,'bad',[['Zurück & Zug zeigen',()=>{ tippZaehlen(); game.showBetter={path:adv.path.slice()}; undo(); }]],'Jetzt bestenfalls '+adv.best+' Steine, vorher war 1 erreichbar.',KURZ_KLASSE[adv.cat]||'Dieser Zug kostet die Lösung');
+    if(adv){ setSuche(adv.suche); setStatus('Strategischer Fehler – '+adv.cat+'. '+adv.why,'bad',[['Zurück & Zug zeigen',()=>{ tippZaehlen(); game.showBetter={path:adv.path.slice()}; undo(); }]],'Jetzt bestenfalls '+adv.best+' Steine, vorher war 1 erreichbar.',KURZ_KLASSE[adv.cat]||'Dieser Zug kostet die Lösung');
       /* Der Alarm beim Verlust der Loesung laeuft schon - der kurze Stups
          wuerde ihn nur zudecken. */
       if(Date.now()-alarmZuletzt>alarmDauer()) Sound.bad();
@@ -2041,6 +2071,7 @@ function showTrainer(){
     +(adv?' '+adv.cat+': '+adv.why:'');
   const aktion=adv?[['Zurück & Zug zeigen',()=>{ tippZaehlen(); game.showBetter={path:adv.path.slice()}; undo(); }]]
     :lost?[['Zurück',()=>undo()]]:[['Fehler suchen',()=>findMistake()]];
+  if(adv) setSuche(adv.suche);
   setStatus(t,'bad',aktion,note,adv?(KURZ_KLASSE[adv.cat]||'Dieser Zug kostet die Lösung')
     :'Bestenfalls '+ev.best+' Steine'+(lost?' – Zug hat es gekostet':''));
 }

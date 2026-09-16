@@ -227,6 +227,22 @@ function kurzfassungGleich(proben,voll,erwartet){
      Klasse und die Begruendung bleiben - das ist Analyse, kein Zug. */
   ok('Der bessere Zug wird nicht ungefragt verraten',
      !!adv&&!/Besser:/.test(adv), (adv||'').slice(0,120));
+  /* Seit v1.51 steht hinter dem Pfeil rechts eine SUCHGEGEND (Lutz,
+     16.09.2026: "eine Idee, wo ich nach einem richtigen Zug suchen sollte,
+     kein exakter Zug als Vorgabe"). Geprueft wird deshalb nicht nur, DASS
+     dort etwas steht, sondern dass es den Zug nicht verraet: kein Farbname
+     und keine Richtungsangabe - beides zusammen waere der Zug. */
+  const blatt=await page.evaluate(()=>{ openDetail(); const e=document.getElementById('detailSuche');
+    const r=e.getBoundingClientRect();
+    const farben=Object.values(HEX_NAMES);
+    return {txt:e.textContent, sichtbar:!e.hidden&&r.width>0&&r.height>0,
+            farbe:farben.filter(f=>e.textContent.includes(f)),
+            richtung:/nach (oben|unten|links|rechts)/.test(e.textContent)}; });
+  console.log('INFO Suchgegend: '+JSON.stringify(blatt));
+  ok('Pfeil rechts zeigt eine Suchgegend', blatt.sichtbar&&blatt.txt.length>20, blatt.txt);
+  ok('Die Suchgegend nennt keinen Farbnamen', blatt.farbe.length===0, blatt.farbe.join(','));
+  ok('Die Suchgegend nennt keine Richtung', !blatt.richtung, blatt.txt);
+  await page.evaluate(()=>closeDetail());
   await page.evaluate(()=>{ [...statusEl.querySelectorAll('.link')].find(l=>/Zurück & Zug/.test(l.textContent)).click(); }); await sleep(1400); await page.waitForFunction(()=>!game.animating,{timeout:20000}); await sleep(200);
   const shown=await page.evaluate(()=>({hint:game.hintOn&&!!document.querySelector('#board .hint-arrow'),status:statusFullText(),moves:game.history.length}));
   console.log('INFO nach Zurück & Zug zeigen: '+JSON.stringify(shown));
@@ -548,11 +564,24 @@ function kurzfassungGleich(proben,voll,erwartet){
   await page.evaluate(()=>{ game.evalRes=null; game.prevEval=null; evaluatePosition(); }); await page.waitForFunction(()=>!game.evaluating,{timeout:20000}); await sleep(100);
   s=await state(); console.log('INFO nach 3 Zügen: '+s.status);
   ok('Verloren, aber Zug nicht schuld: Link „Fehler suchen"', /Fehler lag früher/.test(s.status)&&/Fehler suchen/.test(s.status));
+  const tippVorher=await page.evaluate(()=>game.tippKeys.size);
   await page.evaluate(()=>{ [...statusEl.querySelectorAll('.link')].find(l=>/Fehler suchen/.test(l.textContent)).click(); });
   await page.waitForFunction(()=>/entscheidende Fehler|nicht mehr erreichbar|abgebrochen/.test(statusFullText()),{timeout:60000}); await sleep(100);
   s=await state(); console.log('INFO Fehlersuche: '+s.status);
-  ok('Fehlersuche nennt Zug 13 mit besserem Zug', /Zug war Zug 13 von 15/.test(s.status)&&/Besser war/.test(s.status));
+  /* Umgekehrt in v1.51: Die Fehlersuche soll die STELLE finden, nicht die
+     Loesung verraten. Sie nennt Zugnummer und Fehlerklasse - und weil sie
+     keinen Zug mehr ausspricht, kostet sie auch keinen Tipp mehr. Faellig
+     wird der erst, wenn der Zug ueber den Knopf wirklich gezeigt wird. */
+  ok('Fehlersuche nennt Zug 13 und die Fehlerklasse', /Zug war Zug 13 von 15/.test(s.status)
+     &&/(Reihenfolge|Falsche Richtung|Struktur|Stein gestrandet)/.test(s.status), s.status.slice(0,120));
+  ok('Fehlersuche verraet den besseren Zug nicht mehr', !/Besser war/.test(s.status), s.status.slice(0,120));
+  const fsBlatt=await page.evaluate(()=>{ openDetail(); const e=document.getElementById('detailSuche');
+    const t=e.textContent; closeDetail(); return {txt:t, tipps:game.tippKeys.size}; });
+  console.log('INFO Fehlersuche-Blatt: '+JSON.stringify(fsBlatt));
+  ok('Fehlersuche gibt eine Suchgegend statt des Zuges', fsBlatt.txt.length>20&&!/nach (oben|unten|links|rechts)/.test(fsBlatt.txt), fsBlatt.txt);
+  ok('Suchen allein kostet keinen Tipp', fsBlatt.tipps===tippVorher, fsBlatt.tipps+' statt '+tippVorher);
   await page.evaluate(()=>{ [...statusEl.querySelectorAll('.link')].find(l=>/Dorthin zurück/.test(l.textContent)).click(); }); await sleep(300);
+  ok('Erst der gezeigte Zug kostet einen Tipp', await page.evaluate(()=>game.tippKeys.size)===tippVorher+1);
   const rw=await page.evaluate(()=>({moves:game.history.length,hint:game.hintOn&&!!document.querySelector('#board .hint-arrow'),future:game.future.length}));
   ok('Zurückgespult auf Zug 12, besserer Zug markiert, Vor-Verlauf erhalten', rw.moves===12&&rw.hint&&rw.future===3, JSON.stringify(rw));
   await page.evaluate(()=>{ settings.strategy=false; renderStrategyBtn(); newGame('english'); });
@@ -632,8 +661,13 @@ function kurzfassungGleich(proben,voll,erwartet){
      mitStrat.vorher===1&&mitStrat.nachher===2&&mitStrat.endbilder===8, JSON.stringify(mitStrat).slice(0,120));
   ok('Falsch gefuelltes Loch heisst "Falsche Richtung", nicht "Struktur"',
      /Falsche Richtung/.test(mitStrat.text)&&!/Struktur/.test(mitStrat.text), mitStrat.text.slice(0,110));
-  ok('Erklaerung nennt beide Richtungen',
-     /musste nach (oben|unten|links|rechts) gehen, nicht nach (oben|unten|links|rechts)/.test(mitStrat.text),
+  /* Umgekehrt in v1.51: Bis v1.50 nannte die Erklaerung beide Richtungen
+     ("musste nach oben gehen, nicht nach rechts") - zusammen mit dem Loch ist
+     das der Zug. Lutz am 16.09.2026: "kein exakter Zug als Vorgabe". Die
+     Erklaerung sagt jetzt nur noch, DASS die Seite falsch war; wo zu suchen
+     ist, steht als Gegend im Blatt hinter dem Pfeil. */
+  ok('Erklaerung nennt die Richtung nicht mehr',
+     /von einer anderen Seite/.test(mitStrat.text)&&!/nach (oben|unten|links|rechts)/.test(mitStrat.text),
      mitStrat.text.slice(0,140));
 
   const ohneStrat=await lutzZug(false);
