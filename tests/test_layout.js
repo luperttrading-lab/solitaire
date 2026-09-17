@@ -352,7 +352,7 @@ const FAELLE=[
      const zeilenVorher=Math.round(document.querySelector('.quick').getBoundingClientRect().height);
      const l=currentLine(); applyMove(game.board.moves[l.path[0]],true); render(); renderHud(); fitStage();
      const q=document.querySelector('.quick').getBoundingClientRect();
-     const st=document.getElementById('btnStrategy').getBoundingClientRect();
+     const st=document.getElementById('btnComputer').getBoundingClientRect();
      const pa=document.getElementById('btnPause').getBoundingClientRect();
      /* Einzeilig heisst hier: nicht hoeher als der Strategie-Chip, der
         nachweislich einzeilig ist. Die sonst uebliche Formel Hoehe durch

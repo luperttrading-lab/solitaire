@@ -187,6 +187,7 @@ header .boardname:active{background:var(--panel2)}
 #detail.on{transform:translateY(0)}
 #detail .handle{width:44px;height:5px;border-radius:3px;background:var(--line);margin:10px auto 4px;flex:none}
 
+#status.ohneAmpel .dot{display:none}
 #detail .kopf{display:flex;align-items:center;gap:10px;font-size:17px;color:var(--ink);margin-bottom:8px}
 #detail .kopf .dot{flex:none;width:14px;height:14px;border-radius:50%;background:var(--muted)}
 #detail.ok .kopf .dot{background:#3fae6a}
@@ -284,6 +285,9 @@ header .boardname:active{background:var(--panel2)}
 .row{display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--line);gap:10px}
 .row .t{font-size:15px}
 .row .d{font-size:12px;color:var(--muted);margin-top:2px}
+/* Unterpunkte des Hauptschalters Computer: eingerueckt, und ohne ihn weg -
+   sonst dreht jemand am Warnblitz und wundert sich, warum nichts kommt. */
+.row.sub{padding-left:14px;border-left:2px solid var(--line)}
 .switch{flex:none;width:52px;height:31px;border-radius:16px;background:#4a3f33;position:relative;transition:background .2s}
 .switch::after{content:"";position:absolute;top:3px;left:3px;width:25px;height:25px;border-radius:50%;background:#fff;transition:transform .2s;box-shadow:0 2px 4px rgba(0,0,0,.4)}
 .switch.on{background:var(--brass)}
@@ -423,7 +427,7 @@ header .boardname:active{background:var(--panel2)}
       <dt>Rettung</dt><dd id="hudRett">–</dd>
     </dl>
   </div>
-  <div class="quick"><button id="btnStrategy" class="pill" aria-pressed="false">Strategie-Hinweise: aus</button><button type="button" id="btnPause" class="pill"><i class="pzb"></i>Pause</button></div>
+  <div class="quick"><button id="btnComputer" class="pill" aria-pressed="false">Computer: aus</button><button type="button" id="btnPause" class="pill"><i class="pzb"></i>Pause</button></div>
   <div id="stage"><svg id="board" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Spielbrett"></svg>
     <div id="pause" aria-hidden="true"><div class="pt">Pause</div><div class="ps">Das Brett ist verdeckt – sonst wäre die Pause eine Bedenkzeit.</div><button type="button" class="pknopf" id="btnWeiter" aria-label="Weiter spielen"><svg viewBox="0 0 24 24" width="34" height="34" aria-hidden="true"><path d="M8.5 5.2v13.6L19 12z" fill="currentColor"/></svg>Weiter</button></div></div>
   <div id="status"></div>
@@ -454,15 +458,17 @@ header .boardname:active{background:var(--panel2)}
     <h2>Lernen</h2>
     <p>Lektionen: kurze Aufgaben mit vorbereiteten Stellungen.</p>
     <div class="chips" id="lessonList"></div>
-    <div class="row"><div><div class="t">Trainer</div><div class="d">Bewertet nach jedem Zug, ob 1 Stein noch erreichbar ist, und nennt den Zug, der es gekostet hat.</div></div><button class="switch" id="swTrainer" role="switch" aria-label="Trainer"></button></div>
-    <div class="row"><div><div class="t">Gestrandete Steine markieren</div><div class="d">Felder, die in jeder bestmöglichen Fortsetzung besetzt bleiben, bekommen ein Zeichen – dort wird ein Stein übrig bleiben. Ein Tipp auf so einen Stein sagt es noch einmal. Ab 24 Steinen abwärts.</div></div><button class="switch" id="swMarks" role="switch" aria-label="Gestrandete Steine markieren"></button></div>
+    <h2>Hilfe</h2>
+    <div class="row"><div><div class="t">Computer</div><div class="d">Der Rechner bewertet jeden Zug: Ampel, Warnblitz, Erklärung hinter dem Pfeil, markierte Steine und die roten Dreiecke deiner Versuche. Aus heißt: wie am echten Brett – nichts davon, nur Vor und Zurück.</div></div><button class="switch" id="swComputer" role="switch" aria-label="Computer"></button></div>
+    <div class="row sub" data-sub="computer"><div><div class="t">Warnblitz</div><div class="d">Kostet ein Zug die Lösung, leuchtet der Bildschirm einmal kurz rot auf. Nur beim Übergang, nicht bei jedem weiteren Zug.</div></div><button class="switch" id="swAlarm" role="switch" aria-label="Warnblitz"></button></div>
+    <div class="row sub" data-sub="computer"><div style="width:100%"><div class="t">Alarmton</div><div class="d">Welches Signal ertönt, wenn ein Zug die Lösung kostet. Tippen spielt es zur Probe ab.</div><div class="chips" id="alarmList" style="margin-top:10px"></div></div></div>
+    <div class="row sub" data-sub="computer"><div><div class="t">Gestrandete Steine markieren</div><div class="d">Felder, die in jeder bestmöglichen Fortsetzung besetzt bleiben, bekommen ein Zeichen – dort wird ein Stein übrig bleiben. Ein Tipp auf so einen Stein sagt es noch einmal. Ab 24 Steinen abwärts.</div></div><button class="switch" id="swMarks" role="switch" aria-label="Gestrandete Steine markieren"></button></div>
+    <div class="row sub" data-sub="computer"><div><div class="t">Probierte Züge</div><div class="d">Nimmst du einen Zug zurück, bleibt er als rotes Dreieck stehen – breit, wo du ansetztest, spitz, wo du landetest. So siehst du, was du hier schon versucht hast. Ein Zug führt in eine andere Stellung, dort beginnt die Zählung von vorn.</div></div><button class="switch" id="swProbiert" role="switch" aria-label="Probierte Züge"></button></div>
+    <div class="row"><div><div class="t">Tipps</div><div class="d">Hilfe auf Anfrage: der Tipp-Knopf zeigt den besten Zug, „Fehler suchen" findet den Zug, der die Lösung gekostet hat. Beides wird gezählt. Aus heißt: der Knopf ist weg.</div></div><button class="switch" id="swTipps" role="switch" aria-label="Tipps"></button></div>
     <h2>Steuerung</h2>
     <div class="row"><div><div class="t">Auto-Sprung</div><div class="d">Antippen genügt, wenn nur ein Zug möglich ist. Bei mehreren: in Richtung wischen oder Zielfeld tippen.</div></div><button class="switch" id="swAuto" role="switch" aria-label="Auto-Sprung"></button></div>
     <div class="row"><div><div class="t">Zielfelder anzeigen</div><div class="d">Mögliche Ziele des gewählten Steins markieren.</div></div><button class="switch" id="swTargets" role="switch" aria-label="Zielfelder anzeigen"></button></div>
     <div class="row"><div><div class="t">Startloch frei wählen</div><div class="d">Beim Start alle Steine setzen und selbst einen herausnehmen.</div></div><button class="switch" id="swFree" role="switch" aria-label="Startloch frei wählen"></button></div>
-    <div class="row"><div><div class="t">Warnblitz</div><div class="d">Kostet ein Zug die Lösung, leuchtet der Bildschirm einmal kurz rot auf. Nur beim Übergang, nicht bei jedem weiteren Zug.</div></div><button class="switch" id="swAlarm" role="switch" aria-label="Warnblitz"></button></div>
-    <div class="row"><div style="width:100%"><div class="t">Alarmton</div><div class="d">Welches Signal ertönt, wenn ein Zug die Lösung kostet. Tippen spielt es zur Probe ab.</div><div class="chips" id="alarmList" style="margin-top:10px"></div></div></div>
-    <div class="row"><div><div class="t">Probierte Züge</div><div class="d">Nimmst du einen Zug zurück, bleibt er als dünner roter Strich stehen – so siehst du auf einen Blick, was du hier schon versucht hast. Nach zwei Sekunden tritt die große Markierung zurück und lässt nur den Strich stehen. Ein Zug führt in eine andere Stellung, dort beginnt die Zählung von vorn.</div></div><button class="switch" id="swProbiert" role="switch" aria-label="Probierte Züge"></button></div>
     <div class="row"><div><div class="t">Funkeln</div><div class="d">Ein Streiflicht wandert über die Murmel, die du antippst, und über die, die gerade gesprungen ist. Sonst bleibt das Brett still.</div></div><button class="switch" id="swFunkeln" role="switch" aria-label="Funkeln"></button></div>
     <div class="row"><div><div class="t">Ton</div><div class="d">Kurze Klicks beim Ziehen, Jingle am Ende.</div></div><button class="switch" id="swSound" role="switch" aria-label="Ton"></button></div>
     <h2>So geht's</h2>
@@ -528,7 +534,7 @@ header .boardname:active{background:var(--panel2)}
 
 <script>
 'use strict';
-const APP_VERSION='1.53';
+const APP_VERSION='1.54';
 /* =========================================================================
    Kern: Bretter, Züge, Symmetrien, Paritäts-Schranke, Solver
    (als Fabrik, damit derselbe Code im Web Worker läuft)
@@ -809,13 +815,17 @@ const Store={
   set(k,v){ try{ localStorage.setItem('solitaire.'+k,JSON.stringify(v)); }catch(e){} },
   del(k){ try{ localStorage.removeItem('solitaire.'+k); }catch(e){} }
 };
-const settings=Object.assign({board:'english',theme:'glas',boardLook:'holz',pegStyle:'glas',pegColor:'bunt',autoJump:true,showTargets:true,freeStart:false,sound:true,trainer:true,marks:false,strategy:true,alarm:true,alarmTon:'gong',funkeln:true,ampelKraft:6,ampelSkala:0,probiert:true},Store.get('settings',{}));
+const settings=Object.assign({board:'english',theme:'glas',boardLook:'holz',pegStyle:'glas',pegColor:'bunt',autoJump:true,showTargets:true,freeStart:false,sound:true,trainer:true,marks:false,strategy:true,computer:true,tipps:true,alarm:true,alarmTon:'gong',funkeln:true,ampelKraft:6,ampelSkala:0,probiert:true},Store.get('settings',{}));
 function saveSettings(){ Store.set('settings',settings); }
 /* Einmalige Umstellung: Trainer und Strategie-Hinweise sind ab Werk an. Wer
    die App vorher installiert hatte, trug den alten Stand (strategy:false) in
    seinen gespeicherten Einstellungen mit sich - ein geaenderter Standard
    erreicht ihn nie, weil Object.assign den gespeicherten Wert vorzieht. */
 if(!settings.anGestellt){ settings.trainer=true; settings.strategy=true; settings.anGestellt=true; saveSettings(); }
+/* v1.54: Trainer, Strategie-Hinweise und Markierung werden zu EINEM
+   Hauptschalter "Computer" (Lutz, 17.09.2026). Wer vorher alle drei aus
+   hatte, bekommt ihn aus; sonst an. Laeuft genau einmal. */
+if(!settings.hilfeSortiert){ settings.computer=!!(settings.trainer||settings.strategy||settings.marks); settings.hilfeSortiert=true; saveSettings(); }
 function currentLook(){ const t=THEMES[settings.theme]||THEMES.glas; return t.custom?{board:settings.boardLook,peg:settings.pegStyle,color:settings.pegColor}:{board:t.board,peg:t.peg,color:t.color}; }
 
 /* =========================================================================
@@ -1165,7 +1175,7 @@ function applyMove(m,record){
    (15.09.2026): "dass ich sehe, welchen Zug ich schon probiert habe, wenn ich
    den gleichen Zug mehrfach falsch mache". */
 function probiertMerken(mi){
-  if(!settings.probiert) return;
+  if(!settings.computer||!settings.probiert) return;
   const k=stateKey();
   let s=game.probiert.get(k); if(!s){ s=new Set(); game.probiert.set(k,s); }
   s.add(mi);
@@ -1184,7 +1194,7 @@ function probiertMerken(mi){
   },2000);
 }
 function probierteHier(){
-  if(!settings.probiert) return null;
+  if(!settings.computer||!settings.probiert) return null;
   const s=game.probiert.get(stateKey());
   return (s&&s.size)?s:null;
 }
@@ -1214,7 +1224,7 @@ function undo(){
       let p=0; for(let i=0;i<L.phases.length;i++){ if(ls.phaseStarts&&ls.phaseStarts[i]!==undefined&&ls.phaseStarts[i]<=game.history.length) p=i; }
       ls.phase=p; ls.movesAtStart=ls.phaseStarts[p]||0; ls.expected=ls.phaseExpected?ls.phaseExpected[p]:null;
       const ph=L.phases[p]; $('lessonText').textContent=ph.text; }
-    if(settings.trainer||settings.marks||settings.strategy) evaluatePosition();
+    if(settings.computer) evaluatePosition();
   },true,'slow',400);
 }
 function redo(){
@@ -1226,7 +1236,7 @@ function redo(){
   cancelEval(); renderOverlay(); setStatus(game.lastMove.text,'',null,null,game.lastMove.count);
   animateMove(m,()=>{ applyMove(m,false); game.history.push(h); game.lastMove.dir='redo';
     render(); afterMove(true);
-    if(anyLegalMove()&&!(settings.trainer&&!game.hintOn)) setStatus(game.lastMove.text,'',null,null,game.lastMove.count); },false,'slow',400);
+    if(anyLegalMove()&&!(settings.computer&&!game.hintOn)) setStatus(game.lastMove.text,'',null,null,game.lastMove.count); },false,'slow',400);
 }
 function elapsedMs(){ return game.elapsedBefore+(game.startedAt&&!game.finished?Date.now()-game.startedAt:0); }
 /* Pause von Hand. game.pauseAn ist bewusst etwas anderes als game.paused
@@ -1280,7 +1290,7 @@ function renderPegs(){
 function renderOverlay(){
   overlayLayer.innerHTML=''; const lay=game.lay;
   if(game.phase==='choose'){ return; }
-  const ev=game.evalRes; if(settings.marks&&ev&&ev.key===stateKey()&&ev.optFinal&&ev.best>1){
+  const ev=game.evalRes; if(settings.computer&&settings.marks&&ev&&ev.key===stateKey()&&ev.optFinal&&ev.best>1){
     const om=ev.optFinal.mask; let gab=false;
     for(let i=0;i<game.board.n;i++){ if(game.pegAt[i]<0) continue; const stays= i<32?!!((om[0]>>>i)&1):!!((om[1]>>>(i-32))&1);
       if(stays){ gab=true; const p=lay.pos[i]; overlayLayer.appendChild(el('circle',{cx:p.x+24,cy:p.y+24,r:11,fill:'#1a1512',stroke:'#e2a95c','stroke-width':'2'})); overlayLayer.appendChild(el('path',{d:`M${p.x+19} ${p.y+19}l10 10M${p.x+29} ${p.y+19}l-10 10`,stroke:'#e2a95c','stroke-width':'2.5','stroke-linecap':'round'})); } }
@@ -1376,6 +1386,8 @@ function renderHud(){
   const pb=$('btnPause'); if(pb) pb.disabled=!p&&(!game.startedAt||game.finished);
   $('btnUndo').disabled=!game.history.length||game.animating||p; $('btnRedo').disabled=!game.future.length||game.animating||p;
   $('btnHint').disabled=game.phase==='choose'||game.finished||game.searching||game.animating||!!game.lesson||p;
+  /* Hilfe auf Anfrage haengt am Schalter Tipps - aus heisst: kein Knopf. */
+  $('btnHint').hidden=!settings.tipps;
 }
 // Feste Brettgröße: hängt nur von Fenster und Lektionsmodus ab, nicht von der Textlänge darunter
 /* Laengste Meldung, die die Strategie-Hinweise erzeugen koennen: Fehlerklasse,
@@ -1440,9 +1452,16 @@ function fitStage(){
   boardSvg.style.width=Math.round(w)+'px'; boardSvg.style.height=Math.round(w*ratio)+'px';
 }
 window.addEventListener('resize',()=>{ statusReserveCache={w:-1,h:statusReserveCache.h}; stageShrink=0; fitStage(); ensureStatusFits(); });
-function renderStrategyBtn(){ const b=$('btnStrategy'); b.classList.toggle('on',!!settings.strategy); b.setAttribute('aria-pressed',String(!!settings.strategy)); b.textContent='Strategie-Hinweise: '+(settings.strategy?'an':'aus'); }
-$('btnStrategy').addEventListener('click',()=>{ settings.strategy=!settings.strategy; saveSettings(); renderStrategyBtn(); if(settings.strategy){ toast('Nach jedem Zug: War das ein strategischer Fehler – und was wäre besser gewesen?'); evaluatePosition(); } else if(!settings.trainer) setStatus(pegCount()+' Steine übrig.'); });
-renderStrategyBtn();
+function renderComputerBtn(){ const b=$('btnComputer'); b.classList.toggle('on',!!settings.computer); b.setAttribute('aria-pressed',String(!!settings.computer)); b.textContent='Computer: '+(settings.computer?'an':'aus'); }
+/* Der Hauptschalter: an = der Rechner bewertet jeden Zug (Ampel, Warnblitz,
+   Erklaerung, Markierung, probierte Zuege). Aus = wie am echten Brett: nichts
+   davon, nur Vor und Zurueck. */
+function computerSetzen(an){ settings.computer=!!an; saveSettings(); renderComputerBtn();
+  if(settings.computer){ evaluatePosition(); }
+  else { cancelEval(); game.evalRes=null; game.prevEval=null; game.probiert=new Map(); clearTimeout(game.probiertTimer); renderOverlay(); setStatus(pegCount()+' Steine übrig.'); }
+  buildSheet(); }
+$('btnComputer').addEventListener('click',()=>{ computerSetzen(!settings.computer); if(settings.computer) toast('Der Computer bewertet jetzt jeden Zug.'); });
+renderComputerBtn();
 function render(){ renderPegs(); renderOverlay(); renderHud(); refreshAnker(); }
 setInterval(()=>{ if(game.startedAt&&!game.finished) $('hudTime').textContent=fmtTime(elapsedMs()); },500);
 
@@ -1529,6 +1548,8 @@ function setStatus(text,cls,linkText,linkFn,note,kurz){
   const nurZahl=/^\d+ Steine? übrig\.?$/.test(text.trim());
   if(nurZahl){ kurzT=''; }
   statusEl.className=cls||''; statusEl.textContent='';
+  /* Ohne Computer gibt es keine Bewertung, also auch keine Ampel. */
+  statusEl.classList.toggle('ohneAmpel',!settings.computer);
   const mehr=links.length>0||!!noteText||!!suche||(kurzT!==text&&!nurZahl);
   statusDetail=mehr?{text:text,cls:cls||'',note:noteText||'',suche:suche,links:links,kurz:kurzT||text}:null;
 
@@ -1635,7 +1656,7 @@ function afterMove(fresh){ hinweisBis=0;
     if(game.autoplay&&ln){ setTimeout(()=>{ if(game.autoplay){ const l2=currentLine(); if(l2) playMove(game.board.moves[l2.path[0]]); } },game.demo?600:260); return; }
     game.autoplay=false; game.demo=false;
     if(fresh) setStatus(pegCount()+' Steine übrig.');
-    if(fresh&&(settings.trainer||settings.marks||settings.strategy)) evaluatePosition(); else { game.evalRes=null; }
+    if(fresh&&settings.computer) evaluatePosition(); else { game.evalRes=null; }
     return;
   }
   game.autoplay=false; game.elapsedBefore=elapsedMs(); game.finished=true; game.startedAt=0; renderHud();
@@ -1689,7 +1710,7 @@ boardSvg.addEventListener('pointercancel',()=>{ ptr=null; });
    das deshalb auch so. */
 function istGestrandet(i){
   const ev=game.evalRes;
-  if(!settings.marks||!ev||ev.key!==stateKey()||!ev.optFinal||!(ev.best>1)) return false;
+  if(!settings.computer||!settings.marks||!ev||ev.key!==stateKey()||!ev.optFinal||!(ev.best>1)) return false;
   if(game.pegAt[i]<0) return false;
   const m=ev.optFinal.mask;
   return i<32?!!((m[0]>>>i)&1):!!((m[1]>>>(i-32))&1);
@@ -1765,6 +1786,7 @@ setTimeout(getWorker,300);
 let hintSeq=0, cancelHint=null, lastSearchWhere='';
 function fmtNum(n){ return n<1000000?n.toLocaleString('de-DE'):(n/1e6).toFixed(1).replace('.',',')+' Mio.'; }
 function requestHint(again){
+  if(!settings.tipps) return;
   if(game.searching||game.finished||game.phase==='choose'||game.animating||game.pauseAn) return;
   /* Ein Tipp je Stellung. Denselben Tipp nochmal ansehen ist kein zweiter. */
   tippZaehlen();
@@ -1783,7 +1805,7 @@ function requestHint(again){
     if(key!==stateKey()){ renderHud(); return; }
     if(!r.path||!r.path.length){ setStatus('Keine Fortsetzung gefunden.','bad'); renderHud(); return; }
     game.line={key,best:r.best,path:r.path.slice(),complete:r.complete&&!r.cancelled,nodes:r.nodes,lb,where:r.where,ms:r.ms||(Date.now()-t0),cancelled:!!r.cancelled}; game.hintOn=true; describeHint(); render();
-    if(settings.marks&&!(game.evalRes&&game.evalRes.key===key)) evaluatePosition(); };
+    if(settings.computer&&settings.marks&&!(game.evalRes&&game.evalRes.key===key)) evaluatePosition(); };
   const runMain=()=>{ if(id!==hintSeq) return;
     let search; try{ search=CORE.createSearch(game.board,lo,hi,count,opts); }catch(e){ game.searching=false; $('btnHint').classList.remove('busy'); setStatus('Die Suche ist fehlgeschlagen: '+e.message,'bad'); renderHud(); return; }
     let cancelled=false; cancelHint=()=>{ cancelled=true; }; let lastProg=0;
@@ -1885,6 +1907,7 @@ function runSearch(lo,hi,count,opts,onProgress,onDone){
 /* ---------- Fehler suchen: rückwärts durch die Partie, bis 1 Stein noch erreichbar war ---------- */
 let mistakeCancel=null;
 function findMistake(){
+  if(!settings.tipps) return;
   if(mistakeCancel){ mistakeCancel(); mistakeCancel=null; }
   const hist=game.history.slice(); const n=hist.length; if(!n) return;
   const book=(!settings.freeStart&&OPENING_BOOK[game.board.def.id])?OPENING_BOOK[game.board.def.id]:null;
@@ -1965,7 +1988,7 @@ function cancelEval(){ if(nachCancel){ nachCancel(); nachCancel=null; }
   if(evalCurrentId!==null&&worker){ try{ worker.postMessage({cancel:evalCurrentId}); }catch(e){} } evalCurrentId=null; evalSeq++; game.evaluating=false; zeigeRechnet(false); }
 function evaluatePosition(){
   if(game.lesson) return; if(mistakeCancel){ mistakeCancel(); mistakeCancel=null; }
-  if(!(settings.trainer||settings.marks||settings.strategy)){ game.evalRes=null; renderOverlay(); return; }
+  if(!settings.computer){ game.evalRes=null; renderOverlay(); return; }
   if(game.finished||game.phase==='choose'||game.searching) return;
   const count=pegCount(); if(count<=1||!anyLegalMove()) return;
   const key=stateKey(); if(game.evalRes&&game.evalRes.key===key) { showTrainer(); return; }
@@ -1973,12 +1996,11 @@ function evaluatePosition(){
   const full=count<=24;                       // vollständige Absuche nur, wenn sie schnell ist
   const opts={target:lb,maxNodes:0,timeMs:6000,seed:(Date.now()%100000)+7,full};
   const id=++evalSeq; evalCurrentId='ev'+id; const t0=Date.now(); game.evaluating=true;
-  if(settings.trainer&&!game.hintOn){
+  if(!game.hintOn){
     if(game.lastMove) setStatus(game.lastMove.text,'',null,null,game.lastMove.count);
     else if(!statusEl.querySelector('.kurz')||!statusEl.querySelector('.kurz').textContent) setStatus(pegCount()+' Steine übrig.'); }
-  /* Gerechnet wird auch ohne Trainer - etwa nur mit Strategie-Hinweisen. Die
-     Anzeige haengt deshalb daran, dass gerechnet wird, nicht an der
-     Einstellung. */
+  /* Die Anzeige haengt daran, dass gerechnet wird - und gerechnet wird nur
+     mit Computer an (evaluatePosition kehrt sonst vorher um). */
   zeigeRechnet(true);
   const finish=r=>{ if(id!==evalSeq) return; game.evaluating=false; zeigeRechnet(false); if(key!==stateKey()) return;
     game.evalRes={key,best:r.best,complete:r.complete&&!r.cancelled&&!r.timeout,path:r.path||[],nodes:r.nodes,lb,ms:Date.now()-t0,everEmpty:r.everEmpty||null,optFinal:r.optFinal||null,full};
@@ -1995,7 +2017,7 @@ function evaluatePosition(){
       done=true; w.removeEventListener('message',handler); const r=e.data.r; if(r.cancelled) r.timeout=true; finish(r); };
     w.addEventListener('message',handler);
     try{ w.postMessage({id:'ev'+id,def:game.board.def,lo,hi,count,opts}); }catch(e){ if(!done){ done=true; w.removeEventListener('message',handler); runMain(); } }
-    setTimeout(()=>{ if(!done&&id===evalSeq){ done=true; w.removeEventListener('message',handler); try{ w.postMessage({cancel:'ev'+id}); }catch(x){} game.evaluating=false; zeigeRechnet(false); if(settings.trainer) setStatus('Trainer: Diese Stellung war nicht in sechs Sekunden zu Ende zu rechnen.','warn'); } },opts.timeMs+2500);
+    setTimeout(()=>{ if(!done&&id===evalSeq){ done=true; w.removeEventListener('message',handler); try{ w.postMessage({cancel:'ev'+id}); }catch(x){} game.evaluating=false; zeigeRechnet(false); setStatus('Diese Stellung war nicht in sechs Sekunden zu Ende zu rechnen.','warn'); } },opts.timeMs+2500);
   } else runMain();
 }
 function dirWord(m){ const a=game.board.cells[m.from], b=game.board.cells[m.to]; const dr=b.r-a.r, dc=b.c-a.c; if(game.board.def.type==='tri') return dc>0&&dr===0?'nach rechts':dc<0&&dr===0?'nach links':dr>0?'nach unten':'nach oben'; return dr>0?'nach unten':dr<0?'nach oben':dc>0?'nach rechts':'nach links'; }
@@ -2042,48 +2064,33 @@ function strategyAdvice(prev,ev){
 function showTrainer(){
   const ev=game.evalRes; if(!ev||ev.key!==stateKey()) return;
   if(Date.now()<hinweisBis){ setTimeout(showTrainer,hinweisBis-Date.now()+30); return; }
+  /* Seit v1.54 gibt es nur noch EINEN Pfad. Trainer und Strategie-Hinweise
+     unterschieden sich zuletzt nur im Praefix "Trainer:"; beide haengen
+     jetzt am Hauptschalter Computer (Lutz, 17.09.2026). Der Wortlaut ist der
+     der Strategie-Hinweise - den hat Lutz am 16.09. ausdruecklich gelobt. */
+  if(!settings.computer||game.hintOn) return;
   const prev=game.prevEval;
-  if(settings.strategy&&!game.hintOn){ const adv=strategyAdvice(prev,ev);
-    /* Der konkrete bessere Zug steht NICHT mehr im Text (Lutz, 16.09.2026):
-       Er ist faktisch ein Tipp und wurde trotzdem nicht mitgezaehlt - damit
-       war die Tipp-Zahl am Ende der Partie nicht ehrlich. Die Fehlerklasse
-       und die Begruendung bleiben, das ist Analyse, kein Zug. Wer den Zug
-       sehen will, holt ihn ueber die Aktion - und die zaehlt. */
-    if(adv){ setSuche(adv.suche); setStatus('Strategischer Fehler – '+adv.cat+'. '+adv.why,'bad',[['Zug zurück',()=>undo()]],'Jetzt bestenfalls '+adv.best+' Steine, vorher war 1 erreichbar.',KURZ_KLASSE[adv.cat]||'Dieser Zug kostet die Lösung');
-      /* Der Alarm beim Verlust der Loesung laeuft schon - der kurze Stups
-         wuerde ihn nur zudecken. */
-      if(Date.now()-alarmZuletzt>alarmDauer()) Sound.bad();
-      return; }
-    if(!settings.trainer){
-      if(!ev.complete){ setStatus('Diese Stellung war in sechs Sekunden nicht zu Ende zu rechnen. Das kommt selten vor – spiel einen Zug weiter, dann geht es meist wieder.','warn',null,null,null,'Noch nicht bewertbar'); return; }
-      if(ev.best===1){ setStatus('In Ordnung – 1 Stein ist weiterhin erreichbar.','ok',null,null,null,'1 Stein bleibt erreichbar'); return; }
-      const nf=ev.optFinal?ev.optFinal.count:0;
-      setStatus('Bestenfalls '+ev.best+' Steine'+(nf>1?' ('+nf+' Endbilder)':'')+' – der entscheidende Fehler lag früher.','bad',[['Fehler suchen',()=>findMistake()]],null,'Bestenfalls '+ev.best+' Steine'); return; } }
-  if(!settings.trainer||game.hintOn) return;
-  if(!ev.complete){ setStatus('Trainer: Diese Stellung war in sechs Sekunden nicht zu Ende zu rechnen. Das kommt selten vor – spiel einen Zug weiter, dann geht es meist wieder.','warn',null,null,null,'Noch nicht bewertbar'); return; }
   const note=game.lastMove?game.lastMove.text+' '+game.lastMove.count:'';
-  if(ev.best===1){ setStatus('Trainer: 1 Stein ist noch erreichbar.','ok',null,null,note,'1 Stein bleibt erreichbar'); return; }
+  if(!ev.complete){ setStatus('Diese Stellung war in sechs Sekunden nicht zu Ende zu rechnen. Das kommt selten vor – spiel einen Zug weiter, dann geht es meist wieder.','warn',null,null,note,'Noch nicht bewertbar'); return; }
+  if(ev.best===1){ setStatus('In Ordnung – 1 Stein ist weiterhin erreichbar.','ok',null,null,note,'1 Stein bleibt erreichbar'); return; }
   const lost=prev&&prev.complete&&prev.best<ev.best;
   const nf=ev.optFinal?ev.optFinal.count:0;
-  /* Bis v1.21 sagte der Trainer nur, DASS der Zug die Loesung gekostet hat.
-     Woran es lag, stand allein in den Strategie-Hinweisen - wer die aus hat
-     (Lutz am 13.09.), stand ohne Erklaerung da. Die Klassifikation ist aus
-     der schon vorliegenden Bewertung praktisch gratis, also nennt der Trainer
-     sie jetzt mit. */
   const adv=lost?strategyAdvice(prev,ev):null;
-  const t='Trainer: ab hier bestenfalls '+ev.best+' Steine'+(nf>1?' ('+nf+' verschiedene Endbilder)':nf===1?' (ein einziges Endbild)':'')+'.'
-    +(lost?' Der letzte Zug hat das gekostet.':'')
-    +(adv?' '+adv.cat+': '+adv.why:'');
-  /* Seit v1.53 nimmt der Knopf den Zug NUR zurueck. Lutz am 16.09.2026:
-     "eigentlich wuerde ich hier nur anbieten Zug zurueck, dann kommen wir
-     wieder aufs Spielfeld, der eben gezogene Zug ist noch mit dem roten
-     Dreieck markiert und wir versuchen selber weiter. Den Tipp machen wir
-     nicht durch diesen Button, sondern nur durch den Tipp-Button - dann
-     weiss man auch, wann man einen Tipp wirklich verbraucht." */
-  const aktion=(adv||lost)?[['Zug zurück',()=>undo()]]:[['Fehler suchen',()=>findMistake()]];
-  if(adv) setSuche(adv.suche);
-  setStatus(t,'bad',aktion,note,adv?(KURZ_KLASSE[adv.cat]||'Dieser Zug kostet die Lösung')
-    :'Bestenfalls '+ev.best+' Steine'+(lost?' – Zug hat es gekostet':''));
+  /* Der konkrete bessere Zug steht NICHT im Text (Lutz, 16.09.2026): er ist
+     ein Tipp und wuerde sonst nicht gezaehlt. Klasse und Begruendung bleiben,
+     das ist Analyse. Der Knopf nimmt nur zurueck (v1.53); den Zug zeigt
+     allein der Tipp-Knopf. */
+  if(adv){ setSuche(adv.suche);
+    setStatus('Strategischer Fehler – '+adv.cat+'. '+adv.why,'bad',[['Zug zurück',()=>undo()]],'Jetzt bestenfalls '+adv.best+' Steine, vorher war 1 erreichbar.',KURZ_KLASSE[adv.cat]||'Dieser Zug kostet die Lösung');
+    /* Der Alarm beim Verlust der Loesung laeuft schon - der kurze Stups
+       wuerde ihn nur zudecken. */
+    if(Date.now()-alarmZuletzt>alarmDauer()) Sound.bad();
+    return; }
+  const t='Bestenfalls '+ev.best+' Steine'+(nf>1?' ('+nf+' verschiedene Endbilder)':nf===1?' (ein einziges Endbild)':'')
+    +(lost?'. Der letzte Zug hat das gekostet.':' – der entscheidende Fehler lag früher.');
+  /* Fehler suchen ist Hilfe auf Anfrage und haengt am Schalter Tipps. */
+  const aktion=lost?[['Zug zurück',()=>undo()]]:settings.tipps?[['Fehler suchen',()=>findMistake()]]:null;
+  setStatus(t,'bad',aktion,note,'Bestenfalls '+ev.best+' Steine'+(lost?' – Zug hat es gekostet':''));
 }
 function describeHint(){
   const h=currentLine(); if(!h){ setStatus('Kein Zug gefunden.','bad'); return; }
@@ -2141,7 +2148,8 @@ function buildSheet(){
     ch.className='chip'+(settings.alarmTon===k?' on':''); ch.textContent=ALARM_TOENE[k].name;
     ch.addEventListener('click',()=>{ settings.alarmTon=k; saveSettings(); buildSheet();
       Sound.ensure(); Sound.alarm(); }); al.appendChild(ch); });
-  ['swAuto:autoJump','swTargets:showTargets','swFree:freeStart','swSound:sound','swTrainer:trainer','swMarks:marks','swAlarm:alarm','swFunkeln:funkeln','swProbiert:probiert'].forEach(s=>{ const [id,k]=s.split(':'); const e=$(id); e.classList.toggle('on',!!settings[k]); e.setAttribute('aria-checked',String(!!settings[k])); });
+  ['swAuto:autoJump','swTargets:showTargets','swFree:freeStart','swSound:sound','swComputer:computer','swTipps:tipps','swMarks:marks','swAlarm:alarm','swFunkeln:funkeln','swProbiert:probiert'].forEach(s=>{ const [id,k]=s.split(':'); const e=$(id); e.classList.toggle('on',!!settings[k]); e.setAttribute('aria-checked',String(!!settings[k])); });
+  document.querySelectorAll('.row.sub[data-sub="computer"]').forEach(r=>{ r.hidden=!settings.computer; });
 }
 function applyLook(){ buildBoardSvg(); render(); }
 function openSheet(){ buildSheet(); $('sheet').classList.add('on'); $('backdrop').classList.add('on'); }
@@ -2322,7 +2330,8 @@ $('sheet').querySelector('.handle').addEventListener('click',closeSheet);
 $('btnResetStats').addEventListener('click',()=>{ Store.del('stats'); buildSheet(); toast('Bestleistungen gelöscht.'); });
 $('swAuto').addEventListener('click',()=>{ settings.autoJump=!settings.autoJump; saveSettings(); buildSheet(); });
 $('swTargets').addEventListener('click',()=>{ settings.showTargets=!settings.showTargets; saveSettings(); buildSheet(); renderOverlay(); });
-$('swTrainer').addEventListener('click',()=>{ settings.trainer=!settings.trainer; saveSettings(); buildSheet(); evaluatePosition(); });
+$('swComputer').addEventListener('click',()=>computerSetzen(!settings.computer));
+$('swTipps').addEventListener('click',()=>{ settings.tipps=!settings.tipps; saveSettings(); buildSheet(); renderHud(); if(!settings.tipps&&mistakeCancel){ mistakeCancel(); mistakeCancel=null; } });
 $('swMarks').addEventListener('click',()=>{ settings.marks=!settings.marks; saveSettings(); buildSheet(); evaluatePosition(); });
 $('swAlarm').addEventListener('click',()=>{ settings.alarm=!settings.alarm; saveSettings(); buildSheet(); if(settings.alarm) warnblitz(true); });
 /* Zur Probe gleich ein Stein funkeln lassen - ohne Sehen ist der Schalter nur ein Wort. */

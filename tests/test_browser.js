@@ -159,18 +159,18 @@ function kurzfassungGleich(proben,voll,erwartet){
   ok('Messwerte in eigener Zeile', await page.evaluate(()=>{ const n=statusEl.querySelector('.note'); return !!n&&/Stellungen/.test(n.textContent)&&!/Stellungen/.test(statusEl.firstChild.textContent); }));
   ok('HUD einzeilig: Übrig von N', await page.evaluate(()=>document.getElementById('hudLeftLabel').textContent==='Übrig von 32'&&!document.querySelector('.hud .sub')));
   // Trainer + Markierung
-  await page.evaluate(()=>{ settings.trainer=true; settings.marks=true; settings.strategy=false; renderStrategyBtn(); newGame('english'); });
+  await page.evaluate(()=>{ settings.computer=true; settings.marks=true; renderComputerBtn(); newGame('english'); });
   // dem Buch 12 Züge folgen (bleibt lösbar), dann bewerten lassen
   await page.evaluate(()=>{ for(let k=0;k<12;k++){ const l=currentLine(); applyMove(game.board.moves[l.path[0]],true); } render(); evaluatePosition(); });
   await page.waitForFunction(()=>!game.evaluating,{timeout:20000}); await sleep(100);
   s=await state(); console.log('INFO Trainer nach Buchzügen: '+s.status);
-  ok('Trainer: noch lösbar erkannt', /1 Stein ist noch erreichbar/.test(s.status));
+  ok('Computer: noch lösbar erkannt', /1 Stein ist (noch|weiterhin) erreichbar/.test(s.status));
   // jetzt einen Zug spielen, der 1 verhindert: alle Züge durchprobieren, bis der Trainer "gekostet" meldet
   const legal=await page.evaluate(()=>game.board.moves.map((m,i)=>({i,ok:game.pegAt[m.from]>=0&&game.pegAt[m.over]>=0&&game.pegAt[m.to]<0})).filter(x=>x.ok).map(x=>x.i));
   let lostMsg=null;
   for(const mi of legal){ await page.evaluate(i=>{ applyMove(game.board.moves[i],true); render(); afterMove(true); },mi);
     await page.waitForFunction(()=>!game.evaluating,{timeout:20000}); await sleep(100); s=await state();
-    if(/gekostet/.test(s.status)){ lostMsg=s.status; break; } await page.evaluate(()=>undo()); await sleep(1200); await page.waitForFunction(()=>!game.animating&&!game.evaluating,{timeout:20000}); }
+    if(/gekostet|Strategischer Fehler/.test(s.status)){ lostMsg=s.status; break; } await page.evaluate(()=>undo()); await sleep(1200); await page.waitForFunction(()=>!game.animating&&!game.evaluating,{timeout:20000}); }
   console.log('INFO Trainer Fehlzug: '+lostMsg);
   // Zurück, Zurück, Vor, Vor: beim zweiten Vor muss wieder „gekostet" stehen
   await page.evaluate(()=>undo()); await sleep(1200); await page.waitForFunction(()=>!game.animating&&!game.evaluating,{timeout:20000});
@@ -178,7 +178,7 @@ function kurzfassungGleich(proben,voll,erwartet){
   await page.evaluate(()=>redo()); await sleep(1200); await page.waitForFunction(()=>!game.animating&&!game.evaluating,{timeout:20000}); await sleep(100); const s1=(await state()).status;
   await page.evaluate(()=>redo()); await sleep(1200); await page.waitForFunction(()=>!game.animating&&!game.evaluating,{timeout:20000}); await sleep(100); const s2=(await state()).status;
   console.log('INFO Vorspulen: 1) '+s1+' | 2) '+s2);
-  ok('Vorspulen: erst grün, dann „gekostet"', /noch erreichbar/.test(s1)&&/gekostet/.test(s2));
+  ok('Vorspulen: erst grün, dann „gekostet"', /(noch|weiterhin) erreichbar/.test(s1)&&/gekostet|Strategischer Fehler/.test(s2));
   // Reihenfolge: erst Markierung, dann Sprung
   await page.evaluate(()=>undo()); await sleep(1500); await page.waitForFunction(()=>!game.animating&&!game.evaluating,{timeout:20000});
   const before=await page.evaluate(()=>game.history.length);
@@ -197,7 +197,7 @@ function kurzfassungGleich(proben,voll,erwartet){
   console.log('INFO Zurück-Anzeige: '+JSON.stringify(und));
   ok("Zurück: Markierung zeigt den Zug, Ring am wieder aufgetauchten Stein, Zählung ab 1", und.towardsTo&&und.back&&/Zug \d+ von/.test(und.status)&&!/Zug 0 von/.test(und.status));
   await page.screenshot({path:'shot_spool.png'});
-  ok('Trainer meldet den verlorenen Zug mit Zurück-Link', !!lostMsg&&/Zurück/.test(lostMsg));
+  ok('Erklaerung meldet den verlorenen Zug mit Zug-zurueck-Knopf', !!lostMsg&&/Zug zurück/.test(lostMsg));
   // Markierung: konstruierte Stellung mit gestrandetem Stein (0,2)
   await page.evaluate(()=>{ const b=game.board; for(let i=0;i<b.n;i++) game.pegAt[i]=-1; ['0,2','3,2','3,3','3,4','3,5','3,6'].forEach((k,j)=>game.pegAt[b.index[k]]=j); game.history=[{mi:0,jumped:0}]; game.evalRes=null; render(); evaluatePosition(); });
   await page.waitForFunction(()=>!game.evaluating,{timeout:20000}); await sleep(150);
@@ -209,9 +209,9 @@ function kurzfassungGleich(proben,voll,erwartet){
   const m20=await page.evaluate(()=>{ const ev=game.evalRes; const i=game.board.index['2,0']; return {n:document.querySelectorAll('#board path[stroke="#e2a95c"]').length, stays20:!!((ev.optFinal.mask[0]>>>i)&1), count:ev.optFinal.count}; });
   console.log('INFO Lutz-Stellung 20:57: '+JSON.stringify(m20)+' | '+s.status);
   ok('Lutz-Stellung: (2,0) markiert, 3 Endbilder', m20.n===1&&m20.stays20&&m20.count===3&&/3 verschiedene Endbilder/.test(s.status));
-  await page.evaluate(()=>{ settings.trainer=false; settings.marks=false; newGame('english'); });
-  // Strategie-Hinweise
-  await page.evaluate(()=>{ settings.trainer=false; settings.marks=false; settings.strategy=true; renderStrategyBtn(); newGame('english'); for(let k=0;k<12;k++){ const l=currentLine(); applyMove(game.board.moves[l.path[0]],true); } render(); evaluatePosition(); });
+  await page.evaluate(()=>{ settings.marks=false; newGame('english'); });
+  // Erklaerung (frueher Strategie-Hinweise)
+  await page.evaluate(()=>{ settings.computer=true; settings.marks=false; renderComputerBtn(); newGame('english'); for(let k=0;k<12;k++){ const l=currentLine(); applyMove(game.board.moves[l.path[0]],true); } render(); evaluatePosition(); });
   await page.waitForFunction(()=>!game.evaluating,{timeout:20000});
   const legal2=await page.evaluate(()=>game.board.moves.map((m,i)=>({i,ok:game.pegAt[m.from]>=0&&game.pegAt[m.over]>=0&&game.pegAt[m.to]<0})).filter(x=>x.ok).map(x=>x.i));
   let adv=null;
@@ -269,7 +269,7 @@ function kurzfassungGleich(proben,voll,erwartet){
   const nachTipp=await page.evaluate(()=>({hint:game.hintOn&&!!document.querySelector('#board .hint-arrow'),tipps:game.tippKeys.size}));
   console.log('INFO Tipp danach: '+JSON.stringify(nachTipp));
   ok('Der Tipp-Knopf zeigt ihn weiterhin - und zählt', nachTipp.hint&&nachTipp.tipps===tippVorStrat+1, JSON.stringify(nachTipp));
-  ok('Strategie-Knopf sichtbar und an', await page.evaluate(()=>document.getElementById('btnStrategy').classList.contains('on')));
+  ok('Computer-Chip sichtbar und an', await page.evaluate(()=>document.getElementById('btnComputer').classList.contains('on')));
   // Guter Zug -> grüne Rückmeldung
   await page.evaluate(()=>{ const l=currentLine(); playMove(game.board.moves[l.path[0]]); }); await sleep(400); await page.waitForFunction(()=>!game.animating&&!game.evaluating,{timeout:20000}); await sleep(100);
   s=await state(); ok('Guter Zug: „In Ordnung"', /In Ordnung/.test(s.status), s.status);
@@ -426,7 +426,7 @@ function kurzfassungGleich(proben,voll,erwartet){
      markVorFlaeche>0&&markNachFlaeche===0, markVorFlaeche+' -> '+markNachFlaeche);
   // Die Antwort auf eine Beruehrung darf nicht sofort von der Bewertung
   // ueberschrieben werden - sonst liest man sie nie.
-  await page.evaluate(()=>{ settings.trainer=true; settings.strategy=true; newGame('english');
+  await page.evaluate(()=>{ settings.computer=true; newGame('english');
     const l=currentLine()||game.bookLine; applyMove(game.board.moves[l.path[0]],true); render(); afterMove(true); });
   await sleep(120);
   const ohne=await page.evaluate(()=>{ const frei=game.board.moves.filter(m=>game.pegAt[m.from]>=0&&game.pegAt[m.over]>=0&&game.pegAt[m.to]<0).map(m=>m.from);
@@ -437,7 +437,7 @@ function kurzfassungGleich(proben,voll,erwartet){
   ok('Hinweis auf eine Beruehrung bleibt kurz stehen',
      ohne&&/kann nicht springen/.test(gleichNach), JSON.stringify(gleichNach.slice(0,60)));
   // Zustand wiederherstellen, wie ihn die folgenden Pruefungen erwarten
-  await page.evaluate(()=>{ settings.trainer=false; settings.marks=false; settings.strategy=true; renderStrategyBtn(); });
+  await page.evaluate(()=>{ settings.computer=true; settings.marks=false; renderComputerBtn(); });
   ok('Zurueck-Markierung kommt beim naechsten Spulen wieder', markNachSpulen>0, markNachSpulen);
   ok('Eigener Alarmton fuer den Verlust der Loesung vorhanden',
      await page.evaluate(()=>typeof Sound.alarm==='function'&&Sound.alarm!==Sound.bad));
@@ -610,7 +610,7 @@ function kurzfassungGleich(proben,voll,erwartet){
      ganze Fehlersuche kostenlos, vom Suchen bis zum Zurueckspulen. */
   ok('Dorthin zurück zeigt den Zug nicht', !rw.hint&&!/markiert/.test(rw.status), JSON.stringify(rw));
   ok('Die ganze Fehlersuche kostet keinen Tipp', rw.tipps===tippVorher, rw.tipps+' statt '+tippVorher);
-  await page.evaluate(()=>{ settings.strategy=false; renderStrategyBtn(); newGame('english'); });
+  await page.evaluate(()=>{ settings.computer=false; renderComputerBtn(); newGame('english'); });
   // Längste Farbnamen passen in eine Zeile
   const fit=await page.evaluate(()=>{ const names=Object.values(HEX_NAMES).sort((a,b)=>b.length-a.length); const L=names[0];
     const st=document.getElementById('status');
@@ -664,9 +664,11 @@ function kurzfassungGleich(proben,voll,erwartet){
       if(i!==undefined&&bild[r][c]==='p') game.pegAt[i]=id++; }
     game.phase='play'; game.history=[]; game.future=[]; game.finished=false;
     game.evalRes=null; game.prevEval=null; game.startCount=23; render(); };
+  /* Seit v1.54 gibt es nur noch einen Pfad (Hauptschalter Computer); der
+     Parameter bleibt, damit die zweite Runde den Wortlaut auf Stabilitaet
+     prueft - zweimal dieselbe Stellung muss zweimal dasselbe sagen. */
   const lutzZug=async(strategie)=>{
-    await page.evaluate(st=>{ settings.trainer=true; settings.strategy=st; settings.marks=false;
-      renderStrategyBtn(); },strategie);
+    await page.evaluate(()=>{ settings.computer=true; settings.marks=false; renderComputerBtn(); });
     await page.evaluate(stellung); await sleep(200);
     await page.evaluate(()=>evaluatePosition());
     await page.waitForFunction(()=>game.evalRes&&!game.evaluating,{timeout:20000});
@@ -697,13 +699,13 @@ function kurzfassungGleich(proben,voll,erwartet){
      mitStrat.text.slice(0,140));
 
   const ohneStrat=await lutzZug(false);
-  console.log('INFO Lutz-Zug nur mit Trainer: '+JSON.stringify(ohneStrat));
-  ok('Trainer nennt die Fehlerklasse auch ohne Strategie-Hinweise',
+  console.log('INFO Lutz-Zug zweite Runde: '+JSON.stringify(ohneStrat));
+  ok('Zweite Runde nennt dieselbe Fehlerklasse',
      /Falsche Richtung/.test(ohneStrat.text), ohneStrat.text.slice(0,140));
-  ok('Auch der Trainer verraet den Zug nicht ungefragt',
+  ok('Auch die zweite Runde verraet den Zug nicht ungefragt',
      !/Besser:/.test(ohneStrat.text), ohneStrat.text.slice(0,160));
   ok('Kurzfassung bleibt bei hoechstens 32 Zeichen', ohneStrat.kurz.length<=32, ohneStrat.kurz);
-  await page.evaluate(()=>{ settings.strategy=true; renderStrategyBtn(); newGame('english'); });
+  await page.evaluate(()=>{ settings.computer=true; renderComputerBtn(); newGame('english'); });
 
   /* Der Audio-Kontext schlaeft auf iOS ein (Anruf, App im Hintergrund). Toene
      duerfen dann nicht verloren gehen, sondern muessen beim Aufwachen kommen. */
@@ -728,7 +730,7 @@ function kurzfassungGleich(proben,voll,erwartet){
      zwei Endbilder): unabhaengig nachgerechnet bleibt genau (4,6) in beiden
      Endbildern besetzt - genau der Stein mit dem Zeichen im Screenshot. */
   const marke=await page.evaluate(async()=>{
-    settings.marks=true; settings.trainer=true; settings.strategy=false; renderStrategyBtn();
+    settings.marks=true; settings.computer=true; renderComputerBtn();
     Store.del('markeErklaert');
     newGame('english'); const B=game.board;
     const bild=['  zpp  ','  zpz  ','zzzzppp','zzzzzpp','zzpzzzp','  zpp  ','  zpp  '];
@@ -793,7 +795,7 @@ function kurzfassungGleich(proben,voll,erwartet){
   ok('Ohne die Einstellung gibt es keine Markierung',
      await page.evaluate(()=>{ settings.marks=false;
        const r=istGestrandet(game.board.index['4,6']); settings.marks=true; return !r; }));
-  await page.evaluate(()=>{ settings.marks=false; settings.strategy=true; renderStrategyBtn();
+  await page.evaluate(()=>{ settings.marks=false; settings.computer=true; renderComputerBtn();
     Store.del('markeErklaert'); newGame('english'); });
 
   abschnitt='Zaehler';
@@ -801,7 +803,7 @@ function kurzfassungGleich(proben,voll,erwartet){
      verbrauchte Tipps. Gezaehlt wird nicht jedes Zurueck, sondern nur das
      Zuruecknehmen genau des Zuges, der die Loesung gekostet hat. */
   const zaehler=await page.evaluate(async()=>{
-    newGame('english'); settings.trainer=true; settings.alarm=true;
+    newGame('english'); settings.computer=true; settings.alarm=true;
     const B=game.board, erg={};
     erg.startRueck=game.rueckAlarm; erg.startTipp=game.tippKeys.size;
 
@@ -1128,13 +1130,13 @@ function kurzfassungGleich(proben,voll,erwartet){
      Strategie-Hinweisen. Vorher hing sie allein an einem Zeichen von
      7 x 9 px neben dem Wort "Zeit" - Lutz fand es nicht. */
   const chip=await page.evaluate(()=>{ const c=document.getElementById('btnPause');
-    const r=c.getBoundingClientRect(), st=document.getElementById('btnStrategy').getBoundingClientRect();
+    const r=c.getBoundingClientRect(), st=document.getElementById('btnComputer').getBoundingClientRect();
     return {text:c.textContent.trim(), hervor:c.classList.contains('on'), aus:c.disabled,
       flaeche:Math.round(r.width*r.height), b:Math.round(r.width), h:Math.round(r.height),
       sichtbar:getComputedStyle(c).display!=='none'&&r.width>0,
       nebenStrategie:r.left>=st.right-1, gleicheHoehe:Math.abs(r.height-st.height)<2}; });
   console.log('INFO Pause-Chip: '+JSON.stringify(chip));
-  ok('Der Pause-Chip steht sichtbar neben den Strategie-Hinweisen',
+  ok('Der Pause-Chip steht sichtbar neben dem Computer-Chip',
      chip.sichtbar===true&&chip.nebenStrategie===true&&chip.gleicheHoehe===true, JSON.stringify(chip));
   /* Gross genug, um gefunden zu werden - das war der ganze Punkt. Zum
      Vergleich: das alte Zeichen hatte 63 px². */
@@ -1911,6 +1913,99 @@ function kurzfassungGleich(proben,voll,erwartet){
      also lesbar - das war der Grund, aus dem v1.49 den Ring abgeloest hat. */
   ok('Am Ziel verdeckt nichts das leere Feld', pe.basis>20&&pe.spitzeImZiel<0.5,
      'Basis '+pe.basis+', Spitze genau im Feld');
+
+  abschnitt='Hauptschalter Computer';
+  /* v1.54 (Lutz, 17.09.2026): Trainer, Strategie-Hinweise und Markierung
+     werden EIN Schalter. Aus heisst "wie am echten Brett": keine Ampel, kein
+     Blitz, keine Erklaerung, keine Zeichen, keine Dreiecke - nur Vor und
+     Zurueck. Vorher hing der Warnblitz am Rechner, hatte aber einen
+     Schalter, der so tat, als waere er unabhaengig: Markierung an, Trainer
+     und Strategie aus -> es blitzte, und die Zeile blieb leer. */
+  const hs=await page.evaluate(async()=>{
+    const erg={};
+    settings.autoJump=false; settings.alarm=true; settings.marks=true; settings.probiert=true; settings.tipps=true;
+    computerSetzen(false); newGame('english');
+    for(let k=0;k<12;k++){ const l=currentLine(); applyMove(game.board.moves[l.path[0]],true); } render();
+    const dot=document.querySelector('#status .dot');
+    erg.ampelWeg=getComputedStyle(dot).display==='none';
+    erg.chip=document.getElementById('btnComputer').textContent;
+    /* Fehlzug: einer, der 1 unmoeglich macht */
+    const legal=game.board.moves.filter(m=>game.pegAt[m.from]>=0&&game.pegAt[m.over]>=0&&game.pegAt[m.to]<0);
+    let culprit=null;
+    for(const m of legal){ const c=occ(); c[m.from]=0;c[m.over]=0;c[m.to]=1; const [lo,hi]=CORE.fromArray(c);
+      const rr=CORE.solveSmart(game.board,lo,hi,19,{maxNodes:0,timeMs:8000,target:1}); if(rr.best>1){ culprit=m; break; } }
+    const blitzVor=warnblitzZeit||0;
+    playMove(culprit); await new Promise(r=>setTimeout(r,2500));
+    erg.blitz=(warnblitzZeit||0)>blitzVor; erg.bewertet=!!game.evalRes; erg.status=statusFullText();
+    erg.zeichen=document.querySelectorAll('#board .mark, #board .marke, #board [class*="gestrandet"]').length;
+    undo(); await new Promise(r=>setTimeout(r,1400));
+    erg.dreiecke=document.querySelectorAll('#board path.probiert').length;
+    erg.undoGeht=game.history.length===12;
+    /* Wieder an: alles kommt zurueck, ohne Neustart */
+    computerSetzen(true); await new Promise(r=>setTimeout(r,2500));
+    erg.ampelDa=getComputedStyle(dot).display!=='none';
+    erg.bewertetDanach=!!game.evalRes; erg.chipAn=document.getElementById('btnComputer').textContent;
+    settings.autoJump=true;
+    return erg; });
+  console.log('INFO Computer aus: '+JSON.stringify(hs));
+  ok('Computer aus: die Ampel verschwindet', hs.ampelWeg===true, JSON.stringify(hs));
+  ok('Computer aus: der Chip sagt es', hs.chip==='Computer: aus', hs.chip);
+  ok('Computer aus: kein Warnblitz beim Fehlzug', hs.blitz===false, String(hs.blitz));
+  ok('Computer aus: keine Bewertung, keine Erklaerung', hs.bewertet===false&&!/Fehler|Bestenfalls|erreichbar/.test(hs.status), hs.status);
+  ok('Computer aus: kein Dreieck nach dem Zuruecknehmen', hs.dreiecke===0, String(hs.dreiecke));
+  ok('Computer aus: Zurueck geht trotzdem', hs.undoGeht===true);
+  ok('Computer an: Ampel und Bewertung sind wieder da', hs.ampelDa&&hs.bewertetDanach&&hs.chipAn==='Computer: an', JSON.stringify(hs));
+
+  abschnitt='Schalter Tipps';
+  const ts=await page.evaluate(async()=>{
+    const erg={}; newGame('english');
+    settings.tipps=false; renderHud(); buildSheet();
+    erg.knopfWeg=document.getElementById('btnHint').hidden===true;
+    const vorher=game.tippKeys.size; requestHint(); await new Promise(r=>setTimeout(r,300));
+    erg.keinTipp=game.tippKeys.size===vorher&&!game.hintOn;
+    settings.tipps=true; renderHud();
+    erg.knopfDa=document.getElementById('btnHint').hidden===false;
+    return erg; });
+  console.log('INFO Tipps aus: '+JSON.stringify(ts));
+  ok('Tipps aus: der Tipp-Knopf ist weg', ts.knopfWeg===true);
+  ok('Tipps aus: ein Tipp-Aufruf tut nichts und zaehlt nichts', ts.keinTipp===true);
+  ok('Tipps an: der Knopf ist wieder da', ts.knopfDa===true);
+
+  abschnitt='Menue Hilfe';
+  const mh=await page.evaluate(()=>{ const erg={};
+    erg.ueberschrift=[...document.querySelectorAll('#sheet h2')].map(h=>h.textContent);
+    erg.keinTrainer=!document.getElementById('swTrainer');
+    computerSetzen(false); buildSheet();
+    erg.subWeg=[...document.querySelectorAll('.row.sub[data-sub="computer"]')].every(r=>r.hidden);
+    erg.subZahl=document.querySelectorAll('.row.sub[data-sub="computer"]').length;
+    computerSetzen(true); buildSheet();
+    erg.subDa=[...document.querySelectorAll('.row.sub[data-sub="computer"]')].every(r=>!r.hidden);
+    return erg; });
+  console.log('INFO Menue Hilfe: '+JSON.stringify(mh));
+  ok('Menue hat einen Abschnitt Hilfe', mh.ueberschrift.includes('Hilfe'), mh.ueberschrift.join(','));
+  ok('Der Trainer-Schalter ist weg', mh.keinTrainer===true);
+  ok('Unterpunkte verschwinden, wenn Computer aus ist', mh.subWeg===true&&mh.subZahl===4, JSON.stringify(mh));
+  ok('Unterpunkte kommen mit Computer an zurueck', mh.subDa===true);
+
+  abschnitt='Migration Hilfe';
+  /* Wer vorher alles aus hatte, bekommt Computer aus; wer irgendetwas an
+     hatte, an. Laeuft genau einmal - ein spaeteres Abschalten muss halten. */
+  const mig=await (async()=>{
+    await page.evaluate(()=>{ localStorage.setItem('solitaire.settings',JSON.stringify({trainer:false,strategy:false,marks:false,anGestellt:true,board:'english'})); });
+    await page.reload({waitUntil:'load'}); await sleep(2800);
+    const allesAus=await page.evaluate(()=>({c:settings.computer,flag:settings.hilfeSortiert}));
+    await page.evaluate(()=>{ localStorage.setItem('solitaire.settings',JSON.stringify({trainer:false,strategy:true,marks:false,anGestellt:true,board:'english'})); });
+    await page.reload({waitUntil:'load'}); await sleep(2800);
+    const einesAn=await page.evaluate(()=>settings.computer);
+    await page.evaluate(()=>{ settings.computer=false; saveSettings(); });
+    await page.reload({waitUntil:'load'}); await sleep(2800);
+    const bleibtAus=await page.evaluate(()=>settings.computer);
+    await page.evaluate(()=>{ settings.computer=true; settings.tipps=true; saveSettings(); });
+    return {allesAus,einesAn,bleibtAus}; })();
+  console.log('INFO Migration Hilfe: '+JSON.stringify(mig));
+  ok('Alles aus wird zu Computer aus', mig.allesAus.c===false&&mig.allesAus.flag===true, JSON.stringify(mig.allesAus));
+  ok('Ein alter Schalter an wird zu Computer an', mig.einesAn===true);
+  ok('Ein spaeteres Abschalten haelt', mig.bleibtAus===false);
 
   abschnitt='Migration';
   /* Trainer und Strategie-Hinweise sind ab Werk an. Ein geaenderter Standard
