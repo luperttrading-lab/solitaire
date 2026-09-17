@@ -497,6 +497,52 @@ const FAELLE=[
  }
  await p.evaluate(()=>zeigeRechnet(false));
  ok('Beim Durchlauf ist immer ein Licht deutlich an', schwaechster>=0.6, 'schwaechster Moment '+schwaechster.toFixed(2));
+
+ /* Lektionen: das Brett darf durch die Lektionsleiste nicht zusammenfallen.
+    Lutz am 17.09.2026: "Da ist aber manchmal das Spielfeld extrem klein."
+    Gemessen vor v1.56 auf einem iPhone in Safari mit Leisten: 228 statt
+    366 px Brettbreite, also 61 % weniger Flaeche. Drei Ursachen:
+    (1) der ausfuehrliche Erklaertext stand ganz in der Leiste,
+    (2) die Reserve in fitStage war die feste Zahl 230 statt einer Messung,
+    (3) stageShrink waechst nur und wurde beim Wechsel ins Lektions-Layout
+        nie geleert - gemessen 108 px, die ungenutzt blieben. */
+ for(const g of [[390,844,'iPhone 14 Pro'],[390,730,'Safari mit Leisten'],[375,667,'iPhone SE']]){
+   const p=await browser.newPage(); await p.setViewport({width:g[0],height:g[1],isMobile:true,hasTouch:true});
+   await p.goto(url,{waitUntil:'load'}); await sleep(2400);
+   const normal=await p.evaluate(()=>Math.round(document.getElementById('board').getBoundingClientRect().width));
+   for(const id of ['dreier','partie']){
+     const r=await p.evaluate(async(lid)=>{ startLesson(lid); await new Promise(r=>setTimeout(r,800));
+       const tb=document.querySelector('.toolbar').getBoundingClientRect();
+       const bar=document.getElementById('lessonBar').getBoundingClientRect();
+       const app=document.getElementById('app');
+       const unten=app.getBoundingClientRect().bottom-parseFloat(getComputedStyle(app).paddingBottom||0);
+       return {brett:Math.round(document.getElementById('board').getBoundingClientRect().width),
+         raus:Math.round(Math.max(0,tb.bottom-unten)),
+         verdeckt:Math.round(Math.max(0,bar.bottom-tb.top)),
+         ringe:document.querySelectorAll('#board .pkg-ring').length+document.querySelectorAll('#board .cat-ring').length,
+         zeilen:Math.round(document.getElementById('lessonText').getBoundingClientRect().height)}; },id);
+     const name=g[2]+' / '+id;
+     console.log('INFO Lektion '+name+': '+JSON.stringify(r)+' (normal '+normal+')');
+     /* Mindestens die Haelfte der normalen Brettbreite - vorher waren es auf
+        dem iPhone SE 154 von 316, also 49 %, und in Safari 62 %. */
+     ok('Brett bleibt in der Lektion brauchbar gross ('+name+')',
+        r.brett>=Math.round(normal*0.55), r.brett+' von '+normal+' px');
+     ok('Fussleiste bleibt im Bild ('+name+')', r.raus===0, r.raus+' px heraus');
+     ok('Die Lektionsleiste verdeckt die Fussleiste nicht ('+name+')', r.verdeckt===0, r.verdeckt+' px');
+     /* Die Umrandung der Purges muss da sein - sie ist der Zweck der Lektion. */
+     ok('Paket und Hilfsstein sind umrandet ('+name+')', r.ringe>=2, r.ringe+' Ringe');
+     /* Der Text in der Leiste bleibt bei hoechstens zwei Zeilen. */
+     ok('Der Text in der Leiste bleibt kurz ('+name+')', r.zeilen<=42, r.zeilen+' px hoch');
+   }
+   /* Der ausfuehrliche Text ist nicht verloren: er steht im Blatt. */
+   const blatt=await p.evaluate(()=>{ startLesson('partie'); openDetail();
+     const t=document.getElementById('detailText').textContent;
+     const z=document.getElementById('detailZusatz').textContent; closeDetail(); return {t,z}; });
+   ok('Die Einleitung steht im Blatt hinter dem Pfeil ('+g[2]+')',
+      /sechs Abschnitte/.test(blatt.t)&&/Vormachen/.test(blatt.z), blatt.t.slice(0,60));
+   await p.close();
+ }
+
  await p.close();
  await browser.close();
  console.log(fails?`\n${fails} FEHLER`:'\nLAYOUT-TESTS OK'); process.exitCode=fails?1:0;

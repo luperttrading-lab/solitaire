@@ -203,7 +203,13 @@ header .boardname:active{background:var(--panel2)}
 #status.ok{color:var(--ok)}
 #lessonBar{padding:4px 8px 6px;border-top:1px solid var(--line)}
 #lessonBar .lt{font-family:var(--serif);font-size:18px;color:var(--brass2);text-align:center}
-#lessonBar .lx{font-size:13px;color:var(--ink);line-height:1.4;margin:4px 0 8px;text-align:center}
+/* Hoechstens zwei Zeilen. Der ausfuehrliche Text stand bis v1.55 komplett
+   hier und war auf dem iPhone in Safari 95 von 170 px der Leiste - Platz,
+   den das Brett verliert (gemessen: 228 statt 366 px Brettbreite, also
+   61 % weniger Flaeche). Er steht jetzt im Blatt hinter dem Pfeil, wo in
+   dieser App jeder lange Text steht. */
+#lessonBar .lx{font-size:13px;color:var(--ink);line-height:1.4;margin:4px 0 8px;text-align:center;
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 #lessonBar .lb{display:flex;gap:8px}
 #lessonBar .btn{padding:9px;font-size:13px}
 .pkg-ring{fill:none;stroke:#e2a95c;stroke-width:4;stroke-dasharray:5 6}
@@ -534,7 +540,7 @@ header .boardname:active{background:var(--panel2)}
 
 <script>
 'use strict';
-const APP_VERSION='1.55';
+const APP_VERSION='1.56';
 /* =========================================================================
    Kern: Bretter, Züge, Symmetrien, Paritäts-Schranke, Solver
    (als Fabrik, damit derselbe Code im Web Worker läuft)
@@ -1445,7 +1451,17 @@ function fitStage(){
      mitgerechnet, rutscht das Ende der Meldung hinter die Fussleiste. */
   const H=app.clientHeight-parseFloat(getComputedStyle(app).paddingBottom||0);
   const top=$('stage').offsetTop; const toolbarH=document.querySelector('.toolbar').offsetHeight+16;
-  const reserve=game.lesson?230:statusReserve();
+  /* Bis v1.55 stand hier fuer Lektionen die feste Zahl 230 - geraten, nicht
+     gemessen. Die Leiste ist je nach Text und Geraet 95 bis 219 px hoch;
+     dazu kommt die Statuszeile. Jetzt wird beides nachgemessen, wie es der
+     Sockel seit v1.30 schon tut. */
+  const lb=$('lessonBar');
+  /* In der Lektion zaehlt die WIRKLICHE Hoehe der Statuszeile, nicht die
+     Reserve fuer die laengste denkbare Meldung: dort sind die Meldungen kurz
+     und einzeilig. Sonst wird auf schmalen Geraeten zu viel reserviert - beim
+     ersten Versuch sank das Brett auf dem iPhone SE von 154 auf 100 px.
+     Passt es doch nicht, greift ensureStatusFits() als Sicherheitsnetz. */
+  const reserve=game.lesson&&!lb.hidden?lb.offsetHeight+Math.max(82,statusEl.offsetHeight):statusReserve();
   const avail=H-top-toolbarH-reserve-16-stageShrink;
   const lay=game.lay; const ratio=lay?lay.H/lay.W:1;
   const MIN=100; let w=Math.min(W,Math.max(MIN,avail)/ratio); if(w*ratio>Math.max(MIN,avail)) w=Math.max(MIN,avail)/ratio; w=Math.min(w,W);
@@ -1855,7 +1871,18 @@ function startLesson(id){
   game.initial=game.pegAt.slice(); game.startCount=pegCount();
   game.bookLine=null; game.line=null; game.hintOn=false; game.evalRes=null;
   $('boardNameText').textContent=L.title; $('lessonBar').hidden=false; $('lessonTitle').textContent=L.title;
-  lessonBeginPhase(); render(); $('lessonText').textContent=L.intro; setStatus(L.steps); fitStage();
+  /* Die Einleitung geht in die Statuszeile: dort steht die Kurzfassung, der
+     volle Wortlaut im Blatt hinter dem Pfeil - samt der Zugfolge als
+     Zusatzzeile. In der Leiste bleibt die Anweisung des Abschnitts. */
+  /* stageShrink zuruecksetzen: es waechst nur (ensureStatusFits gibt Platz
+     nur nach unten ab, damit das Brett im Spiel nicht springt) und wird sonst
+     allein bei einem resize geleert. Beim Wechsel ins Lektions-Layout gilt
+     eine andere Reserve, der alte Wert frisst dann Brettflaeche weiter -
+     gemessen 108 px, die auf dem Geraet ungenutzt blieben. */
+  lessonBeginPhase(); render(); setStatus(L.intro,'',null,null,L.steps);
+  /* ERST nach setStatus zuruecksetzen: setStatus ruft selbst
+     ensureStatusFits() und setzt stageShrink dabei schon neu. */
+  stageShrink=0; fitStage(); ensureStatusFits();
 }
 function lessonPhase(){ const L=LESSONS.find(x=>x.id===game.lesson.id); return {L,ph:L.phases[game.lesson.phase]}; }
 function lessonBeginPhase(){
@@ -1875,10 +1902,12 @@ function lessonAfterMove(){
 function lessonNextPhase(L){
   game.lesson.phase++; game.autoplay=false; game.demo=false;
   if(game.lesson.phase>=L.phases.length){ lessonSolved(L); return; }
-  lessonBeginPhase(); renderOverlay(); Sound.select(); setStatus('Abschnitt '+game.lesson.phase+' von '+L.phases.length+' geschafft.','ok');
+  lessonBeginPhase(); renderOverlay(); Sound.select(); setStatus('Abschnitt '+game.lesson.phase+' von '+L.phases.length+' geschafft.','ok'); stageShrink=0; fitStage(); ensureStatusFits();
 }
 function lessonSolved(L){
-  game.lesson.solved=true; game.autoplay=false; game.demo=false; $('lessonText').textContent=L.done; setStatus('Lektion geschafft.','ok'); Sound.win(); $('lsDemo').disabled=true;
+  game.lesson.solved=true; game.autoplay=false; game.demo=false;
+  $('lessonText').textContent='Lektion geschafft.';
+  setStatus(L.done,'ok',null,null,null,'Lektion geschafft'); Sound.win(); $('lsDemo').disabled=true;
   const done=Store.get('lessons',{}); done[L.id]=true; Store.set('lessons',done);
 }
 function lessonRestartPhase(){
@@ -1895,7 +1924,7 @@ function lessonDemo(){
   game.line={key:stateKey(),path:moves.map(m=>game.board.moves.indexOf(m)),best:pegCount()-moves.length,complete:true,nodes:0,lb:1};
   game.autoplay=true; game.demo=true; playMove(moves[0]);
 }
-function quitLesson(){ game.lesson=null; game.autoplay=false; $('lessonBar').hidden=true; newGame('english'); fitStage(); }
+function quitLesson(){ game.lesson=null; game.autoplay=false; $('lessonBar').hidden=true; newGame('english'); stageShrink=0; fitStage(); ensureStatusFits(); }
 $('lsDemo').addEventListener('click',lessonDemo); $('lsRestart').addEventListener('click',lessonRestartPhase); $('lsQuit').addEventListener('click',quitLesson);
 
 /* ---------- Generischer Suchlauf: Worker, sonst Hauptthread in Häppchen ---------- */
