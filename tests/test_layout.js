@@ -534,6 +534,47 @@ const FAELLE=[
      /* Der Text in der Leiste bleibt bei hoechstens zwei Zeilen. */
      ok('Der Text in der Leiste bleibt kurz ('+name+')', r.zeilen<=42, r.zeilen+' px hoch');
    }
+   /* Wie gross ist die Trefferflaeche eines Feldes wirklich? Bis v1.56
+      entschied das getroffene Element - ein Kreis mit R_HOLE+8. Gemessen auf
+      dem iPhone in Safari: 21 px in der Lektion, dazwischen 11 px, in denen
+      ein Tipp NICHTS traf (Lutz am 17.09.2026: "Ich klicke die Steine
+      manchmal an und es passiert nichts"). Apple verlangt 44 pt.
+      Gemessen wird der kleinste Versatz in acht Richtungen, bei dem noch
+      dasselbe Feld gemeint ist - nicht der Radius irgendeines Kreises. */
+   const treffer=await p.evaluate(()=>{
+     const bd=document.getElementById('board').getBoundingClientRect();
+     const lay=game.lay, vb=boardSvg.getAttribute('viewBox').split(/\s+/).map(Number);
+     const sk=bd.width/vb[2]; const mitte=Math.floor(game.board.n/2);
+     const cx=bd.left+(lay.pos[mitte].x-vb[0])*sk, cy=bd.top+(lay.pos[mitte].y-vb[1])*sk;
+     let minR=99;
+     for(let a=0;a<8;a++){ const w=a*Math.PI/4; let r=0;
+       for(;r<60;r++){ if(feldAn({clientX:cx+Math.cos(w)*r, clientY:cy+Math.sin(w)*r})!==mitte) break; }
+       if(r<minR) minR=r; }
+     /* Und: gibt es irgendwo auf dem Brett einen Punkt ohne Feld? */
+     /* Das Raster muss RELATIV zum Feldabstand sein: feste 14 px liegen auf
+        einem Brett mit 21 px Rasterabstand schon ausserhalb jeder Zelle, und
+        der Test meldete acht solcher Punkte als "tote Zone" - ein Fehler im
+        Test, nicht im Code. Abgetastet wird die halbe Strecke zum Nachbarn,
+        also genau die Flaeche, die dem Feld zusteht. */
+     const Pp=Math.hypot(lay.pos[1].x-lay.pos[0].x,lay.pos[1].y-lay.pos[0].y)*sk;
+     let ohne=0, gesamt=0; const schritt=Pp/4;
+     for(let i=0;i<game.board.n;i++)
+       for(let a2=-2;a2<=2;a2++) for(let b2=-2;b2<=2;b2++){
+         gesamt++;
+         if(feldAn({clientX:bd.left+(lay.pos[i].x-vb[0])*sk+a2*schritt, clientY:bd.top+(lay.pos[i].y-vb[1])*sk+b2*schritt})<0) ohne++; }
+     /* Der Rasterabstand in px ist die Obergrenze: mehr als die halbe Strecke
+        zum Nachbarn KANN ein Feld nicht bekommen, ohne ihm etwas wegzunehmen.
+        Gefragt ist also nicht eine absolute Pixelzahl, sondern ob das Feld
+        seine Voronoi-Zelle wirklich ausschoepft. */
+     const P2=Math.hypot(lay.pos[1].x-lay.pos[0].x,lay.pos[1].y-lay.pos[0].y)*sk;
+     return {px:+(minR*2).toFixed(1), raster:+P2.toFixed(1), gesamt, ohne};
+   });
+   console.log('INFO Trefferflaeche ('+g[2]+'): '+JSON.stringify(treffer));
+   ok('Ein Feld schoepft seine Flaeche aus ('+g[2]+')', treffer.px>=treffer.raster*0.85,
+      treffer.px+' px bei '+treffer.raster+' px Rasterabstand');
+   ok('Keine toten Zonen zwischen den Feldern ('+g[2]+')', treffer.ohne===0,
+      treffer.ohne+' von '+treffer.gesamt+' Punkten ohne Feld');
+
    /* Der ausfuehrliche Text ist nicht verloren: er steht im Blatt. */
    const blatt=await p.evaluate(()=>{ startLesson('partie'); openDetail();
      const t=document.getElementById('detailText').textContent;

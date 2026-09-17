@@ -540,7 +540,7 @@ header .boardname:active{background:var(--panel2)}
 
 <script>
 'use strict';
-const APP_VERSION='1.56';
+const APP_VERSION='1.57';
 /* =========================================================================
    Kern: Bretter, Züge, Symmetrien, Paritäts-Schranke, Solver
    (als Fabrik, damit derselbe Code im Web Worker läuft)
@@ -1715,21 +1715,53 @@ function afterMove(fresh){ hinweisBis=0;
 
 /* ---------- Eingabe: Tippen & Wischen ---------- */
 let ptr=null;
+/* Welches Feld ist gemeint? Bis v1.56 entschied das getroffene Element - ein
+   transparenter Kreis mit R_HOLE+8 = 33 Einheiten. Zwischen zwei Feldern lagen
+   damit 100 - 2*33 = 34 Einheiten, in denen ein Tipp NICHTS traf. Auf dem
+   iPhone in Safari waren das 21 px Trefferflaeche und 11 px tote Zone
+   (Lutz am 17.09.2026: "Ich klicke hier im Lernen Modus die Steine manchmal
+   an und es passiert nichts"); Apple verlangt 44 pt.
+   Jetzt wird das NAECHSTGELEGENE Feld gerechnet. Damit ist die Flaeche die
+   Voronoi-Zelle des Feldes - lueckenlos, und sie waechst automatisch mit
+   jeder Brettgroesse. TAP_MAX begrenzt sie nach aussen, sonst zoege ein Tipp
+   weit neben dem Brett noch einen Stein an: 0,7 Rasterabstaende decken die
+   Diagonale zwischen vier Feldern (70,7) fast ganz ab. */
+/* 0,75 Rasterabstaende, nicht 0,7: die Diagonale zwischen vier Feldern liegt
+   bei 70,7 Einheiten, mit 0,7 blieben dort winzige tote Ecken - auf dem
+   iPhone SE fielen dadurch 100 von 825 Rasterpunkten durch (gemessen). */
+const TAP_MAX=P*0.75;
+function feldAn(e){
+  const lay=game.lay; if(!lay||!boardSvg.getScreenCTM) return -1;
+  const m=boardSvg.getScreenCTM(); if(!m) return -1;
+  const pt=boardSvg.createSVGPoint(); pt.x=e.clientX; pt.y=e.clientY;
+  const q=pt.matrixTransform(m.inverse());
+  let best=-1, bd=Infinity;
+  for(let i=0;i<game.board.n;i++){ const p=lay.pos[i];
+    const d=(p.x-q.x)*(p.x-q.x)+(p.y-q.y)*(p.y-q.y);
+    if(d<bd){ bd=d; best=i; } }
+  return bd<=TAP_MAX*TAP_MAX?best:-1;
+}
 boardSvg.addEventListener('pointerdown',e=>{
   if(game.animating||game.autoplay){ if(game.autoplay){ game.autoplay=false; game.demo=false; toast('Automatik gestoppt.'); } return; }
-  const cell=e.target.closest?e.target.closest('[data-idx]'):null;
+  const idx=feldAn(e);
   /* Auch ein Tipp neben die Felder - auf die freie Brettflaeche - raeumt die
-     Markierung des zurueckgenommenen Zuges weg. onTap allein greift nur,
-     wenn wirklich ein Feld getroffen wird. */
-  if(!cell){ if(game.lastMove&&!game.markAus){ game.markAus=true; renderOverlay(); } return; }
+     Markierung des zurueckgenommenen Zuges weg. */
+  if(idx<0){ if(game.lastMove&&!game.markAus){ game.markAus=true; renderOverlay(); } return; }
   Sound.ensure();
-  ptr={idx:+cell.getAttribute('data-idx'),x:e.clientX,y:e.clientY,id:e.pointerId};
+  ptr={idx:idx,x:e.clientX,y:e.clientY,id:e.pointerId};
   try{ boardSvg.setPointerCapture(e.pointerId); }catch(err){}
   e.preventDefault();
 },{passive:false});
 boardSvg.addEventListener('pointerup',e=>{
   if(!ptr||e.pointerId!==ptr.id) return; const p=ptr; ptr=null;
   const dx=e.clientX-p.x, dy=e.clientY-p.y; const dist=Math.hypot(dx,dy);
+  /* Die Wisch-Schwelle bleibt bei festen 18 px und waechst NICHT mit der
+     Brettgroesse: Wie weit ein Finger beim Tippen verrutscht, haengt am
+     Finger, nicht am Brett. Ein erster Entwurf machte sie proportional -
+     auf dem kleinen Lektionsbrett waere sie damit auf 14 px gefallen und
+     haette noch mehr Tipps als Wisch gedeutet, also genau das Gegenteil.
+     18 px liegen auch dort unter einem Feldabstand (32 px), Wischen bleibt
+     also moeglich. */
   if(dist>=18) onSwipe(p.idx,dx,dy); else onTap(p.idx);
 });
 boardSvg.addEventListener('pointercancel',()=>{ ptr=null; });
