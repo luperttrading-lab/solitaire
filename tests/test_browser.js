@@ -618,6 +618,35 @@ function kurzfassungGleich(proben,voll,erwartet){
     return cases.map(t=>{ setStatus(t); const k=st.querySelector('.kurz');
       return {gezeigt:k.textContent, platz:Math.round(k.clientWidth), gebraucht:Math.round(k.scrollWidth)}; }); });
   console.log('INFO Spultexte: '+JSON.stringify(fit));
+  /* Lutz' Screenshot vom 17.09.2026: "Zurueck: Violett zurueck, Gold..." -
+     die Kurzfassung griff die ERSTE Sinnesgrenze (den Doppelpunkt, zu kurz)
+     statt der letzten vor dem Limit und fiel in die Stufe mit
+     Auslassungspunkten. Spulmeldungen muessen an der Sinnesgrenze enden. */
+  const spulKurz=await page.evaluate(()=>{ const names=Object.values(HEX_NAMES).sort((a,b)=>b.length-a.length); const L=names[0];
+    /* Die ersten beiden ueber die allgemeine Regel; die Vor-Meldung mit zwei
+       langen Farbnamen hat keine Sinnesgrenze und bekommt deshalb im Code eine
+       ausdrueckliche Kurzfassung - hier wird sie ueber das echte Spulen geholt. */
+    newGame('english'); const l=currentLine(); applyMove(game.board.moves[l.path[0]],true); render();
+    undo(); const vorKurz=(game.lastMove||{}).kurz||''; finishAnimation();
+    const proben=['Zurück: Violett zurück, Gold wieder da.','Zurück: '+L+' zurück, '+L+' wieder da.'];
+    return proben.map(t=>kurzfassung(t)).concat(['Vor: '+L+' über '+L, vorKurz.replace(/^Zurück/,'Zurück')]); });
+  console.log('INFO Spul-Kurzfassungen: '+JSON.stringify(spulKurz));
+  ok('Zurueck-Meldung wird an der Sinnesgrenze gekuerzt', spulKurz[0]==='Zurück: Violett zurück', spulKurz[0]);
+  ok('Keine Spul-Kurzfassung endet mit Auslassungspunkten', spulKurz.every(k=>!/\u2026$/.test(k)), spulKurz.join(' | '));
+  ok('Vor-Kurzfassung passt mit den laengsten Farbnamen in 32 Zeichen', spulKurz[2].length<=32, spulKurz[2]+' ('+spulKurz[2].length+')');
+  ok('Das echte Spulen liefert eine Kurzfassung ohne Punkte', /^Zurück: \S+ zurück$/.test(spulKurz[3]), spulKurz[3]);
+  ok('Keine Kurzfassung endet auf Komma oder Strich vor den Punkten', spulKurz.every(k=>!/[,;:\u2013]\s*\u2026$/.test(k)), spulKurz.join(' | '));
+  /* Und das Blatt hinter dem Pfeil zeigt den Satz EINMAL: Titel ist das
+     Stichwort, nicht der abgeschnittene Anfang desselben Satzes. */
+  const blattSpul=await page.evaluate(()=>{ setStatus('Zurück: Violett zurück, Gold wieder da.','',null,null,'Zug 3 von 3'); openDetail();
+    const r={titel:document.getElementById('detailTitel').textContent, text:document.getElementById('detailText').textContent}; closeDetail(); return r; });
+  console.log('INFO Blatt Spulmeldung: '+JSON.stringify(blattSpul));
+  ok('Blatt: Titel ist das Stichwort, nicht der gekuerzte Satz', blattSpul.titel==='Zurück', blattSpul.titel);
+  ok('Blatt: der Satz steht einmal ganz', blattSpul.text==='Zurück: Violett zurück, Gold wieder da.', blattSpul.text);
+  /* Gegenprobe: eine eigenstaendige Kurzfassung bleibt Titel. */
+  const blattEigen=await page.evaluate(()=>{ setStatus('In Ordnung – 1 Stein ist weiterhin erreichbar.','ok',null,null,null,'1 Stein bleibt erreichbar'); openDetail();
+    const t=document.getElementById('detailTitel').textContent; closeDetail(); return t; });
+  ok('Blatt: eigenstaendige Kurzfassung bleibt Titel', blattEigen==='1 Stein bleibt erreichbar', blattEigen);
   ok('Spultexte passen mit längsten Farbnamen in die Meldungszeile', fit.every(x=>x.gebraucht<=x.platz+1), JSON.stringify(fit.map(x=>x.gebraucht+'/'+x.platz)));
   // Themes screenshots
   for(const th of ['holz','edel','messing','filz','neon','marmor']){ await page.evaluate(t=>{ settings.theme=t; newGame('english'); },th); await sleep(150); await page.screenshot({path:`shot_theme_${th}.png`}); }

@@ -534,7 +534,7 @@ header .boardname:active{background:var(--panel2)}
 
 <script>
 'use strict';
-const APP_VERSION='1.54';
+const APP_VERSION='1.55';
 /* =========================================================================
    Kern: Bretter, Züge, Symmetrien, Paritäts-Schranke, Solver
    (als Fabrik, damit derselbe Code im Web Worker läuft)
@@ -1209,8 +1209,8 @@ function undo(){
   const h=game.history.pop(); const m=game.board.moves[h.mi];
   game.selected=-1; game.line=null; game.hintOn=false; hideModal('resultModal');
   const nJ=pegName(game.pegAt[m.to]), nO=pegName(h.jumped);
-  game.markAus=false; game.lastMove={mi:h.mi,dir:'undo',text:'Zurück: '+(nJ?nJ:'Stein')+' zurück, '+(nO?nO:'Geschlagener')+' wieder da.',count:'Zug '+(game.history.length+1)+' von '+(game.history.length+game.future.length+1)};
-  game.evalRes=null; game.prevEval=null; game.prevPos=null; cancelEval(); renderOverlay(); setStatus(game.lastMove.text,'',null,null,game.lastMove.count);
+  game.markAus=false; game.lastMove={mi:h.mi,dir:'undo',text:'Zurück: '+(nJ?nJ:'Stein')+' zurück, '+(nO?nO:'Geschlagener')+' wieder da.',kurz:'Zurück: '+(nJ?nJ:'Stein')+' zurück',count:'Zug '+(game.history.length+1)+' von '+(game.history.length+game.future.length+1)};
+  game.evalRes=null; game.prevEval=null; game.prevPos=null; cancelEval(); renderOverlay(); setStatus(game.lastMove.text,'',null,null,game.lastMove.count,game.lastMove.kurz);
   animateMove(m,()=>{
     const a=game.pegAt; a[m.from]=a[m.to]; a[m.to]=-1; a[m.over]=h.jumped;
     game.future.push(h);
@@ -1232,11 +1232,11 @@ function redo(){
   if(game.animating) finishAnimation();
   const h=game.future.pop(); const m=game.board.moves[h.mi]; game.selected=-1; game.hintOn=false;
   const nJ=pegName(game.pegAt[m.from]), nO=pegName(h.jumped);
-  game.markAus=false; game.lastMove={mi:h.mi,dir:'redo',text:'Vor: '+(nJ?nJ:'Stein')+' springt über '+(nO?nO:'den Nachbarn')+'.',count:'Zug '+(game.history.length+1)+' von '+(game.history.length+game.future.length+1)};
-  cancelEval(); renderOverlay(); setStatus(game.lastMove.text,'',null,null,game.lastMove.count);
+  game.markAus=false; game.lastMove={mi:h.mi,dir:'redo',text:'Vor: '+(nJ?nJ:'Stein')+' springt über '+(nO?nO:'den Nachbarn')+'.',kurz:'Vor: '+(nJ?nJ:'Stein')+' über '+(nO?nO:'Nachbarn'),count:'Zug '+(game.history.length+1)+' von '+(game.history.length+game.future.length+1)};
+  cancelEval(); renderOverlay(); setStatus(game.lastMove.text,'',null,null,game.lastMove.count,game.lastMove.kurz);
   animateMove(m,()=>{ applyMove(m,false); game.history.push(h); game.lastMove.dir='redo';
     render(); afterMove(true);
-    if(anyLegalMove()&&!(settings.computer&&!game.hintOn)) setStatus(game.lastMove.text,'',null,null,game.lastMove.count); },false,'slow',400);
+    if(anyLegalMove()&&!(settings.computer&&!game.hintOn)) setStatus(game.lastMove.text,'',null,null,game.lastMove.count,game.lastMove.kurz); },false,'slow',400);
 }
 function elapsedMs(){ return game.elapsedBefore+(game.startedAt&&!game.finished?Date.now()-game.startedAt:0); }
 /* Pause von Hand. game.pauseAn ist bewusst etwas anderes als game.paused
@@ -1488,9 +1488,15 @@ function kurzfassung(text){
   const m=text.match(/^[^.!?]*[.!?]/);
   let k=(m?m[0]:text).trim().replace(/\.$/,'');
   if(k.length<=KURZ_MAX) return k;
-  const grenze=k.slice(0,KURZ_MAX+1).match(/^(.*?)\s*[\u2013\u2014,;:]/);
+  /* Die LETZTE Sinnesgrenze vor dem Limit, nicht die erste (gierig). Bis
+     v1.54 stand hier ein nicht-gieriges (.*?) - bei "Zurueck: Violett
+     zurueck, Gold wieder da." griff es den Doppelpunkt nach "Zurueck",
+     6 Zeichen, zu kurz, und fiel in Stufe 3: "Zurueck: Violett zurueck,
+     Gold..." (Lutz' Screenshot 17.09.2026). Richtig ist das Komma. */
+  const grenze=k.slice(0,KURZ_MAX+1).match(/^(.*)\s*[\u2013\u2014,;:]/);
   if(grenze&&grenze[1].trim().length>=KURZ_MIN) return grenze[1].trim();
-  let rest=k.slice(0,KURZ_MAX-3).replace(/\s+\S*$/,'');
+  /* Stufe 3 endet nie auf einem Satzzeichen vor den Auslassungspunkten. */
+  let rest=k.slice(0,KURZ_MAX-3).replace(/\s+\S*$/,'').replace(/[\s,;:\u2013\u2014]+$/,'');
   /* Mehrfach, falls zwei Bindewoerter aufeinandertreffen ("und dann"). */
   let vorher; do{ vorher=rest; rest=rest.replace(KURZ_BINDE,''); }while(rest!==vorher);
   return rest+'\u2026';
@@ -1598,8 +1604,15 @@ function statusFullText(){
 function openDetail(){
   if(!statusDetail) return;
   const d=$('detail'); d.className=statusDetail.cls||'';
-  $('detailTitel').textContent=statusDetail.kurz;
-  $('detailText').textContent=statusDetail.text;
+  /* Ist die Kurzfassung nur ein abgeschnittener Anfang des Textes, stuende
+     im Blatt zweimal dasselbe: oben gekuerzt, darunter ganz (Lutz, 17.09.2026:
+     "macht keinen Sinn"). Dann traegt der Titel nur das Stichwort vor dem
+     Doppelpunkt ("Zurueck", "Vor"), und der Text steht einmal ganz. */
+  const k=statusDetail.kurz.replace(/\u2026$/,''), t=statusDetail.text;
+  const nurAnfang=k!==t.replace(/\.$/,'')&&t.startsWith(k);
+  const stichwort=nurAnfang&&/^([^:]{2,14}):/.exec(t);
+  $('detailTitel').textContent=stichwort?stichwort[1]:statusDetail.kurz;
+  $('detailText').textContent=t;
   $('detailSuche').textContent=statusDetail.suche||'';
   $('detailSuche').hidden=!statusDetail.suche;
   $('detailZusatz').textContent=statusDetail.note||'';
@@ -1997,7 +2010,7 @@ function evaluatePosition(){
   const opts={target:lb,maxNodes:0,timeMs:6000,seed:(Date.now()%100000)+7,full};
   const id=++evalSeq; evalCurrentId='ev'+id; const t0=Date.now(); game.evaluating=true;
   if(!game.hintOn){
-    if(game.lastMove) setStatus(game.lastMove.text,'',null,null,game.lastMove.count);
+    if(game.lastMove) setStatus(game.lastMove.text,'',null,null,game.lastMove.count,game.lastMove.kurz);
     else if(!statusEl.querySelector('.kurz')||!statusEl.querySelector('.kurz').textContent) setStatus(pegCount()+' Steine übrig.'); }
   /* Die Anzeige haengt daran, dass gerechnet wird - und gerechnet wird nur
      mit Computer an (evaluatePosition kehrt sonst vorher um). */
