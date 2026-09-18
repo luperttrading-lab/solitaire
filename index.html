@@ -540,7 +540,7 @@ header .boardname:active{background:var(--panel2)}
 
 <script>
 'use strict';
-const APP_VERSION='1.58';
+const APP_VERSION='1.59';
 /* =========================================================================
    Kern: Bretter, Züge, Symmetrien, Paritäts-Schranke, Solver
    (als Fabrik, damit derselbe Code im Web Worker läuft)
@@ -1156,6 +1156,17 @@ function newGame(boardId,keepPhase){ hinweisBis=0; abortAnimation();
 const evalCache=new Map();
 let nachCancel=null;
 function applyMove(m,record){
+  /* Eine Rettung entsteht AUSSCHLIESSLICH durch Zuruecknehmen. Ein
+     Vorwaertszug loescht die offene Rettung deshalb - sonst bleibt sie
+     haengen, wenn ein Zurueck die Stellung noch nicht loesbar gemacht hat
+     (Lutz, 18.09.2026: "wenn ich nicht zurueckgehe bis zu dem Punkt, wo die
+     Rettung stattfindet, und gehe komplett wieder vor ... dann ist es auch
+     kein Rettungsversuch").
+     Das ist kein Schoenheitsfehler: "verloren" heisst best > lb, und die
+     Paritaetsschranke lb STEIGT im Lauf der Partie mit. Gemessen an einem
+     haengenden rettungOffen mit best=2, lb=2 - also nichts gerettet - zaehlte
+     die Bewertung eine Rettung, die es nie gab. */
+  game.rettungOffen=false;
   const a=game.pegAt;
   /* Belegung und Paritaetsschranke VOR dem Zug. Beides wird gebraucht, um
      spaeter zu entscheiden, ob dieser Zug die Loesung gekostet hat - die

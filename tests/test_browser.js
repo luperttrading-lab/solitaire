@@ -954,6 +954,58 @@ function kurzfassungGleich(proben,voll,erwartet){
   ok('Drei Schritte zurueck zaehlen auch nur als eine', rett.dreiSchritte===1, String(rett.dreiSchritte));
   ok('Einen guten Zug zurueckzunehmen ist keine Rettung', rett.guterZug===0, String(rett.guterZug));
 
+  /* Lutz am 18.09.2026 vermutete zwei weitere Fehler. Beide nachgestellt:
+     (1) "Wenn man den einen Zug immer hin und her macht, zaehlt es immer
+     wieder als Rettung" - trifft NICHT zu, rettKeys haelt dagegen (gemessen
+     1/1/1 ueber drei Runden). (2) "Wenn ich nicht zurueckgehe bis zu dem
+     Punkt, wo die Rettung stattfindet, und gehe komplett wieder vor, ... dann
+     ist es auch kein Rettungsversuch" - stimmte schon.
+     Die Frage deckte aber einen DRITTEN, echten Fehler auf: rettungOffen
+     blieb nach einem Zurueck, das noch nicht gerettet hatte, haengen. Und
+     "verloren" heisst best > lb, wobei die Paritaetsschranke lb im Lauf der
+     Partie MITSTEIGT - bei best=2, lb=2 gilt die Stellung als nicht mehr
+     verloren, und die haengende Merkzelle zaehlte eine Rettung, die es nie
+     gab (gemessen: 1 statt 0). Seit v1.59 loescht jeder Vorwaertszug sie. */
+  const rett2=await page.evaluate(async()=>{
+    const erg={}; const warte=ms=>new Promise(r=>setTimeout(r,ms));
+    const frei=()=>game.board.moves.filter(m=>game.pegAt[m.from]>=0&&game.pegAt[m.over]>=0&&game.pegAt[m.to]<0);
+    const fehlzug=()=>{ for(const m of frei()){ const c=occ(); c[m.from]=0;c[m.over]=0;c[m.to]=1;
+      const [lo,hi]=CORE.fromArray(c);
+      if(CORE.solveSmart(game.board,lo,hi,19,{maxNodes:0,timeMs:8000,target:1}).best>1) return m; } return null; };
+    const auf12=()=>{ newGame('english'); settings.autoJump=false;
+      for(let k=0;k<12;k++){ const l=currentLine(); applyMove(game.board.moves[l.path[0]],true); } render(); };
+    settings.computer=true; settings.alarm=true;
+    /* Der konstruierte Fall: haengende Merkzelle, Schranke mitgestiegen. */
+    newGame('english'); game.imVerlust=true; game.rettungOffen=true; game.rueckAlarm=0; game.rettKeys=new Set();
+    applyMove(frei()[0],true);
+    game.evalRes={key:stateKey(),best:2,complete:true,lb:2,path:[],optFinal:null};
+    rettungPruefen(); erg.konstruiert=game.rueckAlarm;
+    /* Hin und her mit demselben Zug bleibt bei einer Rettung. */
+    auf12(); playMove(fehlzug()); await warte(2600);
+    undo(); await warte(2800); erg.hin1=game.rueckAlarm;
+    redo(); await warte(2800); undo(); await warte(2800); erg.hin2=game.rueckAlarm;
+    redo(); await warte(2800); undo(); await warte(2800); erg.hin3=game.rueckAlarm;
+    /* Teilrueckzug: zurueck ohne zu retten, wieder vor - die Merkzelle geht. */
+    auf12(); playMove(fehlzug()); await warte(2600);
+    playMove(frei()[0]); await warte(2600); playMove(frei()[0]); await warte(2600);
+    const v=game.rueckAlarm;
+    undo(); await warte(2800); erg.offenNachZurueck=game.rettungOffen; erg.nach1=game.rueckAlarm-v;
+    redo(); await warte(2800); erg.offenNachVor=game.rettungOffen; erg.nachVor=game.rueckAlarm-v;
+    undo(); await warte(1500); undo(); await warte(1500); undo(); await warte(2800);
+    erg.ganzZurueck=game.rueckAlarm-v;
+    settings.autoJump=true;
+    return erg; });
+  console.log('INFO Rettung Sonderfaelle: '+JSON.stringify(rett2));
+  ok('Haengende Merkzelle zaehlt nicht, wenn die Schranke mitsteigt',
+     rett2.konstruiert===0, String(rett2.konstruiert));
+  ok('Denselben Zug hin und her zaehlt nur eine Rettung',
+     rett2.hin1===1&&rett2.hin2===1&&rett2.hin3===1, [rett2.hin1,rett2.hin2,rett2.hin3].join('/'));
+  ok('Ein Zurueck, das noch nicht rettet, bleibt offen', rett2.offenNachZurueck===true);
+  ok('Wieder vorwaerts loescht die offene Rettung', rett2.offenNachVor===false);
+  ok('Zurueck und wieder vor ist kein Rettungsversuch',
+     rett2.nach1===0&&rett2.nachVor===0, rett2.nach1+'/'+rett2.nachVor);
+  ok('Erst das Zurueck bis zur loesbaren Stellung zaehlt', rett2.ganzZurueck===1, String(rett2.ganzZurueck));
+
   ok('Derselbe Tipp zweimal angesehen ist ein Tipp',
      zaehler.tipp1===1&&zaehler.tipp2===1, zaehler.tipp1+' / '+zaehler.tipp2);
   ok('Ein Tipp in einer neuen Stellung zaehlt dazu',
