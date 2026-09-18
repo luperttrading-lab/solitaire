@@ -354,14 +354,20 @@ function kurzfassungGleich(proben,voll,erwartet){
   await page.waitForFunction(()=>!game.evaluating&&!game.animating,{timeout:60000});
   await page.waitForFunction(()=>!game.prevPos,{timeout:60000}); await sleep(300);
   const zuegig=await page.evaluate(()=>({blitz:document.getElementById('warnblitz').classList.contains('an'),
-    alarme:window._alarme, hist:game.history.length, gemerkt:game.alarmZuege.has(game.history.length),
+    alarme:window._alarme, hist:game.history.length, gemerkt:game.imVerlust,
     lbNeu:game.evalRes&&game.evalRes.lb, best:game.evalRes&&game.evalRes.best}));
   console.log('INFO Alarm bei zuegigem Spiel: '+JSON.stringify(zuegig)+', vorige Bewertung lief noch: '+nochAmRechnen);
   ok('Warnblitz auch, wenn die vorige Bewertung noch lief',
      zuegig.blitz===true&&zuegig.gemerkt===true, JSON.stringify(zuegig));
   ok('Der Blitz gehoert zum Fehlzug, nicht zu einem frueheren',
      zuegig.alarme.length===1&&zuegig.alarme[0].hist===zuegig.hist, JSON.stringify(zuegig.alarme));
-  const rettungZuegig=await page.evaluate(()=>{ const v=game.rueckAlarm; game.animating=false; undo(); game.animating=false; return {vorher:v,nachher:game.rueckAlarm}; });
+  /* Seit v1.58 zaehlt das Zurueck nicht beim Druecken, sondern wenn die
+     naechste fertige Bewertung sagt, dass es wieder loesbar ist. Der Test
+     muss sie also abwarten - vorher stand hier nur undo(). */
+  const rettungZuegig=await page.evaluate(async()=>{ const v=game.rueckAlarm;
+    game.animating=false; undo(); game.animating=false;
+    await new Promise(r=>setTimeout(r,2800));
+    return {vorher:v,nachher:game.rueckAlarm}; });
   ok('Rettung zaehlt nach diesem Alarm',
      rettungZuegig.nachher===rettungZuegig.vorher+1, JSON.stringify(rettungZuegig));
   await sleep(1500);
@@ -377,7 +383,7 @@ function kurzfassungGleich(proben,voll,erwartet){
   await page.waitForFunction(()=>!game.evaluating&&!game.animating,{timeout:60000});
   await page.waitForFunction(()=>!game.prevPos,{timeout:60000}); await sleep(400);
   const nachger=await page.evaluate(()=>({blitz:document.getElementById('warnblitz').classList.contains('an'),
-    alarme:window._alarme, hist:game.history.length, gemerkt:game.alarmZuege.has(game.history.length),
+    alarme:window._alarme, hist:game.history.length, gemerkt:game.imVerlust,
     prevBest:game.prevEval&&game.prevEval.best}));
   console.log('INFO Alarm nach Nachrechnen: '+JSON.stringify(nachger));
   ok('Warnblitz auch ohne jede Vorbewertung (Nachrechnen)',
@@ -836,19 +842,25 @@ function kurzfassungGleich(proben,voll,erwartet){
     const B=game.board, erg={};
     erg.startRueck=game.rueckAlarm; erg.startTipp=game.tippKeys.size;
 
-    // Ein Zug, der die Loesung kostet - der Alarm merkt sich die Zuglaenge
+    /* Seit v1.58 haengt die Rettung am ZUSTAND, nicht an der Zugnummer:
+       imVerlust sagt, dass gerade verloren steht, und die naechste fertige
+       Bewertung nach einem Zurueck entscheidet. Hier wird das ohne echte
+       Suche durchgespielt - die echten Faelle stehen weiter unten mit
+       laufender Bewertung. */
     const l=currentLine(); applyMove(B.moves[l.path[0]],true); render();
-    warnblitz();                       // wie aus finish(), also ohne erzwingen
-    erg.gemerkt=game.alarmZuege.has(game.history.length);
-    // Ein anderer Zug oben drauf: ein Zurueck von dort zaehlt nicht
-    const l2=currentLine(); if(l2&&l2.path.length) applyMove(B.moves[l2.path[0]],true);
+    game.imVerlust=true;               // Stellung gilt als verloren
+    erg.gemerkt=game.imVerlust;
+    // Ein Zurueck aus dem Verlust heraus: offen, aber noch nicht gezaehlt
     game.animating=false; undo(); game.animating=false;
     erg.nachFremdemZurueck=game.rueckAlarm;
-    // Jetzt der Alarm-Zug selbst
-    undo(); game.animating=false;
+    // Die Bewertung sagt: wieder loesbar -> eine Rettung
+    game.evalRes={key:stateKey(),best:1,complete:true,lb:1,path:[],optFinal:null};
+    rettungPruefen();
     erg.nachAlarmZurueck=game.rueckAlarm;
-    // Nochmal vor und zurueck: derselbe Zug zaehlt kein zweites Mal
-    redo(); game.animating=false; undo(); game.animating=false;
+    // Dieselbe gerettete Stellung noch einmal: zaehlt kein zweites Mal
+    game.imVerlust=true; game.rettungOffen=true;
+    game.evalRes={key:stateKey(),best:1,complete:true,lb:1,path:[],optFinal:null};
+    rettungPruefen();
     erg.nachWiederholung=game.rueckAlarm;
 
     // Tipps: derselbe Tipp zweimal ist einer, eine neue Stellung ist zwei
@@ -894,13 +906,54 @@ function kurzfassungGleich(proben,voll,erwartet){
   console.log('INFO Zaehler: '+JSON.stringify(zaehler));
   ok('Die Zaehler starten bei null',
      zaehler.startRueck===0&&zaehler.startTipp===0, JSON.stringify(zaehler));
-  ok('Der Alarm merkt sich den verlorenen Zug', zaehler.gemerkt===true);
-  ok('Ein Zurueck auf einem anderen Zug zaehlt nicht',
+  ok('Das Spiel merkt sich, dass verloren steht', zaehler.gemerkt===true);
+  ok('Ein Zurueck allein zaehlt noch nicht - erst die Bewertung entscheidet',
      zaehler.nachFremdemZurueck===0, zaehler.nachFremdemZurueck);
-  ok('Das Zuruecknehmen des verlorenen Zuges zaehlt',
+  ok('Wieder loesbar nach dem Zurueck: eine Rettung',
      zaehler.nachAlarmZurueck===1, zaehler.nachAlarmZurueck);
-  ok('Derselbe Zug zaehlt kein zweites Mal',
+  ok('Dieselbe gerettete Stellung zaehlt kein zweites Mal',
      zaehler.nachWiederholung===1, zaehler.nachWiederholung);
+  /* Und jetzt mit ECHTER Bewertung - der Fall, den Lutz am 17.09.2026
+     gemeldet hat: "Ich habe zwei Schritte zurueck gemacht, weil ich beim
+     ersten Schritt nicht gesehen habe, dass ich das Ziel schon nicht mehr
+     erreichen kann ... es wird gar nichts angezeigt."
+     Gemessen vor v1.58: alarmZuege blieb LEER, weil warnblitz() eine fertige
+     Bewertung voraussetzt und zuegiges Weiterspielen sie mit cancelEval()
+     abbricht. Zwei Schritte zurueck zaehlten 0 statt 1. */
+  const rett=await page.evaluate(async()=>{
+    const erg={}; const warte=ms=>new Promise(r=>setTimeout(r,ms));
+    const frei=()=>game.board.moves.filter(m=>game.pegAt[m.from]>=0&&game.pegAt[m.over]>=0&&game.pegAt[m.to]<0);
+    const fehlzug=()=>{ for(const m of frei()){ const c=occ(); c[m.from]=0;c[m.over]=0;c[m.to]=1;
+      const [lo,hi]=CORE.fromArray(c);
+      if(CORE.solveSmart(game.board,lo,hi,19,{maxNodes:0,timeMs:8000,target:1}).best>1) return m; } return null; };
+    const auf12=()=>{ newGame('english'); settings.autoJump=false;
+      for(let k=0;k<12;k++){ const l=currentLine(); applyMove(game.board.moves[l.path[0]],true); } render(); };
+    settings.computer=true; settings.alarm=true;
+    /* Zuegig gespielt: Fehlzug, sofort weiter, dann zwei Schritte zurueck. */
+    auf12(); applyMove(fehlzug(),true); render(); afterMove(true); await warte(120);
+    applyMove(frei()[0],true); render(); afterMove(true); await warte(3000);
+    erg.imVerlust=game.imVerlust;
+    undo(); await warte(1600); erg.nach1=game.rueckAlarm;
+    undo(); await warte(2800); erg.nach2=game.rueckAlarm;
+    /* Drei Schritte zurueck sind trotzdem genau eine Rettung. */
+    auf12(); applyMove(fehlzug(),true); render(); afterMove(true); await warte(100);
+    applyMove(frei()[0],true); render(); afterMove(true); await warte(100);
+    applyMove(frei()[0],true); render(); afterMove(true); await warte(3000);
+    undo(); await warte(1500); undo(); await warte(1500); undo(); await warte(2800);
+    erg.dreiSchritte=game.rueckAlarm;
+    /* Ein guter Zug zurueckgenommen zaehlt nicht. */
+    auf12(); await warte(2600); const vor=game.rueckAlarm;
+    playMove(frei()[0]); await warte(2600); undo(); await warte(2800);
+    erg.guterZug=game.rueckAlarm-vor;
+    settings.autoJump=true;
+    return erg; });
+  console.log('INFO Rettung mit echter Bewertung: '+JSON.stringify(rett));
+  ok('Zuegig gespielt: die Stellung gilt trotzdem als verloren', rett.imVerlust===true);
+  ok('Der erste von zwei Schritten zaehlt noch nicht', rett.nach1===0, String(rett.nach1));
+  ok('Zwei Schritte zurueck zaehlen als eine Rettung', rett.nach2===1, String(rett.nach2));
+  ok('Drei Schritte zurueck zaehlen auch nur als eine', rett.dreiSchritte===1, String(rett.dreiSchritte));
+  ok('Einen guten Zug zurueckzunehmen ist keine Rettung', rett.guterZug===0, String(rett.guterZug));
+
   ok('Derselbe Tipp zweimal angesehen ist ein Tipp',
      zaehler.tipp1===1&&zaehler.tipp2===1, zaehler.tipp1+' / '+zaehler.tipp2);
   ok('Ein Tipp in einer neuen Stellung zaehlt dazu',

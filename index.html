@@ -540,7 +540,7 @@ header .boardname:active{background:var(--panel2)}
 
 <script>
 'use strict';
-const APP_VERSION='1.57';
+const APP_VERSION='1.58';
 /* =========================================================================
    Kern: Bretter, Züge, Symmetrien, Paritäts-Schranke, Solver
    (als Fabrik, damit derselbe Code im Web Worker läuft)
@@ -1103,13 +1103,15 @@ const game={board:null,lay:null,pegAt:[],initial:[],history:[],future:[],selecte
      Zugnummer: wer weitergeht und spaeter zurueckkommt, findet seine
      eigenen Versuche wieder vor. */
   probiert:new Map(), probiertTimer:0,
-  /* Zaehler fuer die Partie. rueckAlarm: wie oft ein Zug zurueckgenommen
-     wurde, der die Loesung gekostet hatte - nicht jedes Zurueck, sondern
-     nur die Reue nach dem Alarm. alarmZuege merkt sich dafuer die
-     Zuglaengen, bei denen ein Alarm kam. tippKeys sammelt die Stellungen,
-     in denen ein Tipp abgerufen wurde: derselbe Tipp zweimal angesehen
-     ist ein Tipp, nicht zwei. */
-  rueckAlarm:0,alarmZuege:null,tippKeys:null};
+  /* Zaehler fuer die Partie. rueckAlarm: wie oft Zuruecknehmen eine schon
+     verlorene Stellung wieder loesbar gemacht hat - nicht jedes Zurueck,
+     sondern die Rettung. imVerlust haelt fest, ob gerade verloren steht;
+     rettungOffen merkt sich ein Zurueck aus dem Verlust heraus, bis die
+     naechste Bewertung entscheidet; rettKeys sammelt die geretteten
+     Stellungen, damit derselbe Fehler nicht doppelt zaehlt.
+     tippKeys sammelt die Stellungen, in denen ein Tipp abgerufen wurde:
+     derselbe Tipp zweimal angesehen ist ein Tipp, nicht zwei. */
+  rueckAlarm:0,tippKeys:null,imVerlust:false,rettungOffen:false,rettKeys:null};
 
 const $=id=>document.getElementById(id);
 const boardSvg=$('board'), statusEl=$('status');
@@ -1137,7 +1139,8 @@ function newGame(boardId,keepPhase){ hinweisBis=0; abortAnimation();
   if(!settings.freeStart) game.pegAt[board.startIdx]=-1;
   game.initial=game.pegAt.slice(); game.history=[]; game.future=[]; game.selected=-1; game.finished=false;
   game.startedAt=0; game.elapsedBefore=0; game.line=null; game.hintOn=false; game.autoplay=false; game.startCount=pegCount();
-  game.rueckAlarm=0; game.alarmZuege=new Set(); game.tippKeys=new Set();
+  game.rueckAlarm=0; game.tippKeys=new Set();
+  game.imVerlust=false; game.rettungOffen=false; game.rettKeys=new Set();
   if(game.pauseAn) pauseSetzen(false);
   game.evalRes=null; game.prevEval=null; game.prevPos=null; evalCache.clear(); cancelEval();
   game.bookLine=(!settings.freeStart&&OPENING_BOOK[board.def.id])?{key:stateKey(),path:OPENING_BOOK[board.def.id].slice(),best:1,complete:true,nodes:0,lb:1,book:true}:null;
@@ -1207,11 +1210,18 @@ function probierteHier(){
 function undo(){
   if(!game.history.length) return;
   if(game.animating) finishAnimation();
-  /* Zaehlt nur, wenn genau der Zug zurueckgeht, der die Loesung gekostet
-     hat. Danach ist die Zuglaenge aus der Liste gestrichen - wer den Zug
-     wiederholt und nochmal zurueckgeht, zaehlt nicht doppelt. */
-  if(game.alarmZuege&&game.alarmZuege.has(game.history.length)){
-    game.alarmZuege.delete(game.history.length); game.rueckAlarm++; }
+  /* Eine Rettung wird am ZUSTAND erkannt, nicht an der Zugnummer (Lutz,
+     17.09.2026): "egal ob ich 12 oder drei zurueckgehen muss - auf jeden
+     Fall ein Rettungsversuch muss protokolliert werden."
+     Bis v1.57 zaehlte nur das Zuruecknehmen genau des Zuges, dessen
+     Zuglaenge in alarmZuege stand. Die kam aber nur dorthin, wenn warnblitz()
+     lief - und das setzt eine FERTIGE Bewertung voraus. Wer zuegig
+     weiterspielt, bricht sie mit cancelEval() ab: gemessen blieb alarmZuege
+     dann leer, und zwei Schritte zurueck zaehlten 0 statt 1.
+     Jetzt merkt sich das Spiel nur, DASS es gerade verloren steht; wird die
+     Stellung durch Zuruecknehmen wieder loesbar, ist das eine Rettung -
+     gezaehlt beim Abschluss der naechsten Bewertung. */
+  if(game.imVerlust) game.rettungOffen=true;
   const h=game.history.pop(); const m=game.board.moves[h.mi];
   game.selected=-1; game.line=null; game.hintOn=false; hideModal('resultModal');
   const nJ=pegName(game.pegAt[m.to]), nO=pegName(h.jumped);
@@ -1530,10 +1540,10 @@ let warnblitzTimer=0, warnblitzZeit=0;
 function warnblitzGleich(){ return Date.now()-warnblitzZeit<1200; }
 let alarmZuletzt=0;
 function warnblitz(erzwingen){
-  /* Die Zuglaenge wird auch dann gemerkt, wenn der Warnblitz abgeschaltet
-     ist - gezaehlt wird der verlorene Zug, nicht das Aufleuchten. Nur die
-     Probe aus dem Menue (erzwingen) zaehlt nicht mit. */
-  if(!erzwingen&&game.alarmZuege) game.alarmZuege.add(game.history.length);
+  /* Seit v1.58 zaehlt der Rettungszaehler am Zustand, nicht an der
+     Zugnummer - alarmZuege wird nicht mehr gelesen und ist ersatzlos weg.
+     Ein toter Zustand, der ueberlebt, wird irgendwann versehentlich
+     wieder gesetzt. */
   if(!settings.alarm&&!erzwingen) return;
   alarmZuletzt=Date.now(); warnblitzZeit=Date.now(); Sound.alarm();
   const e=$('warnblitz'); if(!e) return;
@@ -2036,6 +2046,20 @@ let evalSeq=0, evalCurrentId=null;
    ebenfalls 2, kein Blitz und keine gezaehlte Rettung.
    Verglichen wird deshalb gegen die Bewertung UND die Schranke der
    Vorgaengerstellung; beides steht in prevEval. */
+/* Haelt fest, ob die Partie gerade verloren steht, und zaehlt die Rettung,
+   sobald Zuruecknehmen sie wieder loesbar gemacht hat. Je GERETTETER STELLUNG
+   einmal (rettKeys): wer denselben Fehler wiederholt und nochmal zurueckgeht,
+   zaehlt nicht doppelt - dieselbe Regel wie bei den Tipps. */
+function rettungPruefen(){
+  const ev=game.evalRes; if(!ev||!ev.complete) return;
+  const verloren=ev.best>ev.lb;
+  if(game.rettungOffen&&!verloren){
+    const k=stateKey();
+    if(game.rettKeys&&!game.rettKeys.has(k)){ game.rettKeys.add(k); game.rueckAlarm++; renderHud(); }
+    game.rettungOffen=false;
+  }
+  game.imVerlust=verloren;
+}
 function pruefeVerlust(){
   const ev=game.evalRes; if(!ev||!ev.complete) return;
   const prev=game.prevEval;
@@ -2079,6 +2103,7 @@ function evaluatePosition(){
   const finish=r=>{ if(id!==evalSeq) return; game.evaluating=false; zeigeRechnet(false); if(key!==stateKey()) return;
     game.evalRes={key,best:r.best,complete:r.complete&&!r.cancelled&&!r.timeout,path:r.path||[],nodes:r.nodes,lb,ms:Date.now()-t0,everEmpty:r.everEmpty||null,optFinal:r.optFinal||null,full};
     if(game.evalRes.complete) evalCache.set(key,{best:r.best,complete:true,path:(r.path||[]).slice(),optFinal:game.evalRes.optFinal});
+    rettungPruefen();
     pruefeVerlust();
     showTrainer(); renderOverlay(); };
   const runMain=()=>{ let search; try{ search=CORE.createSearch(game.board,lo,hi,count,opts); }catch(e){ game.evaluating=false; return; }
