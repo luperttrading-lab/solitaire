@@ -2455,6 +2455,37 @@ function kurzfassungGleich(proben,voll,erwartet){
   console.log('INFO Gruene Bildpunkte gegen Weiss: '+grPunkte);
   ok('Gruen ist gegen Weiss wirklich zu sehen', grPunkte>2000, grPunkte+' Bildpunkte mit Gruenstich');
 
+  /* Und sind Weiss und Gruen auseinanderzuhalten - auf dem HOLZBRETT?
+     Lutz am 20.09.2026 (Nussbaum): "man kann nur das gruene von dem weissen
+     nicht unterscheiden." Mit .42 nahm das Weiss die Farbe des Holzes an:
+     gemessen [156,138,125], Abstand zu Gruen 89. Gemessen wird die mittlere
+     Farbe im Dreieck bei 25 % der Strecke - dort liegt es ueber dem Brett,
+     nicht ueber einer Murmel (bei 45 % traf die erste Messung die
+     uebersprungene Murmel und mass Lila). */
+  const grKontrast={};
+  for(const theme of ['nussbaum','glas']){
+    const pts=await page.evaluate(async(theme)=>{
+      settings.theme=theme; applyLook(); settings.gruen=true; settings.zuege=true; newGame('english');
+      for(let n=0;n<12;n++){ const l=currentLine(); applyMove(game.board.moves[l.path[0]],true); } render(); evaluatePosition();
+      for(let i=0;i<60&&!(game.gruen&&game.gruen.fertig);i++) await new Promise(r=>setTimeout(r,100));
+      return [...document.querySelectorAll('#board path.moegl')].map(pf=>{ const z=pf.getAttribute('d').match(/-?\d+(\.\d+)?/g).map(Number);
+        const mx=(z[0]+z[2])/2,my=(z[1]+z[3])/2; const x=mx+(z[4]-mx)*0.25,y=my+(z[5]-my)*0.25; const m=pf.getScreenCTM();
+        return {gut:pf.classList.contains('gut'),x:m.a*x+m.c*y+m.e,y:m.b*x+m.d*y+m.f}; }); },theme);
+    const png=PNG.sync.read(await page.screenshot());
+    const col=pt=>{ const i=((Math.round(pt.y*2)*png.width)+Math.round(pt.x*2))*4; return [png.data[i],png.data[i+1],png.data[i+2]]; };
+    const mean=a=>a.reduce((s,c)=>[s[0]+c[0]/a.length,s[1]+c[1]/a.length,s[2]+c[2]/a.length],[0,0,0]).map(Math.round);
+    const W=pts.filter(q=>!q.gut).map(col), G=pts.filter(q=>q.gut).map(col);
+    grKontrast[theme]={weiss:W.length?mean(W):null, gruen:G.length?mean(G):null};
+    grKontrast[theme].abstand=W.length&&G.length?Math.round(Math.hypot(...[0,1,2].map(i=>grKontrast[theme].weiss[i]-grKontrast[theme].gruen[i]))):null;
+  }
+  console.log('INFO Kontrast Weiss/Gruen: '+JSON.stringify(grKontrast));
+  ok('Weiss und Gruen liegen auf Nussbaum weit auseinander', grKontrast.nussbaum.abstand>=120, String(grKontrast.nussbaum.abstand));
+  ok('Und auf Samt & Glas ebenso', grKontrast.glas.abstand>=120, String(grKontrast.glas.abstand));
+  /* Weiss muss auch WEISS bleiben, nicht Holzfarbe: alle drei Kanaele hell
+     und dicht beieinander. */
+  ok('Das Weiss ist auf Holz noch weiss', grKontrast.nussbaum.weiss&&Math.min(...grKontrast.nussbaum.weiss)>=170&&(Math.max(...grKontrast.nussbaum.weiss)-Math.min(...grKontrast.nussbaum.weiss))<=30, JSON.stringify(grKontrast.nussbaum.weiss));
+  await page.evaluate(()=>{ settings.theme='glas'; applyLook(); saveSettings(); });
+
   /* Nach einem Zug darf kein altes Gruen stehen bleiben - das Ergebnis
      gehoert zur Stellung, nicht zum Brett. */
   const grZug=await page.evaluate(()=>{
