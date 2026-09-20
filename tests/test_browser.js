@@ -2270,8 +2270,15 @@ function kurzfassungGleich(proben,voll,erwartet){
        erste Entwurf dieser Pruefung zaehlte deshalb 671 Punkte und mass in
        Wahrheit die Murmeln. Weiss hebt alle drei Kanaele gleich an, Rot nur
        einen. */
-    const dR=mzJetzt.data[k]-mzGrund.data[k], dG=mzJetzt.data[k+1]-mzGrund.data[k+1], dB=mzJetzt.data[k+2]-mzGrund.data[k+2];
-    if(dR-Math.max(dG,dB)>30) mzRotPunkte++;
+    /* Dritte Fassung (v1.64): Seit die Dreiecke voll deckend sind, hebt
+       Weiss ueber einer tuerkisen Murmel den Rotkanal um 195, Gruen und Blau
+       nur um 55 bzw. 75 - der "Rotstich der Aenderung" meldete 2379 Punkte,
+       obwohl das Ergebnis reines Weiss ist. Die richtige Frage ist, ob ein
+       Punkt rot-DOMINANT geworden ist, der es vorher nicht war. */
+    const jR=mzJetzt.data[k], jG=mzJetzt.data[k+1], jB=mzJetzt.data[k+2];
+    const gR=mzGrund.data[k], gG=mzGrund.data[k+1], gB=mzGrund.data[k+2];
+    const rotJetzt=jR>jG+40&&jR>jB+40, rotVorher=gR>gG+40&&gR>gB+40;
+    if(rotJetzt&&!rotVorher) mzRotPunkte++;
   }
   console.log('INFO Weisse Dreiecke sichtbar: '+mzN+' Dreiecke, '+mzHell
     +' hellere Bildpunkte, davon '+mzKraeftig+' kraeftig, staerkster '+mzMax
