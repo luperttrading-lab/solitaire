@@ -2121,7 +2121,7 @@ function kurzfassungGleich(proben,voll,erwartet){
   console.log('INFO Menue Hilfe: '+JSON.stringify(mh));
   ok('Menue hat einen Abschnitt Hilfe', mh.ueberschrift.includes('Hilfe'), mh.ueberschrift.join(','));
   ok('Der Trainer-Schalter ist weg', mh.keinTrainer===true);
-  ok('Unterpunkte verschwinden, wenn Computer aus ist', mh.subWeg===true&&mh.subZahl===6, JSON.stringify(mh));   // 5 seit v1.62 (Gute Zuege gruen), 6 seit v1.67 (Laufbalken)
+  ok('Unterpunkte verschwinden, wenn Computer aus ist', mh.subWeg===true&&mh.subZahl===7, JSON.stringify(mh));   // 5 seit v1.62 (Gute Zuege gruen), 6 seit v1.67 (Laufbalken), 7 seit v1.72 (Gruener Schein)
   ok('Unterpunkte kommen mit Computer an zurueck', mh.subDa===true);
 
   abschnitt='Migration Hilfe';
@@ -2860,13 +2860,26 @@ function kurzfassungGleich(proben,voll,erwartet){
     const n=document.querySelectorAll('#board circle.landung').length;
     settings.computer=true; return n; });
   ok('Ohne Computer leuchtet nichts', lsOhne===0, String(lsOhne));
-  const lsMenue=await page.evaluate(()=>{ const sw=document.getElementById('swLandung');
+  const lsMenue=await page.evaluate(()=>{ settings.computer=true; buildSheet();
+    const sw=document.getElementById('swLandung');
     const row=sw.closest('.row');
     return {da:!!sw, titel:row.querySelector('.t').textContent, an:sw.classList.contains('on'),
-      sub:row.classList.contains('sub')}; });
+      sub:row.classList.contains('sub'), subVon:row.dataset.sub, versteckt:row.hidden}; });
   console.log('INFO Menue Landeschein: '+JSON.stringify(lsMenue));
-  ok('Der Schalter steht im Menue und ist ab Werk an',
-     lsMenue.da===true&&lsMenue.an===true&&/Grüner Schein/.test(lsMenue.titel)&&lsMenue.sub===false, JSON.stringify(lsMenue));
+  /* v1.72: Der Schein haengt seit v1.71 am Computer, also gehoert seine Zeile
+     unter Computer - eingerueckt und mit ihm verschwindend. Stuende sie
+     weiter allein unter Steuerung, schaltete jemand sie bei ausgeschaltetem
+     Computer an und wunderte sich (dieselbe Falle wie beim Warnblitz vor
+     v1.54). Lutz am 20.09.2026: "wenn ich den Computer aus und unten nichts
+     gruen blinkt, dann darf der Stein oben auch nicht blinken". */
+  ok('Der Schalter steht als Unterpunkt von Computer im Menue und ist ab Werk an',
+     lsMenue.da===true&&lsMenue.an===true&&/Grüner Schein/.test(lsMenue.titel)
+     &&lsMenue.sub===true&&lsMenue.subVon==='computer'&&lsMenue.versteckt===false, JSON.stringify(lsMenue));
+  const lsMenueAus=await page.evaluate(()=>{ settings.computer=false; buildSheet();
+    const r=document.getElementById('swLandung').closest('.row'); const v=r.hidden;
+    settings.computer=true; buildSheet(); return {aus:v,wiederDa:!r.hidden}; });
+  ok('Mit Computer aus verschwindet die Zeile - und kommt mit ihm zurueck',
+     lsMenueAus.aus===true&&lsMenueAus.wiederDa===true, JSON.stringify(lsMenueAus));
   await page.evaluate(()=>{ settings.computer=true; settings.funkeln=true; saveSettings(); newGame('english'); });
 
   ok('keine Seitenfehler insgesamt', errors.length===0, errors.join(' | '));

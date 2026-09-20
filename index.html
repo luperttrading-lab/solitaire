@@ -548,6 +548,7 @@ header .boardname:active{background:var(--panel2)}
     <div class="row sub" data-sub="computer"><div style="width:100%"><div class="t">Alarmton</div><div class="d">Welches Signal ertönt, wenn ein Zug die Lösung kostet. Tippen spielt es zur Probe ab.</div><div class="chips" id="alarmList" style="margin-top:10px"></div></div></div>
     <div class="row sub" data-sub="computer"><div><div class="t">Gestrandete Steine markieren</div><div class="d">Felder, die in jeder bestmöglichen Fortsetzung besetzt bleiben, bekommen ein Zeichen – dort wird ein Stein übrig bleiben. Ein Tipp auf so einen Stein sagt es noch einmal. Ab 24 Steinen abwärts.</div></div><button class="switch" id="swMarks" role="switch" aria-label="Gestrandete Steine markieren"></button></div>
     <div class="row sub" data-sub="computer"><div><div class="t">Probierte Züge</div><div class="d">Nimmst du einen Zug zurück, bleibt er als rotes Dreieck stehen – breit, wo du ansetztest, spitz, wo du landetest. So siehst du, was du hier schon versucht hast. Ein Zug führt in eine andere Stellung, dort beginnt die Zählung von vorn.</div></div><button class="switch" id="swProbiert" role="switch" aria-label="Probierte Züge"></button></div>
+    <div class="row sub" data-sub="computer"><div><div class="t">Grüner Schein beim Sprung</div><div class="d">Hält dein Zug die Lösung, leuchtet der gelandete Stein kurz grün hinter sich auf – gleichzeitig mit dem grünen Licht der Ampel und im selben Takt. Kostet der Zug die Lösung, bleibt es dunkel.</div></div><button class="switch" id="swLandung" role="switch" aria-label="Grüner Schein beim Sprung"></button></div>
     <div class="row sub" data-sub="computer"><div><div class="t">Gute Züge grün</div><div class="d">Lerneinheit. Zeigt der Knopf „Züge" alle möglichen Züge, werden die grün, die das bestmögliche Ergebnis noch halten. Der Rechner prüft dafür jeden Zug einzeln – in der Eröffnung reicht die Zeit oft nicht für alle, dann bleiben die ungeprüften weiß. Eine Partie mit grünen Zügen zählt nicht für die Bestleistungen.</div></div><button class="switch" id="swGruen" role="switch" aria-label="Gute Züge grün"></button></div>
     <div class="row sub" data-sub="computer" data-sub2="gruen"><div style="width:100%"><div class="t">Laufbalken</div><div class="d">Wie weit der Rechner mit den Zügen ist – und wo er stehen geblieben ist, wenn die Zeit nicht reichte. Die Zahlen unten rechts bleiben in jedem Fall.</div><div class="chips" id="balkenList" style="margin-top:10px"></div></div></div>
     <div class="row"><div><div class="t">Tipps</div><div class="d">Hilfe auf Anfrage: der Tipp-Knopf zeigt den besten Zug, „Fehler suchen" findet den Zug, der die Lösung gekostet hat. Beides wird gezählt. Aus heißt: der Knopf ist weg.</div></div><button class="switch" id="swTipps" role="switch" aria-label="Tipps"></button></div>
@@ -556,7 +557,6 @@ header .boardname:active{background:var(--panel2)}
     <div class="row"><div><div class="t">Zielfelder anzeigen</div><div class="d">Mögliche Ziele des gewählten Steins markieren.</div></div><button class="switch" id="swTargets" role="switch" aria-label="Zielfelder anzeigen"></button></div>
     <div class="row"><div><div class="t">Startloch frei wählen</div><div class="d">Beim Start alle Steine setzen und selbst einen herausnehmen.</div></div><button class="switch" id="swFree" role="switch" aria-label="Startloch frei wählen"></button></div>
     <div class="row"><div><div class="t">Funkeln</div><div class="d">Ein Streiflicht wandert über die Murmel, die du antippst, und über die, die gerade gesprungen ist. Sonst bleibt das Brett still.</div></div><button class="switch" id="swFunkeln" role="switch" aria-label="Funkeln"></button></div>
-    <div class="row"><div><div class="t">Grüner Schein beim Sprung</div><div class="d">Der Stein, der gerade gesprungen ist, leuchtet kurz grün hinter sich auf – ein halber Augenblick, damit du siehst, wo er gelandet ist.</div></div><button class="switch" id="swLandung" role="switch" aria-label="Grüner Schein beim Sprung"></button></div>
     <div class="row"><div><div class="t">Ton</div><div class="d">Kurze Klicks beim Ziehen, Jingle am Ende.</div></div><button class="switch" id="swSound" role="switch" aria-label="Ton"></button></div>
     <h2>So geht's</h2>
     <p>Ein Stein springt waagerecht, senkrecht (auf dem Dreieck auch schräg) über einen direkten Nachbarn in ein leeres Loch dahinter. Der übersprungene Stein wird entfernt. Ziel: nur ein Stein bleibt übrig – auf den Kreuzbrettern idealerweise in der Mitte.</p>
@@ -621,7 +621,7 @@ header .boardname:active{background:var(--panel2)}
 
 <script>
 'use strict';
-const APP_VERSION='1.71';
+const APP_VERSION='1.72';
 /* =========================================================================
    Kern: Bretter, Züge, Symmetrien, Paritäts-Schranke, Solver
    (als Fabrik, damit derselbe Code im Web Worker läuft)
