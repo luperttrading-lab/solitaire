@@ -548,7 +548,7 @@ header .boardname:active{background:var(--panel2)}
     <div class="row sub" data-sub="computer"><div style="width:100%"><div class="t">Alarmton</div><div class="d">Welches Signal ertönt, wenn ein Zug die Lösung kostet. Tippen spielt es zur Probe ab.</div><div class="chips" id="alarmList" style="margin-top:10px"></div></div></div>
     <div class="row sub" data-sub="computer"><div><div class="t">Gestrandete Steine markieren</div><div class="d">Felder, die in jeder bestmöglichen Fortsetzung besetzt bleiben, bekommen ein Zeichen – dort wird ein Stein übrig bleiben. Ein Tipp auf so einen Stein sagt es noch einmal. Ab 24 Steinen abwärts.</div></div><button class="switch" id="swMarks" role="switch" aria-label="Gestrandete Steine markieren"></button></div>
     <div class="row sub" data-sub="computer"><div><div class="t">Probierte Züge</div><div class="d">Nimmst du einen Zug zurück, bleibt er als rotes Dreieck stehen – breit, wo du ansetztest, spitz, wo du landetest. So siehst du, was du hier schon versucht hast. Ein Zug führt in eine andere Stellung, dort beginnt die Zählung von vorn.</div></div><button class="switch" id="swProbiert" role="switch" aria-label="Probierte Züge"></button></div>
-    <div class="row sub" data-sub="computer"><div><div class="t">Grüner Schein beim Sprung</div><div class="d">Hält dein Zug die Lösung, leuchtet der gelandete Stein kurz grün hinter sich auf – gleichzeitig mit dem grünen Licht der Ampel und im selben Takt. Kostet der Zug die Lösung, bleibt es dunkel.</div></div><button class="switch" id="swLandung" role="switch" aria-label="Grüner Schein beim Sprung"></button></div>
+    <div class="row sub" data-sub="computer"><div><div class="t">Schein beim Sprung</div><div class="d">Der gelandete Stein leuchtet kurz hinter sich auf – grün, wenn dein Zug die 1-Stein-Lösung hält, rot, wenn er sie kostet. Gleichzeitig mit der Ampel darunter und in ihrer Farbe. Ist die Stellung nicht zu Ende gerechnet (gelb), bleibt es dunkel.</div></div><button class="switch" id="swLandung" role="switch" aria-label="Schein beim Sprung"></button></div>
     <div class="row sub" data-sub="computer"><div><div class="t">Gute Züge grün</div><div class="d">Lerneinheit. Zeigt der Knopf „Züge" alle möglichen Züge, werden die grün, die das bestmögliche Ergebnis noch halten. Der Rechner prüft dafür jeden Zug einzeln – in der Eröffnung reicht die Zeit oft nicht für alle, dann bleiben die ungeprüften weiß. Eine Partie mit grünen Zügen zählt nicht für die Bestleistungen.</div></div><button class="switch" id="swGruen" role="switch" aria-label="Gute Züge grün"></button></div>
     <div class="row sub" data-sub="computer" data-sub2="gruen"><div style="width:100%"><div class="t">Laufbalken</div><div class="d">Wie weit der Rechner mit den Zügen ist – und wo er stehen geblieben ist, wenn die Zeit nicht reichte. Die Zahlen unten rechts bleiben in jedem Fall.</div><div class="chips" id="balkenList" style="margin-top:10px"></div></div></div>
     <div class="row"><div><div class="t">Tipps</div><div class="d">Hilfe auf Anfrage: der Tipp-Knopf zeigt den besten Zug, „Fehler suchen" findet den Zug, der die Lösung gekostet hat. Beides wird gezählt. Aus heißt: der Knopf ist weg.</div></div><button class="switch" id="swTipps" role="switch" aria-label="Tipps"></button></div>
@@ -621,7 +621,7 @@ header .boardname:active{background:var(--panel2)}
 
 <script>
 'use strict';
-const APP_VERSION='1.72';
+const APP_VERSION='1.73';
 /* =========================================================================
    Kern: Bretter, Züge, Symmetrien, Paritäts-Schranke, Solver
    (als Fabrik, damit derselbe Code im Web Worker läuft)
@@ -1134,6 +1134,12 @@ function glanzMarkup(){
    Ausgeloest wird er deshalb in derselben Zeile wie der Ampel-Blitz
    (setStatus), und seine Kurve ist dessen Kurve: 0,5 s, Spitze bei 35 %
    der Laufzeit, beide Flanken ease-out wie die @keyframes blitz. */
+/* Seit v1.73 zwei Farben (Lutz, 20.09.2026): "Wenn es ein roter Zug ist und
+   es rot blitzt, dann koennte der Stein statt dem gruenen Schein auch in rot
+   kurz aufleuchten." Gruen ist das Gruen des Ampellichts, Rot ist #e0574a -
+   genau das rote Licht darunter, nicht das kraeftigere Rot der probierten
+   Zuege: der Schein SAGT dasselbe wie die Ampel, also traegt er ihre Farbe. */
+const LAND_FARBEN={gruen:'#4ade80',rot:'#e0574a'};
 const LAND_MS=500, LAND_R=80, LAND_SPITZE=0.35;
 /* ease-out ist cubic-bezier(0,0,.58,1). x(u) = 1,74u^2 - 0,74u^3,
    y(u) = u^2(3-2u); u wird mit Newton gesucht. Eine Naeherung "irgendeine
@@ -1145,8 +1151,9 @@ function blitzKurve(t){
   return t<LAND_SPITZE? e(t/LAND_SPITZE) : 1-e((t-LAND_SPITZE)/(1-LAND_SPITZE));
 }
 let landeLaeuft=null, landeNr=0;
-function landeSchein(idx){
+function landeSchein(idx,farbe){
   if(!settings.landung||!glowLayer||!game.lay||!defsEl) return;
+  const ton=LAND_FARBEN[farbe||'gruen']; if(!ton) return;
   if(landeLaeuft){ cancelAnimationFrame(landeLaeuft.raf); landeLaeuft.weg(); landeLaeuft=null; }
   const p=game.lay.pos[idx]; if(!p) return;
   /* Eigener Verlauf je Lauf und am Ende wieder entfernt - dieselbe Regel wie
@@ -1155,7 +1162,7 @@ function landeSchein(idx){
   const gr=document.createElementNS(SVGNS,'radialGradient'); gr.setAttribute('id',gid);
   [[0,'.85'],[0.42,'.78'],[0.72,'.30'],[1,'0']].forEach(([off,op])=>{
     const e=document.createElementNS(SVGNS,'stop');
-    e.setAttribute('offset',off); e.setAttribute('stop-color','#4ade80'); e.setAttribute('stop-opacity',op);
+    e.setAttribute('offset',off); e.setAttribute('stop-color',ton); e.setAttribute('stop-opacity',op);
     gr.appendChild(e); });
   defsEl.appendChild(gr);
   const c=el('circle',{class:'landung',cx:p.x,cy:p.y,r:LAND_R,fill:'url(#'+gid+')','fill-opacity':'0'});
@@ -1805,8 +1812,18 @@ function zeigeRechnet(an){ if(rechnet===an) return; rechnet=an;
    uebernaechsten haengen bleibt. */
 let statusSuche='';
 function setSuche(t){ statusSuche=t||''; }
+/* Welches URTEIL die naechste Meldung traegt - 'ok', 'warn' oder 'bad'.
+   Eigener Kanal, von setStatus verbraucht, genau wie die Suchidee. Die
+   CSS-Klasse taugt dafuer NICHT: rote Antworten auf eine Beruehrung
+   ("Dieser Stein kann nicht springen") und das gruene "Abschnitt geschafft"
+   einer Lektion tragen dieselben Klassen, sind aber keine Bewertung. Solange
+   nur Gruen leuchtete, fiel das nicht auf; mit Rot waere aus jedem
+   unmoeglichen Zug ein roter Schein geworden. */
+let statusAmpel='';
+function setAmpel(v){ statusAmpel=v||''; }
 function setStatus(text,cls,linkText,linkFn,note,kurz){
   const suche=statusSuche; statusSuche='';
+  const ampel=statusAmpel; statusAmpel='';
   const isArr=Array.isArray(linkText);
   const links=isArr?linkText:(linkText?[[linkText,linkFn]]:[]);
   const noteText=isArr?linkFn:note;
@@ -1833,10 +1850,17 @@ function setStatus(text,cls,linkText,linkFn,note,kurz){
        duerfen den Raum nicht aufleuchten lassen. Bei Rot laesst er dem
        Warnblitz den Vortritt - der kommt aus derselben Bewertung. */
     ampelHof(cls);
-    /* Gruen im Brett genau dann, wenn unten das gruene Licht blitzt: 'ok'
-       heisst 1 Stein erreichbar. Rot oder Gelb verbraucht die Merkzelle
-       ebenso - der Zug ist bewertet, seine Gelegenheit vorbei. */
-    if(game.landeZiel>=0){ if(cls==='ok') landeSchein(game.landeZiel); game.landeZiel=-1; } }
+    /* Der Schein im Brett traegt die Farbe des Lichts, das gerade blitzt:
+       'ok' (1 Stein erreichbar) gruen, 'bad' rot. Gelb bleibt dunkel - dort
+       ist nichts entschieden, und eine Farbe waere eine Behauptung.
+       Gemessen wird das URTEIL, nicht die Klasse (siehe setAmpel). */
+    if(ampel&&game.landeZiel>=0){
+      if(ampel==='ok') landeSchein(game.landeZiel,'gruen');
+      else if(ampel==='bad') landeSchein(game.landeZiel,'rot');
+      /* Verbraucht wird die Merkzelle nur von einem echten Urteil. Eine rote
+         Antwort auf eine Beruehrung darf sie nicht wegnehmen - sonst waere
+         der Schein weg, weil man zwischendurch einen Stein angetippt hat. */
+      game.landeZiel=-1; } }
   const saeule=document.createElement('span'); saeule.className='saeule';
   const anker=document.createElement('span'); anker.className='anker'; anker.textContent=ankerText(); saeule.appendChild(anker);
   const k=document.createElement('span'); k.className='kurz'; k.textContent=kurzT;
@@ -2636,6 +2660,8 @@ function showTrainer(){
      der Strategie-Hinweise - den hat Lutz am 16.09. ausdruecklich gelobt. */
   if(!settings.computer||game.hintOn) return;
   const prev=game.prevEval;
+  /* Genau hier steht das Urteil fest - eine Zeile fuer alle vier Auswege. */
+  setAmpel(!ev.complete?'warn':ev.best===1?'ok':'bad');
   const note=game.lastMove?game.lastMove.text+' '+game.lastMove.count:'';
   if(!ev.complete){ setStatus('Diese Stellung war in sechs Sekunden nicht zu Ende zu rechnen. Das kommt selten vor – spiel einen Zug weiter, dann geht es meist wieder.','warn',null,null,note,'Noch nicht bewertbar'); return; }
   if(ev.best===1){ setStatus('In Ordnung – 1 Stein ist weiterhin erreichbar.','ok',null,null,note,'1 Stein bleibt erreichbar'); return; }

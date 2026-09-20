@@ -2691,7 +2691,7 @@ function kurzfassungGleich(proben,voll,erwartet){
      Form des Hofes ist davon unberuehrt, deshalb wird sie hier an der
      Zeichnung selbst gemessen und von Hand ausgeloest; WANN er im Spiel
      kommt, pruefen die Bloecke darunter am echten Spiel. */
-  const lsMess=async(reduce)=>{
+  const lsMess=async(reduce,farbe)=>{
     await page.emulateMediaFeatures([{name:'prefers-reduced-motion',value:reduce?'reduce':'no-preference'}]);
     await page.evaluate(()=>{ settings.computer=false; settings.funkeln=false; settings.landung=true;
       settings.zuege=false; settings.gruen=false; newGame('english'); render(); });
@@ -2702,7 +2702,7 @@ function kurzfassungGleich(proben,voll,erwartet){
       return {x:Math.round(x-R),y:Math.round(y-R),width:Math.round(2*R),height:Math.round(2*R),
         mx:x,my:y,sk:m.a}; });
     const ruhe=PNG.sync.read(await page.screenshot({clip:box}));
-    await page.evaluate(()=>{ const l=currentLine(); landeSchein(game.board.moves[l.path[0]].to); });
+    await page.evaluate(f=>{ const l=currentLine(); landeSchein(game.board.moves[l.path[0]].to,f); },farbe||'gruen');
     await sleep(140);                      // die Spitze der Kurve liegt bei 175 ms
     const mitte=PNG.sync.read(await page.screenshot({clip:box}));
     const jetzt=await page.evaluate(()=>{ const c=document.querySelector('#board circle.landung');
@@ -2710,14 +2710,22 @@ function kurzfassungGleich(proben,voll,erwartet){
       return {kreise:document.querySelectorAll('#board circle.landung').length,
         r:c?parseFloat(c.getAttribute('r')):null, op:c?parseFloat(c.getAttribute('fill-opacity')):null,
         fill:c?c.getAttribute('fill'):null,
+        ton:(document.querySelector('#board defs radialGradient[id^=mlnd] stop')||{getAttribute:()=>null}).getAttribute('stop-color'),
         verlaufDa:c?!!document.querySelector('#board defs radialGradient[id^=mlnd]'):null,
         hinterStein:c?alle.indexOf(c.parentNode)<alle.indexOf(pegsLayer):null,
         imOverlay:c?c.parentNode===overlayLayer:null}; });
     await sleep(800);
     const danach=PNG.sync.read(await page.screenshot({clip:box}));
-    const gruenstich=(A,B)=>{ let n=0; for(let k=0;k<A.data.length;k+=4){
+    /* Der Farbstich der AENDERUNG, nicht der Rotkanal und nicht die
+       Dominanz - viermal falsch gestellt, siehe CLAUDE.md. Hier ist er
+       zulaessig, weil Standbild und Messbild dieselbe Stellung zeigen und
+       sich nur der Hof dazwischenlegt. */
+    const stich=(A,B,rot)=>{ let n=0; for(let k=0;k<A.data.length;k+=4){
       const dR=B.data[k]-A.data[k], dG=B.data[k+1]-A.data[k+1], dB=B.data[k+2]-A.data[k+2];
-      if(dG-Math.max(dR,dB)>30) n++; } return n; };
+      const d=rot?dR-Math.max(dG,dB):dG-Math.max(dR,dB);
+      if(d>30) n++; } return n; };
+    const istRot=(farbe||'gruen')==='rot';
+    const gruenstich=(A,B)=>stich(A,B,istRot);
     const weg=await page.evaluate(()=>document.querySelectorAll('#board circle.landung').length);
     /* Hof oder Kranz? Ein Kranz haette bis zu seiner harten Kante ueberall
        dieselbe Staerke. Gemessen wird deshalb die mittlere Gruen-Zunahme auf
@@ -2727,12 +2735,14 @@ function kurzfassungGleich(proben,voll,erwartet){
         const px=Math.round((box.mx+Math.cos(w)*radius*box.sk-box.x)*2);
         const py=Math.round((box.my+Math.sin(w)*radius*box.sk-box.y)*2);
         const k=(py*A.width+px)*4; if(k<0||k+2>=A.data.length) continue;
-        sum+=(B.data[k+1]-A.data[k+1])-Math.max(B.data[k]-A.data[k],B.data[k+2]-A.data[k+2]); n++; }
+        const dR=B.data[k]-A.data[k], dG=B.data[k+1]-A.data[k+1], dB=B.data[k+2]-A.data[k+2];
+        sum+=istRot?dR-Math.max(dG,dB):dG-Math.max(dR,dB); n++; }
       return n?Math.round(sum/n):0; };
     return {jetzt, waehrend:gruenstich(ruhe,mitte), danach:gruenstich(ruhe,danach), weg,
+      gegen:stich(ruhe,mitte,!istRot),
       innen:ring(ruhe,mitte,44), aussen:ring(ruhe,mitte,72)};
   };
-  const lsNorm=await lsMess(false);
+  const lsNorm=await lsMess(false,'gruen');
   console.log('INFO Landeschein normal: '+JSON.stringify(lsNorm));
   ok('Der Schein ist nach dem Sprung wirklich zu sehen', lsNorm.waehrend>500, lsNorm.waehrend+' gruene Bildpunkte');
   ok('Er liegt HINTER dem Stein, nicht im Overlay',
@@ -2749,10 +2759,25 @@ function kurzfassungGleich(proben,voll,erwartet){
      wuechse defs mit jedem Sprung um einen Eintrag. */
   const lsDefs=await page.evaluate(()=>document.querySelectorAll('#board defs radialGradient[id^=mlnd]').length);
   ok('Auch sein Verlauf wird wieder entfernt', lsNorm.jetzt.verlaufDa===true&&lsDefs===0, lsNorm.jetzt.verlaufDa+' / '+lsDefs);
-  const lsRed=await lsMess(true);
+  const lsRed=await lsMess(true,'gruen');
   console.log('INFO Landeschein mit reduzierter Bewegung: '+JSON.stringify(lsRed));
   ok('Auch mit reduzierter Bewegung ist er zu sehen', lsRed.waehrend>500, lsRed.waehrend+' gruene Bildpunkte');
   ok('Und verschwindet auch dort wieder', lsRed.danach===0&&lsRed.weg===0, lsRed.danach+' / '+lsRed.weg);
+  /* v1.73: derselbe Hof in Rot. Lutz am 20.09.2026: "Wenn es ein roter Zug
+     ist und es rot blitzt, dann koennte der Stein statt dem gruenen Schein
+     auch in rot kurz aufleuchten." Gemessen wird beides - dass Rot zu sehen
+     ist UND dass dabei nichts gruen wird. */
+  const lsRotMess=await lsMess(false,'rot');
+  console.log('INFO Landeschein rot: '+JSON.stringify(lsRotMess));
+  ok('Der rote Schein ist genauso zu sehen', lsRotMess.waehrend>500, lsRotMess.waehrend+' rote Bildpunkte');
+  ok('Er traegt das Rot der Ampel, nicht das Rot der probierten Zuege',
+     lsRotMess.jetzt.ton==='#e0574a', String(lsRotMess.jetzt.ton));
+  ok('Er laeuft ebenso nach aussen aus', lsRotMess.innen>25&&lsRotMess.aussen*2<lsRotMess.innen,
+     'innen '+lsRotMess.innen+', aussen '+lsRotMess.aussen);
+  ok('Beim roten Schein wird nichts gruen', lsRotMess.gegen<40, String(lsRotMess.gegen));
+  ok('Beim gruenen Schein wird nichts rot', lsNorm.gegen<40, String(lsNorm.gegen));
+  ok('Auch der rote verschwindet wieder', lsRotMess.danach===0&&lsRotMess.weg===0,
+     lsRotMess.danach+' / '+lsRotMess.weg);
   await page.emulateMediaFeatures([{name:'prefers-reduced-motion',value:'no-preference'}]);
 
   /* Abschaltbar, Standard an. */
@@ -2824,9 +2849,11 @@ function kurzfassungGleich(proben,voll,erwartet){
       /* wie playMove, nur ohne Animation - die Merkzelle ist dieselbe */
       applyMove(m,true); render(); game.landeZiel=m.to; afterMove(true); },mi);
     await page.waitForFunction(()=>game.evalRes&&!game.evaluating,{timeout:20000}); await sleep(120);
-    const z=await page.evaluate(()=>({cls:document.getElementById('status').className,
-      schein:document.querySelectorAll('#board circle.landung').length,
-      ziel:game.landeZiel}));
+    const z=await page.evaluate(()=>{ const gr=document.querySelector('#board defs radialGradient[id^=mlnd] stop');
+      return {cls:document.getElementById('status').className,
+        schein:document.querySelectorAll('#board circle.landung').length,
+        ton:gr?gr.getAttribute('stop-color'):null,
+        ziel:game.landeZiel}; });
     if(/\bbad\b/.test(z.cls)&&!lsRot) lsRot=z;
     if(/\bok\b/.test(z.cls)&&!lsGut) lsGut=z;
     await page.evaluate(()=>undo()); await sleep(1300);
@@ -2834,10 +2861,10 @@ function kurzfassungGleich(proben,voll,erwartet){
     if(lsRot&&lsGut) break;
   }
   console.log('INFO Schein bei Rot: '+JSON.stringify(lsRot)+' | bei Gruen: '+JSON.stringify(lsGut));
-  ok('Ein Zug, der die Loesung kostet, leuchtet nicht gruen',
-     !!lsRot&&lsRot.schein===0&&lsRot.ziel===-1, JSON.stringify(lsRot));
-  ok('Derselbe Weg mit gruener Ampel leuchtet sehr wohl',
-     !!lsGut&&lsGut.schein===1, JSON.stringify(lsGut));
+  ok('Ein Zug, der die Loesung kostet, leuchtet ROT (v1.73)',
+     !!lsRot&&lsRot.schein===1&&lsRot.ton==='#e0574a'&&lsRot.ziel===-1, JSON.stringify(lsRot));
+  ok('Derselbe Weg mit gruener Ampel leuchtet gruen',
+     !!lsGut&&lsGut.schein===1&&lsGut.ton==='#4ade80', JSON.stringify(lsGut));
   /* Das Spulen leuchtet nicht - dort markiert schon der Pfeil, was passiert.
      Und eine haengengebliebene Merkzelle wuerde genau hier auffallen: nach
      dem Zurueck blitzt die Ampel wieder gruen. */
@@ -2852,6 +2879,28 @@ function kurzfassungGleich(proben,voll,erwartet){
   await page.waitForFunction(()=>!game.animating&&!game.evaluating,{timeout:20000}); await sleep(200);
   const lsNachRedo=await page.evaluate(()=>document.querySelectorAll('#board circle.landung').length);
   ok('Zurueck und Vor leuchten nicht', lsNachUndo===0&&lsNachRedo===0, lsNachUndo+' / '+lsNachRedo);
+  /* v1.73: Gefaerbt wird nach dem URTEIL, nicht nach der CSS-Klasse. Eine
+     rote Antwort auf eine Beruehrung und ein gruenes "Abschnitt geschafft"
+     tragen dieselben Klassen und sind keine Bewertung. Solange nur Gruen
+     leuchtete, fiel das nicht auf; mit Rot waere aus jedem unmoeglichen Zug
+     ein roter Schein geworden. Beide Wege werden gemessen. */
+  const lsLeck=await page.evaluate(async()=>{
+    settings.computer=true; settings.landung=true; newGame('english'); render();
+    const ziel=game.board.moves[currentLine().path[0]].to;
+    const probe=async(fn)=>{ game.landeZiel=ziel;
+      zeigeRechnet(true); zeigeRechnet(false);   // Blitz freigeben
+      fn(); await new Promise(r=>setTimeout(r,120));
+      const n=document.querySelectorAll('#board circle.landung').length;
+      const behalten=game.landeZiel===ziel; game.landeZiel=-1; return {n,behalten}; };
+    const beruehrung=await probe(()=>hinweis('Dieser Stein kann nicht springen.','Kein Sprung möglich'));
+    hinweisBis=0;
+    const lektion=await probe(()=>setStatus('Abschnitt 1 von 3 geschafft.','ok'));
+    return {beruehrung,lektion}; });
+  console.log('INFO Kein Schein ohne Urteil: '+JSON.stringify(lsLeck));
+  ok('Eine rote Antwort auf eine Beruehrung faerbt nichts - und nimmt die Merkzelle nicht weg',
+     lsLeck.beruehrung.n===0&&lsLeck.beruehrung.behalten===true, JSON.stringify(lsLeck.beruehrung));
+  ok('Ein gruenes "Abschnitt geschafft" faerbt auch nichts',
+     lsLeck.lektion.n===0&&lsLeck.lektion.behalten===true, JSON.stringify(lsLeck.lektion));
   /* Ohne Computer gibt es keine Bewertung - und damit auch keinen Schein. */
   const lsOhne=await page.evaluate(async()=>{
     settings.computer=false; newGame('english'); render();
@@ -2873,7 +2922,7 @@ function kurzfassungGleich(proben,voll,erwartet){
      v1.54). Lutz am 20.09.2026: "wenn ich den Computer aus und unten nichts
      gruen blinkt, dann darf der Stein oben auch nicht blinken". */
   ok('Der Schalter steht als Unterpunkt von Computer im Menue und ist ab Werk an',
-     lsMenue.da===true&&lsMenue.an===true&&/Grüner Schein/.test(lsMenue.titel)
+     lsMenue.da===true&&lsMenue.an===true&&/^Schein beim Sprung$/.test(lsMenue.titel)
      &&lsMenue.sub===true&&lsMenue.subVon==='computer'&&lsMenue.versteckt===false, JSON.stringify(lsMenue));
   const lsMenueAus=await page.evaluate(()=>{ settings.computer=false; buildSheet();
     const r=document.getElementById('swLandung').closest('.row'); const v=r.hidden;
