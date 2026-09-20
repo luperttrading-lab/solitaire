@@ -621,7 +621,7 @@ header .boardname:active{background:var(--panel2)}
 
 <script>
 'use strict';
-const APP_VERSION='1.70';
+const APP_VERSION='1.71';
 /* =========================================================================
    Kern: Bretter, Züge, Symmetrien, Paritäts-Schranke, Solver
    (als Fabrik, damit derselbe Code im Web Worker läuft)
@@ -1126,7 +1126,24 @@ function glanzMarkup(){
    dort nichts, wo er hinter dem Stein hervorkommen soll.
    Der Radius steht FEST und nur die Deckkraft schwillt an und ab - genau wie
    beim Ampel-Hof; ein wachsender Kreis haette wieder eine wandernde Kante. */
-const LAND_MS=520, LAND_R=80;
+/* Und er haengt seit v1.71 an der BEWERTUNG, nicht am Sprung (Lutz am
+   20.09.2026): "Der Stein darf nur dann gruen aufblinken, wenn es ein
+   gruener Zug ist, quasi wenn die Ein-Punkt-Loesung noch machbar ist. D.h.
+   es kann nicht frueher aufblinken als unten das Gruen und es sollte auch
+   im gleichen Intervall aufblinken, also die gleiche Blinkintensitaet."
+   Ausgeloest wird er deshalb in derselben Zeile wie der Ampel-Blitz
+   (setStatus), und seine Kurve ist dessen Kurve: 0,5 s, Spitze bei 35 %
+   der Laufzeit, beide Flanken ease-out wie die @keyframes blitz. */
+const LAND_MS=500, LAND_R=80, LAND_SPITZE=0.35;
+/* ease-out ist cubic-bezier(0,0,.58,1). x(u) = 1,74u^2 - 0,74u^3,
+   y(u) = u^2(3-2u); u wird mit Newton gesucht. Eine Naeherung "irgendeine
+   weiche Kurve" waere hier zu wenig - gefordert ist DIESELBE. */
+function blitzKurve(t){
+  const e=x=>{ let u=x; for(let i=0;i<6;i++){ const d=3.48*u-2.22*u*u; if(d<1e-6) break;
+      u-=(1.74*u*u-0.74*u*u*u-x)/d; }
+    u=Math.max(0,Math.min(1,u)); return u*u*(3-2*u); };
+  return t<LAND_SPITZE? e(t/LAND_SPITZE) : 1-e((t-LAND_SPITZE)/(1-LAND_SPITZE));
+}
 let landeLaeuft=null, landeNr=0;
 function landeSchein(idx){
   if(!settings.landung||!glowLayer||!game.lay||!defsEl) return;
@@ -1143,15 +1160,15 @@ function landeSchein(idx){
   defsEl.appendChild(gr);
   const c=el('circle',{class:'landung',cx:p.x,cy:p.y,r:LAND_R,fill:'url(#'+gid+')','fill-opacity':'0'});
   glowLayer.appendChild(c);
-  const reduce=window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  const t0=performance.now(), D=reduce?760:LAND_MS;
+  /* Kein eigener reduce-Zweig mehr: der Ampel-Blitz laeuft dort ebenfalls
+     unveraendert 0,5 s, und "im gleichen Intervall" gilt fuer beide
+     Einstellungen. Bewegt wird ohnehin nichts - nur die Deckkraft. */
+  const t0=performance.now(), D=LAND_MS;
   const lauf={c,raf:0,weg(){ if(c.parentNode) c.parentNode.removeChild(c); if(gr.parentNode) gr.parentNode.removeChild(gr); }};
   landeLaeuft=lauf;
   (function schritt(jetzt){
     const t=Math.min(1,(jetzt-t0)/D);
-    /* Plateau statt Spitze - dieselbe Kurve wie beim Glanz (v1.41): sin()
-       pur stuende nur einen Augenblick oben. */
-    c.setAttribute('fill-opacity',(Math.min(1,Math.sin(t*Math.PI)*1.7)*0.72).toFixed(3));
+    c.setAttribute('fill-opacity',(blitzKurve(t)*0.72).toFixed(3));
     if(t<1&&landeLaeuft===lauf){ lauf.raf=requestAnimationFrame(schritt); return; }
     lauf.weg();
     if(landeLaeuft===lauf) landeLaeuft=null;
@@ -1269,6 +1286,7 @@ function newGame(boardId,keepPhase){ hinweisBis=0; abortAnimation();
   game.lastMove=null; if(!keepPhase) game.lesson=null;
   game.probiert=new Map(); clearTimeout(game.probiertTimer);
   game.gruen=null; game.gruenGenutzt=false;
+  game.landeZiel=-1;
   if(landeLaeuft){ cancelAnimationFrame(landeLaeuft.raf); landeLaeuft.weg(); landeLaeuft=null; }
   game.pegAt=new Array(board.n); for(let i=0;i<board.n;i++) game.pegAt[i]=i;
   game.phase=settings.freeStart?'choose':'play';
@@ -1373,6 +1391,7 @@ function undo(){
   game.selected=-1; game.line=null; game.hintOn=false; hideModal('resultModal');
   const nJ=pegName(game.pegAt[m.to]), nO=pegName(h.jumped);
   game.markAus=false; game.lastMove={mi:h.mi,dir:'undo',text:'Zurück: '+(nJ?nJ:'Stein')+' zurück, '+(nO?nO:'Geschlagener')+' wieder da.',kurz:'Zurück: '+(nJ?nJ:'Stein')+' zurück',count:'Zug '+(game.history.length+1)+' von '+(game.history.length+game.future.length+1)};
+  game.landeZiel=-1;
   game.evalRes=null; game.prevEval=null; game.prevPos=null; cancelEval(); renderOverlay(); setStatus(game.lastMove.text,'',null,null,game.lastMove.count,game.lastMove.kurz);
   animateMove(m,()=>{
     const a=game.pegAt; a[m.from]=a[m.to]; a[m.to]=-1; a[m.over]=h.jumped;
@@ -1396,6 +1415,7 @@ function redo(){
   const h=game.future.pop(); const m=game.board.moves[h.mi]; game.selected=-1; game.hintOn=false;
   const nJ=pegName(game.pegAt[m.from]), nO=pegName(h.jumped);
   game.markAus=false; game.lastMove={mi:h.mi,dir:'redo',text:'Vor: '+(nJ?nJ:'Stein')+' springt über '+(nO?nO:'den Nachbarn')+'.',kurz:'Vor: '+(nJ?nJ:'Stein')+' über '+(nO?nO:'Nachbarn'),count:'Zug '+(game.history.length+1)+' von '+(game.history.length+game.future.length+1)};
+  game.landeZiel=-1;
   cancelEval(); renderOverlay(); setStatus(game.lastMove.text,'',null,null,game.lastMove.count,game.lastMove.kurz);
   animateMove(m,()=>{ applyMove(m,false); game.history.push(h); game.lastMove.dir='redo';
     render(); afterMove(true);
@@ -1812,7 +1832,11 @@ function setStatus(text,cls,linkText,linkFn,note,kurz){
        Statuszeile: rote Meldungen wie "Dieser Stein kann nicht springen"
        duerfen den Raum nicht aufleuchten lassen. Bei Rot laesst er dem
        Warnblitz den Vortritt - der kommt aus derselben Bewertung. */
-    ampelHof(cls); }
+    ampelHof(cls);
+    /* Gruen im Brett genau dann, wenn unten das gruene Licht blitzt: 'ok'
+       heisst 1 Stein erreichbar. Rot oder Gelb verbraucht die Merkzelle
+       ebenso - der Zug ist bewertet, seine Gelegenheit vorbei. */
+    if(game.landeZiel>=0){ if(cls==='ok') landeSchein(game.landeZiel); game.landeZiel=-1; } }
   const saeule=document.createElement('span'); saeule.className='saeule';
   const anker=document.createElement('span'); anker.className='anker'; anker.textContent=ankerText(); saeule.appendChild(anker);
   const k=document.createElement('span'); k.className='kurz'; k.textContent=kurzT;
@@ -1903,7 +1927,10 @@ function playMove(m){
   game.selected=-1; renderOverlay(); Sound.jump();
   /* Erst nach render(): renderPegs() baut die Steine neu, ein vorher
      gestarteter Glanz liefe ins Leere. */
-  animateMove(m,()=>{ applyMove(m,true); render(); landeSchein(m.to); glanzAn(m.to); afterMove(true); },false,game.demo?'slow':false);
+  animateMove(m,()=>{ applyMove(m,true); render();
+    /* Nur MERKEN - geleuchtet wird erst, wenn die Bewertung gruen meldet. */
+    game.landeZiel=m.to;
+    glanzAn(m.to); afterMove(true); },false,game.demo?'slow':false);
 }
 function afterMove(fresh){ hinweisBis=0;
   if(game.lesson){ lessonAfterMove(); if(game.lesson.solved){ game.autoplay=false; game.finished=true; game.elapsedBefore=elapsedMs(); game.startedAt=0; renderHud(); return; } }

@@ -2686,7 +2686,11 @@ function kurzfassungGleich(proben,voll,erwartet){
   /* Wunsch von Lutz (20.09.2026): "dass der Stein der springt auch im
      Hintergrund kurz gruen aufleuchtet. Standard eingeschaltet."
      Gemessen wird, was zu SEHEN ist - und in BEIDEN Bewegungs-Einstellungen,
-     denn genau der reduce-Zweig war beim Glanz (v1.39) der unsichtbare. */
+     denn genau der reduce-Zweig war beim Glanz (v1.39) der unsichtbare.
+     Seit v1.71 haengt der Schein an der BEWERTUNG, nicht am Sprung. Die
+     Form des Hofes ist davon unberuehrt, deshalb wird sie hier an der
+     Zeichnung selbst gemessen und von Hand ausgeloest; WANN er im Spiel
+     kommt, pruefen die Bloecke darunter am echten Spiel. */
   const lsMess=async(reduce)=>{
     await page.emulateMediaFeatures([{name:'prefers-reduced-motion',value:reduce?'reduce':'no-preference'}]);
     await page.evaluate(()=>{ settings.computer=false; settings.funkeln=false; settings.landung=true;
@@ -2698,8 +2702,8 @@ function kurzfassungGleich(proben,voll,erwartet){
       return {x:Math.round(x-R),y:Math.round(y-R),width:Math.round(2*R),height:Math.round(2*R),
         mx:x,my:y,sk:m.a}; });
     const ruhe=PNG.sync.read(await page.screenshot({clip:box}));
-    await page.evaluate(()=>{ const l=currentLine(); playMove(game.board.moves[l.path[0]]); });
-    await sleep(430);                      // 230 ms Zug + rund 200 ms in den Schein hinein
+    await page.evaluate(()=>{ const l=currentLine(); landeSchein(game.board.moves[l.path[0]].to); });
+    await sleep(140);                      // die Spitze der Kurve liegt bei 175 ms
     const mitte=PNG.sync.read(await page.screenshot({clip:box}));
     const jetzt=await page.evaluate(()=>{ const c=document.querySelector('#board circle.landung');
       const alle=[...boardSvg.children];
@@ -2754,11 +2758,108 @@ function kurzfassungGleich(proben,voll,erwartet){
   /* Abschaltbar, Standard an. */
   const lsAus=await page.evaluate(async()=>{
     settings.landung=false; newGame('english'); render();
-    const l=currentLine(); playMove(game.board.moves[l.path[0]]);
-    await new Promise(r=>setTimeout(r,430));
+    const l=currentLine(); landeSchein(game.board.moves[l.path[0]].to);
+    await new Promise(r=>setTimeout(r,180));
     const n=document.querySelectorAll('#board circle.landung').length;
     settings.landung=true; return n; });
   ok('Ausgeschaltet leuchtet nichts', lsAus===0, String(lsAus));
+
+  /* v1.71: gekoppelt an das gruene Ampellicht. Lutz am 20.09.2026: "Der
+     Stein darf nur dann gruen aufblinken, wenn es ein gruener Zug ist ...
+     es kann nicht frueher aufblinken als unten das Gruen und es sollte
+     auch im gleichen Intervall aufblinken." Also drei Fragen: kommt er
+     ueberhaupt, kommt er GENAU mit dem Blitz - und bleibt er bei Rot aus. */
+  const lsKopp=await page.evaluate(async()=>{
+    settings.computer=true; settings.landung=true; settings.funkeln=false;
+    settings.zuege=false; settings.gruen=false; newGame('english'); render();
+    /* Die Bewertung der STARTSTELLUNG faerbt die Ampel schon gruen - stuende
+       sie noch da, waere die Messung sinnlos. Also abwarten und die Zeile
+       leeren, damit 'ok' wirklich das Ergebnis DIESES Zuges ist. */
+    for(let i=0;i<500&&!(game.evalRes&&!game.evaluating);i++) await new Promise(r=>setTimeout(r,15));
+    const st=document.getElementById('status'); st.className='';
+    const l=currentLine(); playMove(game.board.moves[l.path[0]]);
+    const t0=performance.now(); let tG=0,tO=0,frueh=0,klasse='';
+    for(let i=0;i<500;i++){
+      await new Promise(r=>setTimeout(r,15));
+      const schein=!!document.querySelector('#board circle.landung');
+      if(!tO&&st.classList.contains('ok')) tO=Math.round(performance.now()-t0);
+      if(!tO&&schein) frueh++;
+      if(!tG&&schein){ tG=Math.round(performance.now()-t0); klasse=st.className; }
+      if(tG&&tO) break;
+    }
+    return {tG,tO,frueh,klasse};
+  });
+  console.log('INFO Schein gekoppelt: '+JSON.stringify(lsKopp));
+  ok('Nach einem guten Zug leuchtet er - und nie vor dem gruenen Licht',
+     lsKopp.tG>0&&lsKopp.tO>0&&lsKopp.frueh===0&&lsKopp.tG-lsKopp.tO<=45, JSON.stringify(lsKopp));
+  ok('Er startet in derselben Zeile wie der Ampel-Blitz',
+     /\bok\b/.test(lsKopp.klasse)&&/\bblitz\b/.test(lsKopp.klasse), lsKopp.klasse);
+  /* Gleiches Intervall heisst hier woertlich: dieselbe Dauer und dieselbe
+     Spitze wie die @keyframes blitz (0,5 s, Spitze bei 35 %). Eine Pruefung
+     auf "irgendeine weiche Kurve" wuerde die Frage nicht stellen. */
+  const lsTakt=await page.evaluate(()=>{
+    const st=document.getElementById('status'); const vorher=st.className;
+    st.className='ok blitz';
+    const b=st.querySelector('.dot b.gr');
+    const dur=b?getComputedStyle(b).animationDuration:null;
+    st.className=vorher;
+    return {dur,landMs:LAND_MS,spitze:LAND_SPITZE,
+      kurve:[0,0.175,0.35,0.5,1].map(x=>+blitzKurve(x).toFixed(3))};
+  });
+  console.log('INFO Takt: '+JSON.stringify(lsTakt));
+  ok('Gleiches Intervall wie der Ampel-Blitz: 0,5 s, Spitze bei 35 %',
+     lsTakt.dur==='0.5s'&&lsTakt.landMs===500&&lsTakt.spitze===0.35
+     &&lsTakt.kurve[0]===0&&lsTakt.kurve[2]===1&&lsTakt.kurve[4]===0
+     &&lsTakt.kurve[1]>0.4&&lsTakt.kurve[1]<0.8&&lsTakt.kurve[3]<lsTakt.kurve[2],
+     JSON.stringify(lsTakt));
+  /* Ein Zug, der die Loesung kostet: rote Ampel, also kein Schein. */
+  await page.evaluate(()=>{ settings.computer=true; settings.landung=true; newGame('english');
+    for(let k=0;k<12;k++){ const l=currentLine(); applyMove(game.board.moves[l.path[0]],true); }
+    render(); evaluatePosition(); });
+  await page.waitForFunction(()=>!game.evaluating,{timeout:20000}); await sleep(120);
+  const lsLegal=await page.evaluate(()=>game.board.moves.map((m,i)=>({i,ok:game.pegAt[m.from]>=0&&game.pegAt[m.over]>=0&&game.pegAt[m.to]<0})).filter(x=>x.ok).map(x=>x.i));
+  let lsRot=null, lsGut=null;
+  for(const mi of lsLegal){
+    await page.evaluate(i=>{ const m=game.board.moves[i];
+      /* wie playMove, nur ohne Animation - die Merkzelle ist dieselbe */
+      applyMove(m,true); render(); game.landeZiel=m.to; afterMove(true); },mi);
+    await page.waitForFunction(()=>game.evalRes&&!game.evaluating,{timeout:20000}); await sleep(120);
+    const z=await page.evaluate(()=>({cls:document.getElementById('status').className,
+      schein:document.querySelectorAll('#board circle.landung').length,
+      ziel:game.landeZiel}));
+    if(/\bbad\b/.test(z.cls)&&!lsRot) lsRot=z;
+    if(/\bok\b/.test(z.cls)&&!lsGut) lsGut=z;
+    await page.evaluate(()=>undo()); await sleep(1300);
+    await page.waitForFunction(()=>!game.animating&&!game.evaluating,{timeout:20000});
+    if(lsRot&&lsGut) break;
+  }
+  console.log('INFO Schein bei Rot: '+JSON.stringify(lsRot)+' | bei Gruen: '+JSON.stringify(lsGut));
+  ok('Ein Zug, der die Loesung kostet, leuchtet nicht gruen',
+     !!lsRot&&lsRot.schein===0&&lsRot.ziel===-1, JSON.stringify(lsRot));
+  ok('Derselbe Weg mit gruener Ampel leuchtet sehr wohl',
+     !!lsGut&&lsGut.schein===1, JSON.stringify(lsGut));
+  /* Das Spulen leuchtet nicht - dort markiert schon der Pfeil, was passiert.
+     Und eine haengengebliebene Merkzelle wuerde genau hier auffallen: nach
+     dem Zurueck blitzt die Ampel wieder gruen. */
+  await page.evaluate(()=>{ newGame('english'); render(); });
+  await page.waitForFunction(()=>!game.evaluating,{timeout:20000});
+  await page.evaluate(()=>{ const l=currentLine(); playMove(game.board.moves[l.path[0]]); });
+  await page.waitForFunction(()=>!game.animating&&!game.evaluating,{timeout:20000}); await sleep(800);
+  await page.evaluate(()=>undo()); await sleep(1300);
+  await page.waitForFunction(()=>!game.animating&&!game.evaluating,{timeout:20000}); await sleep(200);
+  const lsNachUndo=await page.evaluate(()=>document.querySelectorAll('#board circle.landung').length);
+  await page.evaluate(()=>redo()); await sleep(1300);
+  await page.waitForFunction(()=>!game.animating&&!game.evaluating,{timeout:20000}); await sleep(200);
+  const lsNachRedo=await page.evaluate(()=>document.querySelectorAll('#board circle.landung').length);
+  ok('Zurueck und Vor leuchten nicht', lsNachUndo===0&&lsNachRedo===0, lsNachUndo+' / '+lsNachRedo);
+  /* Ohne Computer gibt es keine Bewertung - und damit auch keinen Schein. */
+  const lsOhne=await page.evaluate(async()=>{
+    settings.computer=false; newGame('english'); render();
+    const l=currentLine(); playMove(game.board.moves[l.path[0]]);
+    await new Promise(r=>setTimeout(r,1200));
+    const n=document.querySelectorAll('#board circle.landung').length;
+    settings.computer=true; return n; });
+  ok('Ohne Computer leuchtet nichts', lsOhne===0, String(lsOhne));
   const lsMenue=await page.evaluate(()=>{ const sw=document.getElementById('swLandung');
     const row=sw.closest('.row');
     return {da:!!sw, titel:row.querySelector('.t').textContent, an:sw.classList.contains('on'),
