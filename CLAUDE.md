@@ -271,6 +271,7 @@ Zwei weitere Fallstricke, die das Skript abfängt: Cloud-Sitzungen laufen mit de
 - Werkzeuge: `tools/gen_book2.js` (Eröffnungsbuch neu rechnen), `tools/purge_find.js`/`purge_find2.js`/`purge_plan2.js` (Purge-Muster und Partie-Plan), `tools/count_pos2.js` (Stellungen zählen), `tools/exp_parity.js` (Paritätsschranke prüfen). Ergebnisse liegen als `tools/patterns.json` (Purge-Muster) und `tools/plan.json` (Partie als Purge-Folge) daneben.
 
 ## Offene Ideen
+- **Laufbalken für die Grün-Analyse** (Idee von Lutz, 20.09.2026: „rechts einen Laufbalken von unten nach oben in gelb, dass man sieht, wie viel überprüft sind und wo es stecken bleibt … vielleicht ganz dünn am Brett, ohne dass man Platz verliert"). Vier Skizzen als Bild geschickt, nichts gebaut: A dünner Balken rechts am Brett (senkrecht, unten → oben), B unter dem Brett, C Füllung in der Zahlenanzeige, D unter den Chips über dem Brett. Prozentanzeige verworfen (Lutz: „macht nicht so viel Sinn" – sie versteckt die Zahl der Züge und läuft nicht glatt). **Lutz hat nicht entschieden.**
 - **Nur gültige Züge grün anzeigen** (Idee von Lutz, 20.09.2026: „Nur gültige Züge in grün anzeigen. Evtl. sehr lange Rechenzeiten."). **Gemessen am englischen Brett** (`tools/` nicht dauerhaft abgelegt, Zahlen hier):
   „Grün" heißt: der Zug hält `best` – man muss also für **jeden** Zug die Kindstellung bewerten, nicht nur die aktuelle.
   | Steine | Züge | Zeit für alle Züge |
