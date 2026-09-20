@@ -249,6 +249,22 @@ Zwei weitere Fallstricke, die das Skript abfängt: Cloud-Sitzungen laufen mit de
 - Werkzeuge: `tools/gen_book2.js` (Eröffnungsbuch neu rechnen), `tools/purge_find.js`/`purge_find2.js`/`purge_plan2.js` (Purge-Muster und Partie-Plan), `tools/count_pos2.js` (Stellungen zählen), `tools/exp_parity.js` (Paritätsschranke prüfen). Ergebnisse liegen als `tools/patterns.json` (Purge-Muster) und `tools/plan.json` (Partie als Purge-Folge) daneben.
 
 ## Offene Ideen
+- **Nur gültige Züge grün anzeigen** (Idee von Lutz, 20.09.2026: „Nur gültige Züge in grün anzeigen. Evtl. sehr lange Rechenzeiten."). **Gemessen am englischen Brett** (`tools/` nicht dauerhaft abgelegt, Zahlen hier):
+  „Grün" heißt: der Zug hält `best` – man muss also für **jeden** Zug die Kindstellung bewerten, nicht nur die aktuelle.
+  | Steine | Züge | Zeit für alle Züge |
+  |---|---|---|
+  | 31 | 3 | 0,5 s |
+  | 29 | 7 | **9,9 s** |
+  | 27 | 9 | **42,5 s** (19,6 Mio. Stellungen) |
+  | 25 | 7 | 0,7 s |
+  | 23 | 7 | 1,0 s |
+  | 21 | 9 | 0,8 s |
+  | 19 | 8 | 0,2 s |
+  **Der Bruch liegt nicht bei der Steinzahl, sondern an der Frage, ob die Stellung noch gewinnbar ist.** Einen Zug als **gut** zu beweisen ist billig – eine Linie finden und aufhören. Einen Zug als **schlecht** zu beweisen verlangt, seinen ganzen Teilbaum zu erschöpfen. Ist die Partie schon verloren (`best > lb`), ist das Ziel leicht und alles fällt unter eine Sekunde; in der gewinnbaren Eröffnung kostet ein einziger schlechter Zug den ganzen Rest.
+  **Die Zahlen gelten fast 1:1 fürs iPhone**: diese Maschine schafft 0,46 Mio. Stellungen/s (19.646.785 in 42,5 s), das iPhone 0,4–0,5.
+  **Zwei Optimierungs-Hypothesen von mir, beide gemessen, beide enttäuschend.** (1) *Ein einziger voller Durchlauf statt k Teilsuchen*: **lief über 560 s ohne eine einzige fertige Stellung** – viel schlechter, weil die Teilsuchen früh abbrechen dürfen, ein voller Durchlauf nie. (2) *Geteilte Tabelle zwischen den Teilsuchen* (gemessen, indem das `table.clear()` im Kern entfernt wurde – als Umsetzung falsch, als Messung der Vereinigung richtig): **29 % weniger bei 29 Steinen, 42 % bei 27**. Also ein Drittel, nicht das Zehnfache. Bei 25 Steinen wurden es sogar **65 % mehr** – dort verfälscht das fehlende Leeren die Suche selbst, die Messung taugt dort nicht.
+  **Der stärkere Einwand ist aber nicht die Rechenzeit, sondern was die Anzeige wäre**: Wer alle grünen Züge dauerhaft sieht, kann die Partie nicht mehr verlieren – das ist kein Hinweis, das ist die Lösung. Tipp- und Rettungszähler wären danach bedeutungslos.
+  **Mein Vorschlag, falls Lutz es will**: auf Anfrage statt dauerhaft, **gezählt wie ein Tipp**, und nur dort angeboten, wo es unter einer Sekunde bleibt (ab etwa 25 Steinen abwärts – dort läuft die volle Suche für `optFinal` ohnehin schon, das Markieren der Wurzelzüge wäre dort fast geschenkt). In der Eröffnung ehrlich sagen, dass es zu lange dauert. **Lutz hat nicht entschieden.**
 - Service Worker `1-sw.js` für Offline-Betrieb; Splash-Bild aus dem Walnuss-Icon.
 - Purge-Sprache in den Strategie-Hinweisen („Hilfsstein für den Sechser verbraucht") – erfordert Purge-Erkennung in beliebigen Stellungen.
 - Fehlersuche für Stellungen > 26 Steine (Speicher: Tabelle größer als 2^24 nötig).
