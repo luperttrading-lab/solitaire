@@ -2682,6 +2682,68 @@ function kurzfassungGleich(proben,voll,erwartet){
   await sleep(500);
   await page.evaluate(()=>{ hideModal('resultModal'); settings.gruen=false; settings.zuege=false; settings.autoJump=true; saveSettings(); newGame('english'); });
 
+  abschnitt='Gruener Schein beim Sprung';
+  /* Wunsch von Lutz (20.09.2026): "dass der Stein der springt auch im
+     Hintergrund kurz gruen aufleuchtet. Standard eingeschaltet."
+     Gemessen wird, was zu SEHEN ist - und in BEIDEN Bewegungs-Einstellungen,
+     denn genau der reduce-Zweig war beim Glanz (v1.39) der unsichtbare. */
+  const lsMess=async(reduce)=>{
+    await page.emulateMediaFeatures([{name:'prefers-reduced-motion',value:reduce?'reduce':'no-preference'}]);
+    await page.evaluate(()=>{ settings.computer=false; settings.funkeln=false; settings.landung=true;
+      settings.zuege=false; settings.gruen=false; newGame('english'); render(); });
+    await sleep(120);
+    const box=await page.evaluate(()=>{ const m=boardSvg.getScreenCTM(), l=currentLine(),
+      mv=game.board.moves[l.path[0]], q=game.lay.pos[mv.to];
+      const x=m.a*q.x+m.c*q.y+m.e, y=m.b*q.x+m.d*q.y+m.f, R=60*m.a;
+      return {x:Math.round(x-R),y:Math.round(y-R),width:Math.round(2*R),height:Math.round(2*R)}; });
+    const ruhe=PNG.sync.read(await page.screenshot({clip:box}));
+    await page.evaluate(()=>{ const l=currentLine(); playMove(game.board.moves[l.path[0]]); });
+    await sleep(430);                      // 230 ms Zug + rund 200 ms in den Schein hinein
+    const mitte=PNG.sync.read(await page.screenshot({clip:box}));
+    const jetzt=await page.evaluate(()=>{ const c=document.querySelector('#board circle.landung');
+      const alle=[...boardSvg.children];
+      return {kreise:document.querySelectorAll('#board circle.landung').length,
+        r:c?parseFloat(c.getAttribute('r')):null, op:c?parseFloat(c.getAttribute('fill-opacity')):null,
+        hinterStein:c?alle.indexOf(c.parentNode)<alle.indexOf(pegsLayer):null,
+        imOverlay:c?c.parentNode===overlayLayer:null}; });
+    await sleep(800);
+    const danach=PNG.sync.read(await page.screenshot({clip:box}));
+    const gruenstich=(A,B)=>{ let n=0; for(let k=0;k<A.data.length;k+=4){
+      const dR=B.data[k]-A.data[k], dG=B.data[k+1]-A.data[k+1], dB=B.data[k+2]-A.data[k+2];
+      if(dG-Math.max(dR,dB)>30) n++; } return n; };
+    const weg=await page.evaluate(()=>document.querySelectorAll('#board circle.landung').length);
+    return {jetzt, waehrend:gruenstich(ruhe,mitte), danach:gruenstich(ruhe,danach), weg};
+  };
+  const lsNorm=await lsMess(false);
+  console.log('INFO Landeschein normal: '+JSON.stringify(lsNorm));
+  ok('Der Schein ist nach dem Sprung wirklich zu sehen', lsNorm.waehrend>500, lsNorm.waehrend+' gruene Bildpunkte');
+  ok('Er liegt HINTER dem Stein, nicht im Overlay',
+     lsNorm.jetzt.hinterStein===true&&lsNorm.jetzt.imOverlay===false, JSON.stringify(lsNorm.jetzt));
+  ok('Er waechst ueber die Murmel hinaus', lsNorm.jetzt.r>34&&lsNorm.jetzt.r<=54, String(lsNorm.jetzt.r));
+  ok('Danach ist er weg und raeumt sich ab', lsNorm.danach===0&&lsNorm.weg===0, lsNorm.danach+' / '+lsNorm.weg);
+  const lsRed=await lsMess(true);
+  console.log('INFO Landeschein mit reduzierter Bewegung: '+JSON.stringify(lsRed));
+  ok('Auch mit reduzierter Bewegung ist er zu sehen', lsRed.waehrend>500, lsRed.waehrend+' gruene Bildpunkte');
+  ok('Und verschwindet auch dort wieder', lsRed.danach===0&&lsRed.weg===0, lsRed.danach+' / '+lsRed.weg);
+  await page.emulateMediaFeatures([{name:'prefers-reduced-motion',value:'no-preference'}]);
+
+  /* Abschaltbar, Standard an. */
+  const lsAus=await page.evaluate(async()=>{
+    settings.landung=false; newGame('english'); render();
+    const l=currentLine(); playMove(game.board.moves[l.path[0]]);
+    await new Promise(r=>setTimeout(r,430));
+    const n=document.querySelectorAll('#board circle.landung').length;
+    settings.landung=true; return n; });
+  ok('Ausgeschaltet leuchtet nichts', lsAus===0, String(lsAus));
+  const lsMenue=await page.evaluate(()=>{ const sw=document.getElementById('swLandung');
+    const row=sw.closest('.row');
+    return {da:!!sw, titel:row.querySelector('.t').textContent, an:sw.classList.contains('on'),
+      sub:row.classList.contains('sub')}; });
+  console.log('INFO Menue Landeschein: '+JSON.stringify(lsMenue));
+  ok('Der Schalter steht im Menue und ist ab Werk an',
+     lsMenue.da===true&&lsMenue.an===true&&/Grüner Schein/.test(lsMenue.titel)&&lsMenue.sub===false, JSON.stringify(lsMenue));
+  await page.evaluate(()=>{ settings.computer=true; settings.funkeln=true; saveSettings(); newGame('english'); });
+
   ok('keine Seitenfehler insgesamt', errors.length===0, errors.join(' | '));
   await browser.close();
   console.log(fails?`\n${fails} FEHLER`:'\nALLE BROWSER-TESTS OK'); process.exitCode=fails?1:0;
