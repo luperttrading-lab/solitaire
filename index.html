@@ -375,7 +375,7 @@ header .boardname:active{background:var(--panel2)}
    liegen gleichzeitig auf dem Brett, deckend waere das ein Teppich statt
    eines Hinweises. Ein schon probierter Zug wird gar nicht erst weiss
    gezeichnet, sonst laege Weiss ueber Rot. */
-.moegl{fill:rgba(255,255,255,.66);stroke:none}
+.moegl{fill:#fff;stroke:none}
 /* Gute Zuege gruen (Lerneinheit, v1.62). Kraeftiger als das Weiss, denn die
    Farbe IST hier die Aussage: gruen heisst bewiesen, dass der Zug das
    bestmoegliche Ergebnis haelt. Weiss bleibt "moeglich, aber nicht als gut
@@ -387,7 +387,7 @@ header .boardname:active{background:var(--panel2)}
    Gruen 89. Jetzt rund 140. Die Deckkraft entscheidet hier nicht ueber die
    Sichtbarkeit, sondern ueber die FARBE: ein duennes Weiss nimmt die Farbe
    des Bretts an. */
-.moegl.gut{fill:rgba(74,222,128,.76)}
+.moegl.gut{fill:#4ade80}
 /* Solange der Rechner die Zuege einzeln prueft, pulst das Dreieck im Chip -
    im Takt der Ampel (0,96 s), damit es nicht gegen sie laeuft. */
 .pill.rechnet .pzt{animation:pzpuls .96s ease-in-out infinite}
@@ -579,7 +579,7 @@ header .boardname:active{background:var(--panel2)}
 
 <script>
 'use strict';
-const APP_VERSION='1.63';
+const APP_VERSION='1.64';
 /* =========================================================================
    Kern: Bretter, Züge, Symmetrien, Paritäts-Schranke, Solver
    (als Fabrik, damit derselbe Code im Web Worker läuft)

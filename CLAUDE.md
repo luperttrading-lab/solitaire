@@ -1,6 +1,6 @@
 # Solitaire – Steckbrett-Solitär als Spiel- und Lernapp (iPhone, GitHub Pages)
 
-Stand: v1.63 (20.09.2026). Eine einzige Datei `index.html`, kein Build, keine Abhängigkeiten.
+Stand: v1.64 (20.09.2026). Eine einzige Datei `index.html`, kein Build, keine Abhängigkeiten.
 Autor/Product Owner: Lutz („Neo"). Sprache im Chat und in der App: Deutsch, per Du.
 
 ## Was die App kann
@@ -167,6 +167,7 @@ Autor/Product Owner: Lutz („Neo"). Sprache im Chat und in der App: Deutsch, pe
 - **Icon** (`2-icon.png` 180 px, `2-icon-1024.png` 1024 px): Foto eines Nussbaumbretts mit bunten Murmeln, von Lutz beigesteuert. Entscheidend war der Vergleich bei 58 px – der Größe auf dem Home-Bildschirm: Große, satte Murmeln mit Schatten ergeben dort noch ein erkennbares Kreuz, das früher gerenderte Brett zerfiel in Pixelrauschen. Nicht die Zahl der Elemente entscheidet, sondern ob sie zusammen eine Form ergeben. 16 px des Originals ringsum beschnitten (helle Ecken).
 - **Standardthema** bleibt `glas` („Samt & Glas“, blaues Brett). Die Nussbaum-Optik aus dem Startbild ist als Thema „Nussbaum & Glas“ wählbar und liefert zugleich das Motiv für das Home-Bildschirm-Icon (`2-icon.png`), aber nicht das Spielbrett.
 - **Versionszählung (Vorgabe von Lutz).** Die zweite Stelle zählt die **Auslieferungen**, die etwas Sichtbares verändert haben – `index.html` oder die Icons: v1.1 war der hochgeladene Stand, danach 16 weitere → v1.17. Reine Doku- oder Test-Commits zählen nicht mit (`git log --oneline <stand>..HEAD -- index.html | wc -l`). Die erste Stelle bleibt für neue Substanz reserviert – Lernsystem, Offline-Betrieb, ein weiteres Brett. `APP_VERSION` ist die einzige Quelle; sie steht im Startbild (`#splashVersion`) und im Menü, beide werden im Test dagegen geprüft.
+- **v1.64** (20.09.2026): Weiß und Grün voll deckend (Wunsch von Lutz: „Die Pfeile sind ja so konstruiert, dass man die Spielsteine gut genug sieht"). Ohne Testlauf vor dem Push – ausdrücklich so gewollt, Suiten liefen danach.
 - **v1.63** (20.09.2026): Weiße Dreiecke kräftiger (.66 statt .42), grüne etwas kräftiger (.76) – auf dem Nussbaum-Brett waren beide nicht zu unterscheiden.
 - **v1.62** (20.09.2026): Lerneinheit „Gute Züge grün" (Menü › Hilfe): Beim Knopf „Züge" werden die Züge grün, die das bestmögliche Ergebnis halten – bewiesen, nicht geraten; 6 s Budget, ungeprüfte bleiben weiß. Eine Partie damit zählt nicht für die Bestleistungen.
 - **v1.61** (20.09.2026): Die weißen Dreiecke bleiben jetzt stehen, bis du den Knopf wieder drückst – kein Ausblenden nach drei Sekunden mehr. Die Einstellung überlebt auch einen Neustart.
