@@ -2166,8 +2166,12 @@ function kurzfassungGleich(proben,voll,erwartet){
   abschnitt='Alle moeglichen Zuege';
   /* Entwurf von Lutz (18.09.2026): "Kannst du einen Button machen der alle
      moeglichen Zuege anzeigt. Mein Vorschlag waeren weisse Dreiecke statt
-     rote. Da wo rot ist bleibt rot. Wenn man den Button druckt verschwindet
-     das nach 3 Sekunden oder wenn man wieder drauf drueckt." */
+     rote. Da wo rot ist bleibt rot."
+     Seit v1.61 ein Dauerschalter - Lutz am 20.09.2026: "Dauerhaft
+     eingeblendet waere auch mal zu probieren. Also nicht nach 3 Sekunden
+     automatisch abschalten." Die drei Pruefungen auf das Ausblenden sind
+     deshalb UMGEKEHRT worden: sie bewachen jetzt, dass es nicht
+     zurueckkommt. */
   await page.evaluate(()=>{ settings.computer=true; settings.tipps=true; settings.probiert=true;
     settings.autoJump=false; saveSettings(); newGame('english'); });
   await sleep(200);
@@ -2180,16 +2184,22 @@ function kurzfassungGleich(proben,voll,erwartet){
     const vorher=zahl();
     document.getElementById('btnZuege').click();
     const nachDruck={weiss:zahl(), moeglich:moeglich(), tipps:game.tippKeys.size};
-    await new Promise(r=>setTimeout(r,2400));
-    const nachZweiKomma={weiss:zahl()};
-    await new Promise(r=>setTimeout(r,1100));
-    const nachDrei={weiss:zahl(), an:game.zeigeZuege};
+    /* Deutlich laenger als die drei Sekunden von v1.60 warten - sonst
+       bewacht die Pruefung nichts. */
+    await new Promise(r=>setTimeout(r,3600));
+    const nachDrei={weiss:zahl(), an:settings.zuege};
+    // Ein Zug wechselt die Stellung: die Dreiecke muessen bleiben und die
+    // NEUEN Zuege zeigen.
+    const mz1=game.board.moves.find(m=>game.pegAt[m.from]>=0&&game.pegAt[m.over]>=0&&game.pegAt[m.to]<0);
+    applyMove(mz1,true); render();
+    const nachZug={weiss:zahl(), moeglich:moeglich(), an:settings.zuege};
     // Zweiter Druck raeumt sofort ab
+    document.getElementById('btnZuege').click();
+    const nachZweitemDruck={weiss:zahl(), an:settings.zuege};
     document.getElementById('btnZuege').click();
     const anWieder=zahl();
     document.getElementById('btnZuege').click();
-    const nachZweitemDruck={weiss:zahl(), an:game.zeigeZuege};
-    return {vorher,nachDruck,nachZweiKomma,nachDrei,anWieder,nachZweitemDruck};
+    return {vorher,nachDruck,nachDrei,nachZug,anWieder,nachZweitemDruck};
   });
   console.log('INFO Alle Zuege: '+JSON.stringify(mz));
   ok('Ohne Druck liegt nichts auf dem Brett', mz.vorher===0, String(mz.vorher));
@@ -2199,13 +2209,17 @@ function kurzfassungGleich(proben,voll,erwartet){
   /* Der Knopf sagt nur, welche Zuege es GIBT, nicht welcher gut ist - das
      ist Regelwissen und kostet deshalb keinen Tipp. */
   ok('Er zaehlt nicht als Tipp', mz.nachDruck.tipps===0, String(mz.nachDruck.tipps));
-  ok('Nach 2,4 s stehen sie noch', mz.nachZweiKomma.weiss===mz.nachDruck.weiss,
-     JSON.stringify(mz.nachZweiKomma));
-  ok('Nach 3 s sind sie von allein weg',
-     mz.nachDrei.weiss===0&&mz.nachDrei.an===false, JSON.stringify(mz.nachDrei));
+  /* Umgekehrte Pruefung: bis v1.60 MUSSTEN sie nach drei Sekunden weg
+     sein, jetzt muessen sie bleiben. */
+  ok('Sie gehen nicht von allein wieder weg',
+     mz.nachDrei.weiss===mz.nachDruck.weiss&&mz.nachDrei.an===true,
+     JSON.stringify(mz.nachDrei));
+  ok('Ein Zug laesst sie stehen und zeigt die neuen Zuege',
+     mz.nachZug.an===true&&mz.nachZug.weiss===mz.nachZug.moeglich&&mz.nachZug.weiss>0,
+     JSON.stringify(mz.nachZug));
   ok('Ein zweiter Druck raeumt sie sofort ab',
-     mz.anWieder>0&&mz.nachZweitemDruck.weiss===0&&mz.nachZweitemDruck.an===false,
-     mz.anWieder+' -> '+JSON.stringify(mz.nachZweitemDruck));
+     mz.nachZweitemDruck.weiss===0&&mz.nachZweitemDruck.an===false&&mz.anWieder>0,
+     JSON.stringify(mz.nachZweitemDruck)+' / wieder '+mz.anWieder);
 
   /* "Da wo rot ist bleibt rot": ein schon probierter Zug, der hier noch
      moeglich waere, wird NICHT zusaetzlich weiss gezeichnet - sonst laege
@@ -2218,8 +2232,10 @@ function kurzfassungGleich(proben,voll,erwartet){
     await new Promise(r=>setTimeout(r,1300));      // Spulen abwarten
     const moeglich=game.board.moves.filter(x=>game.pegAt[x.from]>=0&&game.pegAt[x.over]>=0&&game.pegAt[x.to]<0).length;
     game.markAus=true; zuegeSetzen(true);
-    return {moeglich, rot:document.querySelectorAll('#board path.probiert').length,
-            weiss:document.querySelectorAll('#board path.moegl').length};
+    const erg={moeglich, rot:document.querySelectorAll('#board path.probiert').length,
+               weiss:document.querySelectorAll('#board path.moegl').length};
+    zuegeSetzen(false);
+    return erg;
   });
   console.log('INFO Rot bleibt rot: '+JSON.stringify(mzRot));
   ok('Ein schon probierter Zug bleibt rot und wird nicht weiss uebermalt',
@@ -2229,6 +2245,10 @@ function kurzfassungGleich(proben,voll,erwartet){
      darueber nichts - derselbe Fehlertyp wie beim unsichtbaren Glanz in
      v1.39. Gemessen werden Bildpunkte, die heller geworden sind. */
   await page.evaluate(async()=>{
+    /* Der Schalter MUSS hier aus sein - seit v1.61 bleibt er an, bis man
+       ihn ausschaltet, und ein Standbild mit den Dreiecken darin misst
+       null Unterschied (einmal erlebt). */
+    zuegeSetzen(false);
     settings.computer=false; settings.autoJump=false; newGame('english');
     for(let n=0;n<12;n++){ const ms=game.board.moves.filter(m=>game.pegAt[m.from]>=0&&game.pegAt[m.over]>=0&&game.pegAt[m.to]<0);
       if(!ms.length) break; applyMove(ms[0],true); }
@@ -2271,7 +2291,7 @@ function kurzfassungGleich(proben,voll,erwartet){
      sonst waere "wie am echten Brett" auch ohne das, was man dort mit
      eigenen Augen sieht. */
   const mzOhne=await page.evaluate(()=>{
-    settings.computer=false; newGame('english');
+    zuegeSetzen(false); settings.computer=false; newGame('english');
     const l=currentLine(); if(l) applyMove(game.board.moves[l.path[0]],true); render();
     zuegeSetzen(true);
     const n=document.querySelectorAll('#board path.moegl').length;
@@ -2281,8 +2301,9 @@ function kurzfassungGleich(proben,voll,erwartet){
   ok('Ohne Computer zeigt der Knopf die Zuege trotzdem',
      mzOhne.n===mzOhne.moeglich&&mzOhne.n>0, JSON.stringify(mzOhne));
 
-  /* In der Pause ist das Brett verdeckt - dann gibt es nichts zu zeigen,
-     und der Knopf ist gesperrt wie die Fussleiste. */
+  /* In der Pause ist das Brett verdeckt - dann steht auch kein Dreieck
+     darunter, und der Knopf ist gesperrt wie die Fussleiste. Der SCHALTER
+     bleibt aber an: eine Pause ist keine Entscheidung gegen die Anzeige. */
   const mzPause=await page.evaluate(async()=>{
     settings.computer=true; newGame('english');
     const l=currentLine(); applyMove(game.board.moves[l.path[0]],true); render(); renderHud();
@@ -2291,21 +2312,48 @@ function kurzfassungGleich(proben,voll,erwartet){
     const vorher=document.querySelectorAll('#board path.moegl').length;
     pauseSetzen(true);
     const inPause={weiss:document.querySelectorAll('#board path.moegl').length,
-                   gesperrt:document.getElementById('btnZuege').disabled};
+                   gesperrt:document.getElementById('btnZuege').disabled,
+                   an:settings.zuege};
     pauseSetzen(false);
-    return {vorher,inPause}; });
+    const danach={weiss:document.querySelectorAll('#board path.moegl').length, an:settings.zuege};
+    zuegeSetzen(false);
+    return {vorher,inPause,danach}; });
   console.log('INFO Zuege in der Pause: '+JSON.stringify(mzPause));
-  ok('Die Pause raeumt die Dreiecke ab und sperrt den Knopf',
+  ok('Die Pause blendet die Dreiecke aus und sperrt den Knopf',
      mzPause.vorher>0&&mzPause.inPause.weiss===0&&mzPause.inPause.gesperrt===true,
      JSON.stringify(mzPause));
+  ok('Der Schalter ueberlebt die Pause',
+     mzPause.inPause.an===true&&mzPause.danach.an===true&&mzPause.danach.weiss>0,
+     JSON.stringify(mzPause.danach));
 
+  /* Umgekehrt zu v1.60: "dauerhaft" heisst, der Schalter ueberlebt auch
+     ein neues Spiel. Waere er im Spielzustand statt in den Einstellungen,
+     waere er hier wieder aus. */
   const mzNeu=await page.evaluate(()=>{
     newGame('english'); const l=currentLine(); applyMove(game.board.moves[l.path[0]],true); render();
     zuegeSetzen(true); const vorher=document.querySelectorAll('#board path.moegl').length;
     newGame('english');
-    return {vorher, nachher:document.querySelectorAll('#board path.moegl').length, an:game.zeigeZuege}; });
-  ok('Ein neues Spiel raeumt sie ab',
-     mzNeu.vorher>0&&mzNeu.nachher===0&&mzNeu.an===false, JSON.stringify(mzNeu));
+    return {vorher, nachher:document.querySelectorAll('#board path.moegl').length,
+            an:settings.zuege, gespeichert:JSON.parse(localStorage.getItem('solitaire.settings')||'{}').zuege}; });
+  console.log('INFO Zuege nach neuem Spiel: '+JSON.stringify(mzNeu));
+  ok('Ein neues Spiel laesst den Schalter an',
+     mzNeu.vorher>0&&mzNeu.nachher>0&&mzNeu.an===true, JSON.stringify(mzNeu));
+  ok('Und die Einstellung ist gespeichert', mzNeu.gespeichert===true, String(mzNeu.gespeichert));
+
+  /* Der Beweis fuer "dauerhaft": neu laden. Eine Pruefung, die nur die
+     Variable liest, haette die Frage nicht gestellt. */
+  await page.reload({waitUntil:'load'}); await sleep(2800);
+  const mzStart=await page.evaluate(()=>{
+    newGame('english'); const l=currentLine(); applyMove(game.board.moves[l.path[0]],true); render();
+    const n=document.querySelectorAll('#board path.moegl').length;
+    const b=document.getElementById('btnZuege');
+    return {an:settings.zuege, weiss:n, knopfAn:b.classList.contains('on'),
+            aria:b.getAttribute('aria-pressed')}; });
+  console.log('INFO Zuege nach Neustart: '+JSON.stringify(mzStart));
+  ok('Der Schalter ueberlebt den Neustart',
+     mzStart.an===true&&mzStart.weiss>0&&mzStart.knopfAn===true&&mzStart.aria==='true',
+     JSON.stringify(mzStart));
+  await page.evaluate(()=>{ zuegeSetzen(false); });
 
   /* Dieselbe Form wie das rote Dreieck: drei Ecken, Basismitte im
      Ausgangsfeld, Spitze im Zielfeld. */

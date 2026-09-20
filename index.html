@@ -561,7 +561,7 @@ header .boardname:active{background:var(--panel2)}
 
 <script>
 'use strict';
-const APP_VERSION='1.60';
+const APP_VERSION='1.61';
 /* =========================================================================
    Kern: Bretter, Züge, Symmetrien, Paritäts-Schranke, Solver
    (als Fabrik, damit derselbe Code im Web Worker läuft)
@@ -842,7 +842,7 @@ const Store={
   set(k,v){ try{ localStorage.setItem('solitaire.'+k,JSON.stringify(v)); }catch(e){} },
   del(k){ try{ localStorage.removeItem('solitaire.'+k); }catch(e){} }
 };
-const settings=Object.assign({board:'english',theme:'glas',boardLook:'holz',pegStyle:'glas',pegColor:'bunt',autoJump:true,showTargets:true,freeStart:false,sound:true,trainer:true,marks:false,strategy:true,computer:true,tipps:true,alarm:true,alarmTon:'gong',funkeln:true,ampelKraft:6,ampelSkala:0,probiert:true},Store.get('settings',{}));
+const settings=Object.assign({board:'english',theme:'glas',boardLook:'holz',pegStyle:'glas',pegColor:'bunt',autoJump:true,showTargets:true,freeStart:false,sound:true,trainer:true,marks:false,strategy:true,computer:true,tipps:true,alarm:true,alarmTon:'gong',funkeln:true,ampelKraft:6,ampelSkala:0,probiert:true,zuege:false},Store.get('settings',{}));
 function saveSettings(){ Store.set('settings',settings); }
 /* Einmalige Umstellung: Trainer und Strategie-Hinweise sind ab Werk an. Wer
    die App vorher installiert hatte, trug den alten Stand (strategy:false) in
@@ -1132,9 +1132,7 @@ const game={board:null,lay:null,pegAt:[],initial:[],history:[],future:[],selecte
      Stellungen, damit derselbe Fehler nicht doppelt zaehlt.
      tippKeys sammelt die Stellungen, in denen ein Tipp abgerufen wurde:
      derselbe Tipp zweimal angesehen ist ein Tipp, nicht zwei. */
-  rueckAlarm:0,tippKeys:null,imVerlust:false,rettungOffen:false,rettKeys:null,
-  /* Alle moeglichen Zuege, solange der Knopf sie zeigt. */
-  zeigeZuege:false,zuegeTimer:0};
+  rueckAlarm:0,tippKeys:null,imVerlust:false,rettungOffen:false,rettKeys:null};
 
 const $=id=>document.getElementById(id);
 const boardSvg=$('board'), statusEl=$('status');
@@ -1157,7 +1155,6 @@ function newGame(boardId,keepPhase){ hinweisBis=0; abortAnimation();
   const board=boards[settings.board]||boards.english; game.board=board; game.lay=layoutBoard(board);
   game.lastMove=null; if(!keepPhase) game.lesson=null;
   game.probiert=new Map(); clearTimeout(game.probiertTimer);
-  game.zeigeZuege=false; clearTimeout(game.zuegeTimer);
   game.pegAt=new Array(board.n); for(let i=0;i<board.n;i++) game.pegAt[i]=i;
   game.phase=settings.freeStart?'choose':'play';
   if(!settings.freeStart) game.pegAt[board.startIdx]=-1;
@@ -1303,7 +1300,11 @@ function pauseSetzen(an){
   const e=$('pause'); if(e){ e.classList.toggle('an',!!game.pauseAn); e.setAttribute('aria-hidden',game.pauseAn?'false':'true'); }
   const z=$('hudZeit'); if(z) z.setAttribute('aria-label',game.pauseAn?'Zeit weiterlaufen lassen':'Zeit anhalten');
   const l=$('hudZeitLabel'); if(l) l.textContent=game.pauseAn?'Angehalten':'Zeit';
-  if(game.pauseAn&&game.zeigeZuege) zuegeSetzen(false);
+  /* Das Brett ist in der Pause ohnehin verdeckt; der Overlay wird trotzdem
+     neu gezeichnet, damit die Dreiecke nicht darunter stehen bleiben. Der
+     SCHALTER bleibt an - eine Pause ist keine Entscheidung gegen die
+     Anzeige. */
+  if(settings.zuege) renderOverlay();
   const c=$('btnPause');
   if(c){ c.innerHTML=game.pauseAn?'<i class="pzd"></i>Weiter':'<i class="pzb"></i>Pause';
     c.classList.toggle('on',!!game.pauseAn); }
@@ -1368,7 +1369,7 @@ function renderOverlay(){
      uebermalt - "Da wo rot ist bleibt rot" (Lutz, 18.09.2026). Gezeichnet
      wird nur, was die Regeln hier erlauben; das ist dieselbe Bedingung wie
      unten, nur ueber alle Zuege des Bretts. */
-  if(game.zeigeZuege&&!game.pauseAn){
+  if(settings.zuege&&!game.pauseAn){
     const schon=probierteHier();
     game.board.moves.forEach((mm,mi)=>{
       if(!(game.pegAt[mm.from]>=0&&game.pegAt[mm.over]>=0&&game.pegAt[mm.to]<0)) return;
@@ -1453,9 +1454,11 @@ function renderHud(){
   /* Ohne laufende Uhr gibt es nichts anzuhalten - der Chip ist dann matt,
      damit er nicht ins Leere fuehrt. */
   const pb=$('btnPause'); if(pb) pb.disabled=!p&&(!game.startedAt||game.finished);
-  /* Nichts zu zeigen, wenn das Brett verdeckt ist, die Partie steht oder
-     der Startstein noch fehlt. */
-  const zb=$('btnZuege'); if(zb) zb.disabled=p||game.finished||game.phase==='choose';
+  /* In der Pause ist das Brett verdeckt, da laesst sich nichts umschalten.
+     Sonst bleibt der Knopf bedienbar - er schaltet seit v1.61 einen
+     Zustand, keine einmalige Anzeige, und den stellt man auch vor dem
+     ersten Zug ein. */
+  const zb=$('btnZuege'); if(zb) zb.disabled=p;
   $('btnUndo').disabled=!game.history.length||game.animating||p; $('btnRedo').disabled=!game.future.length||game.animating||p;
   $('btnHint').disabled=game.phase==='choose'||game.finished||game.searching||game.animating||!!game.lesson||p;
   /* Hilfe auf Anfrage haengt am Schalter Tipps - aus heisst: kein Knopf. */
@@ -1544,24 +1547,28 @@ function computerSetzen(an){ settings.computer=!!an; saveSettings(); renderCompu
   buildSheet(); }
 $('btnComputer').addEventListener('click',()=>{ computerSetzen(!settings.computer); if(settings.computer) toast('Der Computer bewertet jetzt jeden Zug.'); });
 renderComputerBtn();
-/* Alle moeglichen Zuege auf Knopfdruck - drei Sekunden lang, dann von
-   allein wieder weg, oder auf einen zweiten Druck sofort (Wortlaut von
-   Lutz, 18.09.2026). Kein Dauerzustand: ein Brett, auf dem staendig zwanzig
-   Dreiecke liegen, verdeckt genau die Stellung, die man lesen will.
+/* Alle moeglichen Zuege - ein Dauerschalter (v1.61). In v1.60 blendeten
+   sie sich nach drei Sekunden von allein wieder aus; ich hatte einen
+   Dauerzustand ausdruecklich abgelehnt, weil ein Brett mit staendig
+   fuenfzehn Dreiecken genau die Stellung verdeckt, die man lesen will.
+   Lutz am 20.09.2026: "Dauerhaft eingeblendet waere auch mal zu
+   probieren." Das ist seine Entscheidung, und meine Ablehnung war nicht
+   gemessen, sondern geschaetzt - am Geraet entscheidet er.
+   Der Schalter liegt in den Einstellungen, nicht im Spielzustand: dauerhaft
+   heisst, er ueberlebt Zug, neues Spiel und Neustart. Waere er nur in
+   game, waere er bei jedem neuen Spiel wieder aus - das ist das Gegenteil
+   von dauerhaft.
    Bewusst NICHT an den Schalter Computer gebunden und bewusst kein Tipp:
    welche Zuege die Regeln erlauben, sieht man am echten Brett auch - das
    ist Regelwissen, keine Bewertung. Der Computer sagt, welcher Zug GUT
    ist; dieser Knopf sagt nur, welche es GIBT. */
-const ZUEGE_MS=3000;
 function renderZuegeBtn(){ const b=$('btnZuege'); if(!b) return;
-  b.classList.toggle('on',!!game.zeigeZuege); b.setAttribute('aria-pressed',String(!!game.zeigeZuege)); }
+  b.classList.toggle('on',!!settings.zuege); b.setAttribute('aria-pressed',String(!!settings.zuege)); }
 function zuegeSetzen(an){
-  clearTimeout(game.zuegeTimer);
-  game.zeigeZuege=!!an&&!game.pauseAn&&!game.finished&&game.phase!=='choose';
+  settings.zuege=!!an; saveSettings();
   renderZuegeBtn(); renderOverlay();
-  if(game.zeigeZuege) game.zuegeTimer=setTimeout(()=>{ game.zeigeZuege=false; renderZuegeBtn(); renderOverlay(); },ZUEGE_MS);
 }
-$('btnZuege').addEventListener('click',()=>zuegeSetzen(!game.zeigeZuege));
+$('btnZuege').addEventListener('click',()=>zuegeSetzen(!settings.zuege));
 renderZuegeBtn();
 function render(){ renderPegs(); renderOverlay(); renderHud(); refreshAnker(); }
 setInterval(()=>{ if(game.startedAt&&!game.finished) $('hudTime').textContent=fmtTime(elapsedMs()); },500);
