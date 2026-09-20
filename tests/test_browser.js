@@ -2563,14 +2563,45 @@ function kurzfassungGleich(proben,voll,erwartet){
      JSON.stringify(grStopp));
   await page.click('#zuegeStand'); await sleep(200); const grWeiter=await grStand();
   ok('Ein zweiter Tipp rechnet weiter', grWeiter.g.laeuft===true&&grWeiter.laeuft===true, grWeiter.text);
-  let grEnde; for(let i=0;i<90;i++){ await sleep(100); grEnde=await grStand(); if(grEnde.g&&grEnde.g.fertig) break; }
+  /* Seit v1.68 laeuft "Weiter" OHNE Zeitgrenze bis zum Ende (Lutz: "dann so
+     lang weiterlaufen lassen, bis es fertig ist, ohne neuen Stopp"). Deshalb
+     hier grosszuegig warten - ein einziger schlechter Zug kann in der
+     Eroeffnung gemessen zehn Sekunden und mehr brauchen. */
+  ok('Weiter rechnet ohne Zeitgrenze', await page.evaluate(()=>!!(game.gruen&&game.gruen.ohneLimit)));
+  let grEnde; for(let i=0;i<900;i++){ await sleep(100); grEnde=await grStand(); if(grEnde.g&&grEnde.g.fertig) break; }
   console.log('INFO Stand am Ende: '+JSON.stringify(grEnde));
   /* Nach Stopp und Weiter muessen die Zuege, die noch keine Suche gesehen
      haben, zuerst ihren kleinen Anteil bekommen - sonst frisst der erste
      offene Zug den ganzen Rest (gemessen: 1/5 statt 4/5). */
-  ok('Nach Weiter sind deutlich mehr Zuege entschieden', grEnde.g.fertig===true&&grEnde.g.n>=grStopp.g.n+2, grStopp.g.n+' -> '+grEnde.g.n+' von '+grEnde.g.gesamt);
+  ok('Nach Weiter ist alles entschieden', grEnde.g.fertig===true&&grEnde.g.n===grEnde.g.gesamt,
+     grStopp.g.n+' -> '+grEnde.g.n+' von '+grEnde.g.gesamt);
   ok('Fertig ohne Rest zeigt nur die Zahlen, mit Rest Weiter',
      grEnde.g.zuGross?/ · Weiter$/.test(grEnde.text):/^\d+\/\d+$/.test(grEnde.text), grEnde.text);
+  /* Bei hoechstens zwei offenen Zuegen wird NICHT abgebrochen (v1.68, Lutz:
+     "Bitte nicht ein oder zwei Zuege vor dem Ende abbrechen"). Direkt
+     geprueft: das Budget wird auf 1 ms gestellt, damit der Abbruch sicher
+     greift, und gruenLauf mit einer selbst gebauten Liste offener Zuege
+     gerufen - einmal mit zwei, einmal mit drei. */
+  const grRest=await page.evaluate(async()=>{
+    const alt=GRUEN_MS; GRUEN_MS=1;
+    const arr=occ(), n=pegCount(), best=game.evalRes.best;
+    const moegl=game.board.moves.map((m,mi)=>({m,mi})).filter(({m})=>arr[m.from]&&arr[m.over]&&!arr[m.to]);
+    const bau=k=>moegl.slice(0,k).map(({m,mi})=>{ const c=arr.slice(); c[m.from]=0; c[m.over]=0; c[m.to]=1;
+      const [lo,hi]=CORE.fromArray(c); return {mi,lo,hi,k:CORE.key(lo,hi)}; });
+    const lauf=async k=>{ gruenAbbrechen();
+      game.gruen={key:stateKey(),best,n,gesamt:moegl.length,gut:new Set(),schlecht:new Set(),
+        offen:bau(k),spaeter:[],laufend:null,fertig:false,laeuft:false,zuGross:false};
+      gruenLauf(game.gruen,1);
+      for(let i=0;i<600&&!game.gruen.fertig;i++) await new Promise(r=>setTimeout(r,100));
+      const g=game.gruen; return {n:g.gut.size+g.schlecht.size, offen:k, zuGross:g.zuGross, ohneLimit:!!g.ohneLimit, fertig:g.fertig}; };
+    const zwei=await lauf(2), drei=await lauf(3);
+    GRUEN_MS=alt; gruenAbbrechen(); return {zwei,drei,moeglich:moegl.length}; });
+  console.log('INFO Rest-Regel: '+JSON.stringify(grRest));
+  ok('Zwei offene Zuege werden trotz abgelaufener Zeit zu Ende gerechnet',
+     grRest.zwei.n===2&&grRest.zwei.ohneLimit===true&&grRest.zwei.zuGross===false, JSON.stringify(grRest.zwei));
+  ok('Bei drei offenen Zuegen wird abgebrochen',
+     grRest.drei.n===0&&grRest.drei.zuGross===true, JSON.stringify(grRest.drei));
+
   /* Laufbalken (v1.67): drei Stellen zur Wahl, Lutz nach den Skizzen:
      "Ich finde die Variante rechts und unten drunter gut und auch die
      Variante im Anzeigefeld ... vielleicht kannst du sie ja im Menue zum

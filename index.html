@@ -620,7 +620,7 @@ header .boardname:active{background:var(--panel2)}
 
 <script>
 'use strict';
-const APP_VERSION='1.67';
+const APP_VERSION='1.68';
 /* =========================================================================
    Kern: Bretter, Züge, Symmetrien, Paritäts-Schranke, Solver
    (als Fabrik, damit derselbe Code im Web Worker läuft)
@@ -2181,7 +2181,20 @@ function runSearch(lo,hi,count,opts,onProgress,onDone){
    ist kein Hinweis, das ist die Loesung. Deshalb Lerneinheit: eine Partie,
    in der sie gezeigt wurden, zaehlt nicht fuer die Bestleistungen
    (Entscheidung von Lutz). */
-const GRUEN_MS=6000;
+/* Das Budget ist eine Variable, keine Konstante - die Pruefung stellt es auf
+   1 ms, um den Abbruch gezielt auszuloesen; anders waere die Regel unten
+   nicht direkt pruefbar. */
+let GRUEN_MS=6000;
+/* Bleiben nach Ablauf des Budgets hoechstens so viele Zuege offen, wird NICHT
+   abgebrochen, sondern zu Ende gerechnet (Lutz, 20.09.2026: "Bitte nicht ein
+   oder zwei Zuege vor dem Ende abbrechen, die ein oder zwei kann man noch
+   warten"). Der Abbruch lohnt erst, wenn mehr uebrig bleibt als das Warten
+   wert ist. */
+const GRUEN_REST=2;
+/* Faktisch ohne Limit: ein einzelner schlechter Zug braucht in der Eroeffnung
+   gemessen bis zu 42 s, mehr als zehn Minuten wird keiner. Der Deckel ist nur
+   das Sicherheitsnetz - anhalten kann Lutz jederzeit ueber die Zahlen. */
+const GRUEN_LANG=600000;
 let gruenCancel=null, gruenSeq=0;
 function gruenAktiv(){ return !!(settings.computer&&settings.gruen&&settings.zuege&&!game.lesson); }
 function gruenRechnet(an){ const b=$('btnZuege'); if(b) b.classList.toggle('rechnet',!!an); }
@@ -2216,13 +2229,13 @@ function gruenPlanen(){
   gruenLauf(g,1);
 }
 /* Der Lauf ueber die offenen Zuege, mit frischem Budget. runde 1 = gedeckelte
-   Anteile, runde 2 = der ganze Rest je Zug (siehe unten). Von gruenWeiter() mit den Zuegen gerufen,
-   die stehen geblieben sind. */
-function gruenLauf(g,rundeStart){
-  const id=gruenSeq; g.laeuft=true; g.fertig=false; renderOverlay();
+   Anteile, runde 2 = der ganze Rest je Zug (siehe unten). Von gruenWeiter()
+   mit den Zuegen gerufen, die stehen geblieben sind - dort ohne Limit. */
+function gruenLauf(g,rundeStart,ohneLimit){
+  const id=gruenSeq; g.laeuft=true; g.fertig=false; g.ohneLimit=!!ohneLimit; renderOverlay();
   const t0=Date.now(), best=g.best, n=g.n;
   const ende=(zuGross)=>{ g.fertig=true; g.laeuft=false; g.laufend=null; g.zuGross=!!zuGross; gruenCancel=null; gruenRechnet(false); renderOverlay();
-    if(zuGross) toast('Zeit aus – '+(g.gut.size+g.schlecht.size)+' von '+g.gesamt+' Zügen geprüft. Ein Tipp auf die Zahl rechnet weiter.',3600); };
+    if(zuGross) toast('Zeit aus – '+(g.gut.size+g.schlecht.size)+' von '+g.gesamt+' Zügen geprüft. Ein Tipp auf die Zahl rechnet den Rest zu Ende.',3600); };
   /* Zwei Runden. In der ersten bekommt jeder offene Zug nur seinen ANTEIL
      am Budget: ein guter Zug findet seine Linie meist in Bruchteilen davon,
      ein schlechter braeuchte den ganzen Teilbaum und wuerde sonst allein
@@ -2237,20 +2250,24 @@ function gruenLauf(g,rundeStart){
       if(runde===1&&g.spaeter.length){ runde=2; g.offen=g.spaeter; g.spaeter=[]; }
       else { ende(g.spaeter.length>0); return; } }
     const rest=GRUEN_MS-(Date.now()-t0);
-    if(rest<300){ g.spaeter.push(...g.offen); g.offen=[]; ende(true); return; }
+    if(!g.ohneLimit&&rest<300){
+      /* Zeit aus - aber bei ein oder zwei offenen Zuegen ist Warten besser
+         als Abbrechen. Ab da laeuft es ohne Limit durch; Stopp geht weiter. */
+      if(g.offen.length+g.spaeter.length<=GRUEN_REST) g.ohneLimit=true;
+      else { g.spaeter.push(...g.offen); g.offen=[]; ende(true); return; } }
     const o=g.offen.shift();
     /* Wer seinen gedeckelten Anteil schon hatte (versucht), bekommt in Runde
        1 keinen zweiten - er wandert gleich in Runde 2. Gemessen ohne das:
        nach Stopp und Weiter bei 30 Steinen bekam der erste offene Zug den
        ganzen Rest, die uebrigen sahen nie eine Suche - 1/5 statt 4/5. */
-    if(runde===1&&o.versucht){ g.spaeter.push(o); weiter(); return; }
+    if(!g.ohneLimit&&runde===1&&o.versucht){ g.spaeter.push(o); weiter(); return; }
     g.laufend=o; gruenRechnet(true); renderZuegeStand();
     /* Runde 1 hoechstens 900 ms je Zug: ein Fehlversuch an einem schlechten
        Zug ist verlorene Arbeit (die Tabelle wird je Suche geleert), also
        klein halten - Runde 2 bekommt den Loewenanteil. Ohne Deckel wurden
        bei 28 Steinen alle fuenf Zuege vorher in 4,6 s entschieden, mit
        gleichen Anteilen keiner mehr (gemessen). */
-    const budget=runde===1?Math.min(900,Math.max(400,Math.floor(rest/(g.offen.length+1)))):rest;
+    const budget=g.ohneLimit?GRUEN_LANG:(runde===1?Math.min(900,Math.max(400,Math.floor(rest/(g.offen.length+1)))):rest);
     gruenCancel=runSearch(o.lo,o.hi,n-1,{target:best,maxNodes:0,timeMs:budget,seed:(Date.now()%100000)+5,full:false},null,r=>{
       if(id!==gruenSeq) return; gruenCancel=null; g.laufend=null;
       const fertig=r.complete&&!r.cancelled&&!r.timeout;
@@ -2271,12 +2288,15 @@ function gruenStopp(){
   if(o) g.spaeter.push(o); g.spaeter.push(...g.offen); g.offen=[]; g.laufend=null;
   g.laeuft=false; g.fertig=true; g.zuGross=g.spaeter.length>0; renderOverlay();
 }
-/* Weiter von Hand: frisches Budget fuer die stehen gebliebenen Zuege. Wieder
-   ab Runde 1, damit Zuege, die noch keine Suche gesehen haben, ihren kleinen
-   Anteil bekommen; wer ihn schon hatte, faellt sofort in Runde 2. */
+/* Weiter von Hand: OHNE Limit bis zum Ende (Lutz, 20.09.2026: "wenn dann ich
+   auf Weitermachen, dann so lang weiterlaufen lassen, bis es fertig ist, ohne
+   neuen Stopp - es sei denn, ich druecke auf Stopp"). Wer einmal gesagt hat,
+   dass er warten will, soll nicht nach sechs Sekunden wieder gefragt werden.
+   Damit entfaellt hier auch die Runden-Logik: jeder offene Zug wird zu Ende
+   gerechnet, die Reihenfolge ist gleichgueltig. */
 function gruenWeiter(){
   const g=game.gruen; if(!g||g.laeuft||!g.spaeter.length||g.key!==stateKey()||!gruenAktiv()) return;
-  gruenAbbrechen(); g.offen=g.spaeter; g.spaeter=[]; gruenLauf(g,1);
+  gruenAbbrechen(); g.offen=g.spaeter; g.spaeter=[]; gruenLauf(g,1,true);
 }
 /* Die zwei kleinen Zahlen: geprueft / moeglich. Waehrend des Rechnens gruen
    mit "Stopp", angehalten mit offenen Zuegen in Messing mit "Weiter",
