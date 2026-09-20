@@ -359,7 +359,10 @@ const FAELLE=[
         line-height taugt bei einem Chip mit Polster nicht - line-height ist
         dort "normal", parseFloat liefert NaN, und der Rueckfall auf 16 px
         macht aus 29 px zwei Zeilen (einmal erlebt). */
-     return {beideDrin:st.left>=q.left-1&&pa.right<=q.right+1,
+     const zu=document.getElementById('btnZuege').getBoundingClientRect();
+     return {beideDrin:st.left>=q.left-1&&zu.right<=q.right+1,
+       zuegeDrin:zu.left>=q.left-1&&zu.right<=q.right+1&&Math.abs(st.top-zu.top)<2,
+       zuegeBreit:Math.round(zu.width), luft:Math.round((q.right-zu.right)+(st.left-q.left)),
        aufEinerHoehe:Math.abs(st.top-pa.top)<2,
        chipHoehe:Math.round(pa.height), stratHoehe:Math.round(st.height),
        einzeilig:Math.abs(pa.height-st.height)<2&&pa.height<40,
@@ -373,7 +376,39 @@ const FAELLE=[
       cz.zeilenHoehe===cz.zeilenVorher, cz.zeilenVorher+' / '+cz.zeilenHoehe+' px');
    ok('Der Pause-Chip kostet keine Brettflaeche',
       cz.brett===cz.brettVorher, cz.brettVorher+' / '+cz.brett);
+   /* Seit v1.60 steht ein dritter Chip daneben (alle moeglichen Zuege). Auf
+      320 px Breite fuellten drei Chips die Zeile bis auf 2 px aus - kein
+      Abstand, auf den man bauen kann. Unter 386 px sind Polster und Schrift
+      deshalb eine Stufe kleiner; geprueft wird der uebrige Platz, nicht nur
+      ob der Chip zufaellig noch hineinpasst. */
+   ok('Auch der Zuege-Chip steht in der Zeile',
+      cz.zuegeDrin===true, JSON.stringify({zuegeDrin:cz.zuegeDrin,breit:cz.zuegeBreit}));
+   ok('Und die Zeile hat noch Luft', cz.luft>=16, cz.luft+' px frei');
    await pp.close();
+ }
+
+ /* Die engen Geraete pruefen den dritten Chip erst richtig: dort greift die
+    kleinere Stufe (unter 386 px). Ohne sie blieben auf 320 px genau 2 px
+    uebrig - bei groesserer Systemschrift waere die Zeile uebergelaufen. */
+ for(const [name,w,h] of [['iPhone SE',375,667],['sehr klein',360,600],['ganz schmal',320,568]]){
+   const pc=await browser.newPage(); await pc.setViewport({width:w,height:h});
+   await pc.goto(url,{waitUntil:'load'}); await sleep(2300);
+   const c=await pc.evaluate(()=>{ newGame('english');
+     const l=currentLine(); applyMove(game.board.moves[l.path[0]],true); render(); renderHud(); fitStage();
+     const q=document.querySelector('.quick').getBoundingClientRect();
+     const cs=[...document.querySelectorAll('.quick .pill')].map(e=>e.getBoundingClientRect());
+     return {n:cs.length, hoehe:Math.round(q.height),
+       chipHoehe:Math.round(cs[0].height),
+       eineZeile:cs.every(r=>Math.abs(r.top-cs[0].top)<2),
+       drin:cs[0].left>=q.left-1&&cs[cs.length-1].right<=q.right+1,
+       luft:Math.round((q.right-cs[cs.length-1].right)+(cs[0].left-q.left))}; });
+   console.log('INFO Chip-Zeile '+name+': '+JSON.stringify(c));
+   ok('['+name+'] Alle drei Chips stehen auf einer Zeile',
+      c.n===3&&c.eineZeile===true&&c.drin===true, JSON.stringify(c));
+   ok('['+name+'] Und die Zeile hat noch Luft', c.luft>=16, c.luft+' px frei');
+   ok('['+name+'] Die Chip-Zeile bleibt einzeilig hoch',
+      c.hoehe<=c.chipHoehe+10, c.hoehe+' px bei Chip '+c.chipHoehe);
+   await pc.close();
  }
 
  /* Der Sockel legt nur den Schutzrand drauf, der nicht ohnehin schon unter

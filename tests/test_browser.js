@@ -2163,6 +2163,186 @@ function kurzfassungGleich(proben,voll,erwartet){
   ok('Wer sie danach abschaltet, behaelt das',
      anAus.nachAbschalten.t===false&&anAus.nachAbschalten.s===false, JSON.stringify(anAus.nachAbschalten));
 
+  abschnitt='Alle moeglichen Zuege';
+  /* Entwurf von Lutz (18.09.2026): "Kannst du einen Button machen der alle
+     moeglichen Zuege anzeigt. Mein Vorschlag waeren weisse Dreiecke statt
+     rote. Da wo rot ist bleibt rot. Wenn man den Button druckt verschwindet
+     das nach 3 Sekunden oder wenn man wieder drauf drueckt." */
+  await page.evaluate(()=>{ settings.computer=true; settings.tipps=true; settings.probiert=true;
+    settings.autoJump=false; saveSettings(); newGame('english'); });
+  await sleep(200);
+  const mz=await page.evaluate(async()=>{
+    const zahl=()=>document.querySelectorAll('#board path.moegl').length;
+    const moeglich=()=>game.board.moves.filter(m=>game.pegAt[m.from]>=0&&game.pegAt[m.over]>=0&&game.pegAt[m.to]<0).length;
+    // Ein paar Zuege spielen, damit es mehr als die vier Eroeffnungszuege gibt
+    for(let n=0;n<10;n++){ const l=currentLine(); if(!l) break; applyMove(game.board.moves[l.path[0]],true); }
+    render();
+    const vorher=zahl();
+    document.getElementById('btnZuege').click();
+    const nachDruck={weiss:zahl(), moeglich:moeglich(), tipps:game.tippKeys.size};
+    await new Promise(r=>setTimeout(r,2400));
+    const nachZweiKomma={weiss:zahl()};
+    await new Promise(r=>setTimeout(r,1100));
+    const nachDrei={weiss:zahl(), an:game.zeigeZuege};
+    // Zweiter Druck raeumt sofort ab
+    document.getElementById('btnZuege').click();
+    const anWieder=zahl();
+    document.getElementById('btnZuege').click();
+    const nachZweitemDruck={weiss:zahl(), an:game.zeigeZuege};
+    return {vorher,nachDruck,nachZweiKomma,nachDrei,anWieder,nachZweitemDruck};
+  });
+  console.log('INFO Alle Zuege: '+JSON.stringify(mz));
+  ok('Ohne Druck liegt nichts auf dem Brett', mz.vorher===0, String(mz.vorher));
+  ok('Der Knopf zeigt jeden moeglichen Zug',
+     mz.nachDruck.weiss===mz.nachDruck.moeglich&&mz.nachDruck.weiss>=4,
+     mz.nachDruck.weiss+' von '+mz.nachDruck.moeglich);
+  /* Der Knopf sagt nur, welche Zuege es GIBT, nicht welcher gut ist - das
+     ist Regelwissen und kostet deshalb keinen Tipp. */
+  ok('Er zaehlt nicht als Tipp', mz.nachDruck.tipps===0, String(mz.nachDruck.tipps));
+  ok('Nach 2,4 s stehen sie noch', mz.nachZweiKomma.weiss===mz.nachDruck.weiss,
+     JSON.stringify(mz.nachZweiKomma));
+  ok('Nach 3 s sind sie von allein weg',
+     mz.nachDrei.weiss===0&&mz.nachDrei.an===false, JSON.stringify(mz.nachDrei));
+  ok('Ein zweiter Druck raeumt sie sofort ab',
+     mz.anWieder>0&&mz.nachZweitemDruck.weiss===0&&mz.nachZweitemDruck.an===false,
+     mz.anWieder+' -> '+JSON.stringify(mz.nachZweitemDruck));
+
+  /* "Da wo rot ist bleibt rot": ein schon probierter Zug, der hier noch
+     moeglich waere, wird NICHT zusaetzlich weiss gezeichnet - sonst laege
+     Weiss ueber Rot und die Farbe saegte nichts mehr. */
+  const mzRot=await page.evaluate(async()=>{
+    settings.probiert=true; settings.autoJump=false; newGame('english');
+    await new Promise(r=>setTimeout(r,60));
+    const m=game.board.moves.find(x=>game.pegAt[x.from]>=0&&game.pegAt[x.over]>=0&&game.pegAt[x.to]<0);
+    applyMove(m,true); render(); undo();
+    await new Promise(r=>setTimeout(r,1300));      // Spulen abwarten
+    const moeglich=game.board.moves.filter(x=>game.pegAt[x.from]>=0&&game.pegAt[x.over]>=0&&game.pegAt[x.to]<0).length;
+    game.markAus=true; zuegeSetzen(true);
+    return {moeglich, rot:document.querySelectorAll('#board path.probiert').length,
+            weiss:document.querySelectorAll('#board path.moegl').length};
+  });
+  console.log('INFO Rot bleibt rot: '+JSON.stringify(mzRot));
+  ok('Ein schon probierter Zug bleibt rot und wird nicht weiss uebermalt',
+     mzRot.rot===1&&mzRot.weiss===mzRot.moeglich-1, JSON.stringify(mzRot));
+
+  /* Und die Frage, die zaehlt: sieht man sie? Die Zahl der Elemente sagt
+     darueber nichts - derselbe Fehlertyp wie beim unsichtbaren Glanz in
+     v1.39. Gemessen werden Bildpunkte, die heller geworden sind. */
+  await page.evaluate(async()=>{
+    settings.computer=false; settings.autoJump=false; newGame('english');
+    for(let n=0;n<12;n++){ const ms=game.board.moves.filter(m=>game.pegAt[m.from]>=0&&game.pegAt[m.over]>=0&&game.pegAt[m.to]<0);
+      if(!ms.length) break; applyMove(ms[0],true); }
+    render(); await new Promise(r=>setTimeout(r,80)); });
+  await sleep(250);
+  const mzBox=await page.evaluate(()=>{ const r=document.getElementById('board').getBoundingClientRect();
+    return {x:Math.round(r.x),y:Math.round(r.y),width:Math.round(r.width),height:Math.round(r.height)}; });
+  const mzGrund=PNG.sync.read(await page.screenshot({clip:mzBox}));
+  const mzN=await page.evaluate(()=>{ zuegeSetzen(true); return document.querySelectorAll('#board path.moegl').length; });
+  await sleep(150);
+  const mzJetzt=PNG.sync.read(await page.screenshot({clip:mzBox}));
+  let mzHell=0, mzKraeftig=0, mzMax=0, mzRotPunkte=0;
+  for(let k=0;k<mzJetzt.data.length;k+=4){
+    const dh=(mzJetzt.data[k]-mzGrund.data[k])+(mzJetzt.data[k+1]-mzGrund.data[k+1])+(mzJetzt.data[k+2]-mzGrund.data[k+2]);
+    if(dh>10){ mzHell++; if(dh>100) mzKraeftig++; if(dh>mzMax) mzMax=dh; }
+    /* Wurde irgendwo ROT dazugemalt? Dann waere die Farbe nicht mehr
+       eindeutig. Gezaehlt wird der FARBSTICH der Aenderung, nicht der
+       Rotkanal: Weiss ueber einer roten Murmel hebt deren Rot mit an - der
+       erste Entwurf dieser Pruefung zaehlte deshalb 671 Punkte und mass in
+       Wahrheit die Murmeln. Weiss hebt alle drei Kanaele gleich an, Rot nur
+       einen. */
+    const dR=mzJetzt.data[k]-mzGrund.data[k], dG=mzJetzt.data[k+1]-mzGrund.data[k+1], dB=mzJetzt.data[k+2]-mzGrund.data[k+2];
+    if(dR-Math.max(dG,dB)>30) mzRotPunkte++;
+  }
+  console.log('INFO Weisse Dreiecke sichtbar: '+mzN+' Dreiecke, '+mzHell
+    +' hellere Bildpunkte, davon '+mzKraeftig+' kraeftig, staerkster '+mzMax
+    +'; rote dazu: '+mzRotPunkte);
+  ok('Die weissen Dreiecke sind wirklich zu sehen', mzHell>3000, mzHell+' hellere Bildpunkte');
+  ok('Und kraeftig genug, um aufzufallen', mzKraeftig>1000&&mzMax>=100,
+     mzKraeftig+' kraeftige Punkte, staerkster '+mzMax);
+  ok('Sie malen nichts Rotes aufs Brett', mzRotPunkte<50, mzRotPunkte+' Punkte mit Rotstich');
+  /* Sie duerfen das Brett nicht zudecken: bei 15 gleichzeitigen Zuegen lagen
+     5,9 % der Brettflaeche unter Weiss (gemessen). Waere hier ein Drittel
+     betroffen, waere es ein Teppich statt eines Hinweises. */
+  ok('Und decken das Brett nicht zu',
+     mzHell < mzJetzt.width*mzJetzt.height*0.25,
+     mzHell+' von '+(mzJetzt.width*mzJetzt.height));
+
+  /* Regelwissen, keine Bewertung: der Knopf muss auch ohne Computer gehen -
+     sonst waere "wie am echten Brett" auch ohne das, was man dort mit
+     eigenen Augen sieht. */
+  const mzOhne=await page.evaluate(()=>{
+    settings.computer=false; newGame('english');
+    const l=currentLine(); if(l) applyMove(game.board.moves[l.path[0]],true); render();
+    zuegeSetzen(true);
+    const n=document.querySelectorAll('#board path.moegl').length;
+    const moeglich=game.board.moves.filter(m=>game.pegAt[m.from]>=0&&game.pegAt[m.over]>=0&&game.pegAt[m.to]<0).length;
+    zuegeSetzen(false); settings.computer=true; saveSettings();
+    return {n,moeglich}; });
+  ok('Ohne Computer zeigt der Knopf die Zuege trotzdem',
+     mzOhne.n===mzOhne.moeglich&&mzOhne.n>0, JSON.stringify(mzOhne));
+
+  /* In der Pause ist das Brett verdeckt - dann gibt es nichts zu zeigen,
+     und der Knopf ist gesperrt wie die Fussleiste. */
+  const mzPause=await page.evaluate(async()=>{
+    settings.computer=true; newGame('english');
+    const l=currentLine(); applyMove(game.board.moves[l.path[0]],true); render(); renderHud();
+    game.startedAt=Date.now(); renderHud();
+    zuegeSetzen(true);
+    const vorher=document.querySelectorAll('#board path.moegl').length;
+    pauseSetzen(true);
+    const inPause={weiss:document.querySelectorAll('#board path.moegl').length,
+                   gesperrt:document.getElementById('btnZuege').disabled};
+    pauseSetzen(false);
+    return {vorher,inPause}; });
+  console.log('INFO Zuege in der Pause: '+JSON.stringify(mzPause));
+  ok('Die Pause raeumt die Dreiecke ab und sperrt den Knopf',
+     mzPause.vorher>0&&mzPause.inPause.weiss===0&&mzPause.inPause.gesperrt===true,
+     JSON.stringify(mzPause));
+
+  const mzNeu=await page.evaluate(()=>{
+    newGame('english'); const l=currentLine(); applyMove(game.board.moves[l.path[0]],true); render();
+    zuegeSetzen(true); const vorher=document.querySelectorAll('#board path.moegl').length;
+    newGame('english');
+    return {vorher, nachher:document.querySelectorAll('#board path.moegl').length, an:game.zeigeZuege}; });
+  ok('Ein neues Spiel raeumt sie ab',
+     mzNeu.vorher>0&&mzNeu.nachher===0&&mzNeu.an===false, JSON.stringify(mzNeu));
+
+  /* Dieselbe Form wie das rote Dreieck: drei Ecken, Basismitte im
+     Ausgangsfeld, Spitze im Zielfeld. */
+  const mzForm=await page.evaluate(()=>{
+    settings.autoJump=false; newGame('english');
+    const l=currentLine(); const m=game.board.moves[l.path[0]];
+    applyMove(m,true); render(); zuegeSetzen(true);
+    const pfad=[...document.querySelectorAll('#board path.moegl')][0];
+    if(!pfad) return null;
+    const d=pfad.getAttribute('d');
+    const z=d.match(/-?\d+(\.\d+)?/g).map(Number);
+    const A={x:z[0],y:z[1]}, B={x:z[2],y:z[3]}, C={x:z[4],y:z[5]};
+    // Welcher Zug ist das? Ueber die Spitze suchen.
+    const treffer=game.board.moves.filter(x=>game.pegAt[x.from]>=0&&game.pegAt[x.over]>=0&&game.pegAt[x.to]<0)
+      .find(x=>Math.hypot(game.lay.pos[x.to].x-C.x,game.lay.pos[x.to].y-C.y)<1);
+    const mitte={x:(A.x+B.x)/2,y:(A.y+B.y)/2};
+    const start=treffer?game.lay.pos[treffer.from]:null;
+    const fuellung=getComputedStyle(pfad).fill;
+    zuegeSetzen(false);
+    return {fuellung, ecken:z.length/2, geschlossen:/Z\s*$/.test(d.trim()),
+      basis:Math.round(Math.hypot(A.x-B.x,A.y-B.y)),
+      spitzeTrifft:!!treffer,
+      basisMitteImStart:start?Math.round(Math.hypot(start.x-mitte.x,start.y-mitte.y)):-1};
+  });
+  console.log('INFO Form der weissen Dreiecke: '+JSON.stringify(mzForm));
+  ok('Ein Dreieck mit drei Ecken', mzForm&&mzForm.ecken===3&&mzForm.geschlossen===true,
+     JSON.stringify(mzForm));
+  ok('Basismitte im Ausgangsfeld, Spitze im Zielfeld',
+     mzForm&&mzForm.basisMitteImStart===0&&mzForm.spitzeTrifft===true, JSON.stringify(mzForm));
+  ok('Die Basis ist halb so breit wie ein Spielstein', mzForm&&mzForm.basis===34,
+     mzForm?String(mzForm.basis):'-');
+  /* Weiss, nicht rot - die Farbe ist die ganze Unterscheidung zu den schon
+     probierten Zuegen. */
+  ok('Gefuellt wird weiss', mzForm&&/rgba?\(\s*255,\s*255,\s*255/.test(mzForm.fuellung),
+     mzForm?mzForm.fuellung:'-');
+  await page.evaluate(()=>{ settings.autoJump=true; saveSettings(); newGame('english'); });
+
   ok('keine Seitenfehler insgesamt', errors.length===0, errors.join(' | '));
   await browser.close();
   console.log(fails?`\n${fails} FEHLER`:'\nALLE BROWSER-TESTS OK'); process.exitCode=fails?1:0;

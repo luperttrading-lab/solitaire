@@ -97,7 +97,20 @@ header .boardname:active{background:var(--panel2)}
 .pzb{display:inline-block;width:8px;height:11px;border-left:3px solid currentColor;border-right:3px solid currentColor}
 .pzd{display:inline-block;width:0;height:0;border-left:10px solid currentColor;
   border-top:6px solid transparent;border-bottom:6px solid transparent}
+/* Lang und schmal - so sieht das Richtungsdreieck auf dem Brett aus (Basis
+   34 Einheiten, Laenge 100). Das breite .pzd des Pause-Chips liest sich als
+   Wiedergabe-Zeichen; zwei gleiche Dreiecke nebeneinander waeren nicht zu
+   trennen. */
+.pzt{display:inline-block;width:0;height:0;border-left:13px solid currentColor;
+  border-top:4px solid transparent;border-bottom:4px solid transparent}
 .pill{border-radius:999px;padding:6px 14px;font-size:13px;background:var(--panel);color:var(--muted);border:1px solid var(--line)}
+/* Drei Chips nebeneinander fuellen auf 320 px Breite die Zeile bis auf 2 px
+   aus (gemessen). Das ist kein Abstand, auf den man bauen kann - bei
+   groesserer Systemschrift liefe die Zeile ueber. Deshalb unter 386 px
+   engeres Polster und eine Stufe kleinere Schrift, dieselbe Grenze wie bei
+   den Beschriftungen der Zaehlerzeile. Umbrechen waere die schlechtere
+   Loesung: eine zweite Chip-Zeile kostet Brettflaeche. */
+@media (max-width:385px){ .quick{gap:6px} .quick .pill{padding:6px 10px;font-size:12px} }
 .pill.on{background:linear-gradient(180deg,#d9b25f,#b88f36);color:#1f1608;border-color:transparent}
 .pill:disabled{opacity:.4}
 #stage{flex:none;display:flex;align-items:center;justify-content:center;padding:8px 0;position:relative}
@@ -355,6 +368,14 @@ header .boardname:active{background:var(--panel2)}
    Zielfeld. Zwei gleiche Punkte sagen WO, die Verjuengung sagt WOHIN - und
    zwar ohne Pfeilkopf, der wie die volle Markierung ausgesehen haette. */
 .probiert{fill:#ff4436;stroke:none;opacity:.92}
+/* Alle moeglichen Zuege auf Knopfdruck (v1.60, Entwurf von Lutz am
+   18.09.2026: "einen Button der alle moeglichen Zuege anzeigt ... weisse
+   Dreiecke statt rote. Da wo rot ist bleibt rot"). Dieselbe Geometrie wie
+   das rote Dreieck, nur weiss und durchscheinend - bis zu zwanzig davon
+   liegen gleichzeitig auf dem Brett, deckend waere das ein Teppich statt
+   eines Hinweises. Ein schon probierter Zug wird gar nicht erst weiss
+   gezeichnet, sonst laege Weiss ueber Rot. */
+.moegl{fill:rgba(255,255,255,.42);stroke:none}
 /* Beim Einstellen liegt der Schein UEBER dem Blatt. Sein Zentrum sitzt bei
    82 % der Hoehe, das Blatt beginnt bei 57 % - unter dem Blatt war er
    also vollstaendig verdeckt und beim Einstellen nicht zu sehen (gemessen:
@@ -433,7 +454,7 @@ header .boardname:active{background:var(--panel2)}
       <dt>Rettung</dt><dd id="hudRett">–</dd>
     </dl>
   </div>
-  <div class="quick"><button id="btnComputer" class="pill" aria-pressed="false">Computer: aus</button><button type="button" id="btnPause" class="pill"><i class="pzb"></i>Pause</button></div>
+  <div class="quick"><button id="btnComputer" class="pill" aria-pressed="false">Computer: aus</button><button type="button" id="btnPause" class="pill"><i class="pzb"></i>Pause</button><button type="button" id="btnZuege" class="pill" aria-pressed="false"><i class="pzt"></i>Züge</button></div>
   <div id="stage"><svg id="board" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Spielbrett"></svg>
     <div id="pause" aria-hidden="true"><div class="pt">Pause</div><div class="ps">Das Brett ist verdeckt – sonst wäre die Pause eine Bedenkzeit.</div><button type="button" class="pknopf" id="btnWeiter" aria-label="Weiter spielen"><svg viewBox="0 0 24 24" width="34" height="34" aria-hidden="true"><path d="M8.5 5.2v13.6L19 12z" fill="currentColor"/></svg>Weiter</button></div></div>
   <div id="status"></div>
@@ -540,7 +561,7 @@ header .boardname:active{background:var(--panel2)}
 
 <script>
 'use strict';
-const APP_VERSION='1.59';
+const APP_VERSION='1.60';
 /* =========================================================================
    Kern: Bretter, Züge, Symmetrien, Paritäts-Schranke, Solver
    (als Fabrik, damit derselbe Code im Web Worker läuft)
@@ -1111,7 +1132,9 @@ const game={board:null,lay:null,pegAt:[],initial:[],history:[],future:[],selecte
      Stellungen, damit derselbe Fehler nicht doppelt zaehlt.
      tippKeys sammelt die Stellungen, in denen ein Tipp abgerufen wurde:
      derselbe Tipp zweimal angesehen ist ein Tipp, nicht zwei. */
-  rueckAlarm:0,tippKeys:null,imVerlust:false,rettungOffen:false,rettKeys:null};
+  rueckAlarm:0,tippKeys:null,imVerlust:false,rettungOffen:false,rettKeys:null,
+  /* Alle moeglichen Zuege, solange der Knopf sie zeigt. */
+  zeigeZuege:false,zuegeTimer:0};
 
 const $=id=>document.getElementById(id);
 const boardSvg=$('board'), statusEl=$('status');
@@ -1134,6 +1157,7 @@ function newGame(boardId,keepPhase){ hinweisBis=0; abortAnimation();
   const board=boards[settings.board]||boards.english; game.board=board; game.lay=layoutBoard(board);
   game.lastMove=null; if(!keepPhase) game.lesson=null;
   game.probiert=new Map(); clearTimeout(game.probiertTimer);
+  game.zeigeZuege=false; clearTimeout(game.zuegeTimer);
   game.pegAt=new Array(board.n); for(let i=0;i<board.n;i++) game.pegAt[i]=i;
   game.phase=settings.freeStart?'choose':'play';
   if(!settings.freeStart) game.pegAt[board.startIdx]=-1;
@@ -1279,6 +1303,7 @@ function pauseSetzen(an){
   const e=$('pause'); if(e){ e.classList.toggle('an',!!game.pauseAn); e.setAttribute('aria-hidden',game.pauseAn?'false':'true'); }
   const z=$('hudZeit'); if(z) z.setAttribute('aria-label',game.pauseAn?'Zeit weiterlaufen lassen':'Zeit anhalten');
   const l=$('hudZeitLabel'); if(l) l.textContent=game.pauseAn?'Angehalten':'Zeit';
+  if(game.pauseAn&&game.zeigeZuege) zuegeSetzen(false);
   const c=$('btnPause');
   if(c){ c.innerHTML=game.pauseAn?'<i class="pzd"></i>Weiter':'<i class="pzb"></i>Pause';
     c.classList.toggle('on',!!game.pauseAn); }
@@ -1338,6 +1363,23 @@ function renderOverlay(){
   /* Schon probierte Zuege dieser Stellung: nur der Strich, dezent, damit er
      neben der vollen Markierung nicht mit ihr konkurriert. Vor ihr gezeichnet,
      also liegt sie darueber. */
+  /* Alle moeglichen Zuege, solange der Knopf sie zeigt. Vor den roten
+     gezeichnet, und ein schon probierter Zug wird ausgelassen statt
+     uebermalt - "Da wo rot ist bleibt rot" (Lutz, 18.09.2026). Gezeichnet
+     wird nur, was die Regeln hier erlauben; das ist dieselbe Bedingung wie
+     unten, nur ueber alle Zuege des Bretts. */
+  if(game.zeigeZuege&&!game.pauseAn){
+    const schon=probierteHier();
+    game.board.moves.forEach((mm,mi)=>{
+      if(!(game.pegAt[mm.from]>=0&&game.pegAt[mm.over]>=0&&game.pegAt[mm.to]<0)) return;
+      if(schon&&schon.has(mi)) return;
+      const qa=lay.pos[mm.from], qc=lay.pos[mm.to];
+      const qdx=qc.x-qa.x, qdy=qc.y-qa.y, qL=Math.hypot(qdx,qdy);
+      const qux=qdx/qL, quy=qdy/qL, qnx=-quy, qny=qux;
+      overlayLayer.appendChild(el('path',{class:'moegl',
+        d:`M${qa.x+qnx*P_BASIS} ${qa.y+qny*P_BASIS} L${qa.x-qnx*P_BASIS} ${qa.y-qny*P_BASIS} L${qc.x} ${qc.y} Z`}));
+    });
+  }
   const probiert=probierteHier();
   if(probiert) probiert.forEach(mi=>{
     const pm=game.board.moves[mi];
@@ -1411,6 +1453,9 @@ function renderHud(){
   /* Ohne laufende Uhr gibt es nichts anzuhalten - der Chip ist dann matt,
      damit er nicht ins Leere fuehrt. */
   const pb=$('btnPause'); if(pb) pb.disabled=!p&&(!game.startedAt||game.finished);
+  /* Nichts zu zeigen, wenn das Brett verdeckt ist, die Partie steht oder
+     der Startstein noch fehlt. */
+  const zb=$('btnZuege'); if(zb) zb.disabled=p||game.finished||game.phase==='choose';
   $('btnUndo').disabled=!game.history.length||game.animating||p; $('btnRedo').disabled=!game.future.length||game.animating||p;
   $('btnHint').disabled=game.phase==='choose'||game.finished||game.searching||game.animating||!!game.lesson||p;
   /* Hilfe auf Anfrage haengt am Schalter Tipps - aus heisst: kein Knopf. */
@@ -1499,6 +1544,25 @@ function computerSetzen(an){ settings.computer=!!an; saveSettings(); renderCompu
   buildSheet(); }
 $('btnComputer').addEventListener('click',()=>{ computerSetzen(!settings.computer); if(settings.computer) toast('Der Computer bewertet jetzt jeden Zug.'); });
 renderComputerBtn();
+/* Alle moeglichen Zuege auf Knopfdruck - drei Sekunden lang, dann von
+   allein wieder weg, oder auf einen zweiten Druck sofort (Wortlaut von
+   Lutz, 18.09.2026). Kein Dauerzustand: ein Brett, auf dem staendig zwanzig
+   Dreiecke liegen, verdeckt genau die Stellung, die man lesen will.
+   Bewusst NICHT an den Schalter Computer gebunden und bewusst kein Tipp:
+   welche Zuege die Regeln erlauben, sieht man am echten Brett auch - das
+   ist Regelwissen, keine Bewertung. Der Computer sagt, welcher Zug GUT
+   ist; dieser Knopf sagt nur, welche es GIBT. */
+const ZUEGE_MS=3000;
+function renderZuegeBtn(){ const b=$('btnZuege'); if(!b) return;
+  b.classList.toggle('on',!!game.zeigeZuege); b.setAttribute('aria-pressed',String(!!game.zeigeZuege)); }
+function zuegeSetzen(an){
+  clearTimeout(game.zuegeTimer);
+  game.zeigeZuege=!!an&&!game.pauseAn&&!game.finished&&game.phase!=='choose';
+  renderZuegeBtn(); renderOverlay();
+  if(game.zeigeZuege) game.zuegeTimer=setTimeout(()=>{ game.zeigeZuege=false; renderZuegeBtn(); renderOverlay(); },ZUEGE_MS);
+}
+$('btnZuege').addEventListener('click',()=>zuegeSetzen(!game.zeigeZuege));
+renderZuegeBtn();
 function render(){ renderPegs(); renderOverlay(); renderHud(); refreshAnker(); }
 setInterval(()=>{ if(game.startedAt&&!game.finished) $('hudTime').textContent=fmtTime(elapsedMs()); },500);
 
