@@ -2447,6 +2447,14 @@ function kurzfassungGleich(proben,voll,erwartet){
   ok('Gruen und nicht gruen stimmen mit der unabhaengigen Suche ueberein',
      grAn.app.gut===grAn.unab.gut&&grAn.app.schlecht===grAn.unab.schlecht, JSON.stringify({app:grAn.app,unab:grAn.unab}));
   ok('Die guten Zuege stehen gruen auf dem Brett', grAn.dreiecke===grAn.gutZahl&&grAn.gutZahl>=1, grAn.dreiecke+' von '+grAn.gutZahl);
+  /* Gruen UEBER Weiss (v1.66): im SVG malt die Reihenfolge, also muessen
+     alle gruenen Pfade hinter allen weissen im Baum stehen. Geprueft an
+     der Stellung von eben, die beide Farben hat. */
+  const grOrdnung=await page.evaluate(()=>{ const alle=[...document.querySelectorAll('#board path.moegl')];
+    const ersterGruener=alle.findIndex(p=>p.classList.contains('gut')), letzterWeisser=alle.map(p=>!p.classList.contains('gut')).lastIndexOf(true);
+    return {weiss:alle.length-alle.filter(p=>p.classList.contains('gut')).length, gruen:alle.filter(p=>p.classList.contains('gut')).length, ersterGruener, letzterWeisser}; });
+  ok('Gruen liegt ueber Weiss (alle gruenen Pfade nach allen weissen)',
+     grOrdnung.weiss>0&&grOrdnung.gruen>0&&grOrdnung.letzterWeisser<grOrdnung.ersterGruener, JSON.stringify(grOrdnung));
   ok('Nach dem Ende pulst der Chip nicht mehr', grAn.rechnet===false);
   ok('Die Partie ist als Lerneinheit markiert und sagt es', grAn.genutzt===true&&/Lerneinheit/.test(grAn.toast), grAn.toast);
 

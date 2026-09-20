@@ -600,7 +600,7 @@ header .boardname:active{background:var(--panel2)}
 
 <script>
 'use strict';
-const APP_VERSION='1.65';
+const APP_VERSION='1.66';
 /* =========================================================================
    Kern: Bretter, Züge, Symmetrien, Paritäts-Schranke, Solver
    (als Fabrik, damit derselbe Code im Web Worker läuft)
@@ -1421,15 +1421,23 @@ function renderOverlay(){
     /* Gruen nur mit Ergebnis fuer GENAU diese Stellung - ein altes Ergebnis
        nach einem Zug waere eine Luege in Gruen. */
     const g=game.gruen&&gruenAktiv()&&game.gruen.key===stateKey()?game.gruen:null;
+    /* Gruen liegt UEBER Weiss (v1.66, Lutz am 20.09.2026: "weil das ja die
+       wichtigeren sind"). Im SVG malt die Reihenfolge - also erst alle
+       weissen, dann alle gruenen anhaengen, statt in Zugreihenfolge, wo sich
+       an jeder Kreuzung der spaetere Zug durchsetzte, egal welche Farbe. */
+    const gruene=[];
     game.board.moves.forEach((mm,mi)=>{
       if(!(game.pegAt[mm.from]>=0&&game.pegAt[mm.over]>=0&&game.pegAt[mm.to]<0)) return;
       if(schon&&schon.has(mi)) return;
       const qa=lay.pos[mm.from], qc=lay.pos[mm.to];
       const qdx=qc.x-qa.x, qdy=qc.y-qa.y, qL=Math.hypot(qdx,qdy);
       const qux=qdx/qL, quy=qdy/qL, qnx=-quy, qny=qux;
-      overlayLayer.appendChild(el('path',{class:'moegl'+(g&&g.gut.has(mi)?' gut':''),
-        d:`M${qa.x+qnx*P_BASIS} ${qa.y+qny*P_BASIS} L${qa.x-qnx*P_BASIS} ${qa.y-qny*P_BASIS} L${qc.x} ${qc.y} Z`}));
+      const gut=!!(g&&g.gut.has(mi));
+      const pfad=el('path',{class:'moegl'+(gut?' gut':''),
+        d:`M${qa.x+qnx*P_BASIS} ${qa.y+qny*P_BASIS} L${qa.x-qnx*P_BASIS} ${qa.y-qny*P_BASIS} L${qc.x} ${qc.y} Z`});
+      if(gut) gruene.push(pfad); else overlayLayer.appendChild(pfad);
     });
+    gruene.forEach(pf=>overlayLayer.appendChild(pf));
   }
   const probiert=probierteHier();
   if(probiert) probiert.forEach(mi=>{
