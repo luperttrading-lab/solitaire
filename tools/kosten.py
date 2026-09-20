@@ -67,7 +67,7 @@ def echt(text):
         'This session is being continued')
 
 
-seen, last_user, faltungen = {}, None, 0
+seen, last_user, faltungen, last_any = {}, None, 0, None
 for line in open(f):
     try: d = json.loads(line)
     except: continue
@@ -91,6 +91,8 @@ for line in open(f):
             last_user = d.get('timestamp')
     if t == 'assistant' and m.get('usage'):      # je Nachricht nur die letzte Fassung
         seen[m.get('id') or d.get('uuid')] = (d.get('timestamp', ''), m.get('model'), m['usage'])
+    if d.get('timestamp'):                       # letzter Eintrag ueberhaupt
+        last_any = max(last_any or '', d['timestamp'])
 
 def preise(model):
     model = model or ''
@@ -118,8 +120,54 @@ tot   = sum(cost(mo, u) for _, mo, u in seen.values())
 heute = sum(cost(mo, u) for ts, mo, u in seen.values() if lokal(ts) == heute_lokal)
 frage = sum(cost(mo, u) for ts, mo, u in seen.values() if last_user and ts >= last_user)
 de = lambda x: f'{x:.2f}'.replace('.', ',')
-print(f"<sub>{jetzt.strftime('%d.%m. %H:%M')} Uhr · Frage {de(frage)} · "
-      f"heute {de(heute)} · ges. {de(tot)} $</sub>")
+
+
+def zeitpunkt(ts):
+    """Zeitstempel aus dem Protokoll als datetime, sonst None."""
+    try:
+        return datetime.datetime.fromisoformat((ts or '').replace('Z', '+00:00'))
+    except Exception:
+        return None
+
+
+def arbeitszeit():
+    """Wanduhrzeit von Lutz' Frage bis jetzt.
+
+    Gemeint ist ausdruecklich die VERSTRICHENE Zeit, nicht Rechenzeit: Lutz
+    legt das Geraet weg, waehrend npm test und der Pages-Build laufen, und
+    will wissen, wie lange das gedauert hat.
+
+    Zwei Faelle sind auseinanderzuhalten. Laeuft das Skript am Ende der
+    Antwort - der Normalfall -, ist `jetzt` das Ende. Wird es dagegen
+    spaeter noch einmal von Hand gerufen, liegt der letzte Protokolleintrag
+    weit zurueck, und `jetzt` wuerde die Wartezeit von Lutz mitzaehlen.
+    Deshalb endet die Messung beim letzten Eintrag, sobald der ueber zehn
+    Minuten alt ist.
+    """
+    start = zeitpunkt(last_user)
+    if not start:
+        return None
+    ende = jetzt
+    letzter = zeitpunkt(last_any)
+    if letzter and (jetzt - letzter).total_seconds() > 600:
+        ende = letzter
+    s = (ende - start).total_seconds()
+    if s < 0:
+        return None
+    if s < 90:
+        return f'{int(round(s))} s'
+    # Bei 3599 s ergibt die gerundete Minutenzahl 60 - das waere "60 min"
+    # statt einer Stunde. Die Grenze bleibt trotzdem bei 3600 s, sonst
+    # stuende dort "0 h 59"; unterhalb wird auf 59 gedeckelt.
+    if s < 3600:
+        return f'{min(59, int(round(s / 60)))} min'
+    return f'{int(s // 3600)} h {int((s % 3600) // 60):02d}'
+
+
+az = arbeitszeit()
+print(f"<sub>{jetzt.strftime('%d.%m. %H:%M')} Uhr · "
+      + (f'Arbeit {az} · ' if az else '')
+      + f"Frage {de(frage)} · heute {de(heute)} · ges. {de(tot)} $</sub>")
 
 # Wann ein neuer Chat fällig ist. Die Zusammenfassung ist das harte Signal:
 # ab da ist der Kontext voll, sie wiederholt sich und kostet jedes Mal erneut
