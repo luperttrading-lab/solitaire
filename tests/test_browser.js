@@ -2118,7 +2118,7 @@ function kurzfassungGleich(proben,voll,erwartet){
   console.log('INFO Menue Hilfe: '+JSON.stringify(mh));
   ok('Menue hat einen Abschnitt Hilfe', mh.ueberschrift.includes('Hilfe'), mh.ueberschrift.join(','));
   ok('Der Trainer-Schalter ist weg', mh.keinTrainer===true);
-  ok('Unterpunkte verschwinden, wenn Computer aus ist', mh.subWeg===true&&mh.subZahl===4, JSON.stringify(mh));
+  ok('Unterpunkte verschwinden, wenn Computer aus ist', mh.subWeg===true&&mh.subZahl===5, JSON.stringify(mh));   // 5 seit v1.62 (Gute Zuege gruen)
   ok('Unterpunkte kommen mit Computer an zurueck', mh.subDa===true);
 
   abschnitt='Migration Hilfe';
@@ -2390,6 +2390,117 @@ function kurzfassungGleich(proben,voll,erwartet){
   ok('Gefuellt wird weiss', mzForm&&/rgba?\(\s*255,\s*255,\s*255/.test(mzForm.fuellung),
      mzForm?mzForm.fuellung:'-');
   await page.evaluate(()=>{ settings.autoJump=true; saveSettings(); newGame('english'); });
+
+  abschnitt='Gute Zuege gruen';
+  /* Lerneinheit (Lutz, 20.09.2026): "Nur gueltige Zuege in gruen anzeigen
+     ... eher eine Lerneinheit, die gar nicht fuer die Rangliste zaehlt."
+     Gruen heisst BEWIESEN gut; die Pruefung rechnet jedes Kind unabhaengig
+     nach, statt der App zu glauben. */
+  const gr0=await page.evaluate(()=>{
+    const row=document.getElementById('swGruen').closest('.row');
+    return {da:!!row, sub:row&&row.classList.contains('sub')&&row.dataset.sub==='computer',
+            titel:row&&row.querySelector('.t').textContent}; });
+  ok('Der Schalter steht im Menue unter Computer', gr0.da&&gr0.sub===true&&/Gute Züge/.test(gr0.titel), JSON.stringify(gr0));
+
+  /* Schalter aus: der Knopf zeigt alle Zuege weiss, nichts wird gruen. */
+  const grAus=await page.evaluate(async()=>{
+    settings.computer=true; settings.gruen=false; settings.zuege=true; saveSettings(); newGame('english');
+    for(let n=0;n<12;n++){ const l=currentLine(); applyMove(game.board.moves[l.path[0]],true); }
+    render(); evaluatePosition();
+    for(let i=0;i<40&&!(game.evalRes&&game.evalRes.complete);i++) await new Promise(r=>setTimeout(r,150));
+    await new Promise(r=>setTimeout(r,300));
+    return {weiss:document.querySelectorAll('#board path.moegl').length, gruen:document.querySelectorAll('#board path.moegl.gut').length,
+            analyse:!!game.gruen, genutzt:game.gruenGenutzt}; });
+  ok('Schalter aus: alles weiss, keine Analyse, Partie zaehlt', grAus.weiss>0&&grAus.gruen===0&&grAus.analyse===false&&grAus.genutzt===false, JSON.stringify(grAus));
+
+  /* Schalter an: Analyse laeuft nach der Bewertung an, wird fertig, und ihr
+     Urteil stimmt mit einer UNABHAENGIGEN Suche je Kind ueberein. */
+  const grAn=await page.evaluate(async()=>{
+    settings.gruen=true; saveSettings(); gruenPlanen();
+    const t0=Date.now();
+    for(let i=0;i<80&&!(game.gruen&&game.gruen.fertig);i++) await new Promise(r=>setTimeout(r,150));
+    const g=game.gruen; const dauer=Date.now()-t0;
+    const arr=occ(), n=pegCount(), best=game.evalRes.best; const unab={gut:[],schlecht:[]};
+    game.board.moves.forEach((m,mi)=>{ if(!(arr[m.from]&&arr[m.over]&&!arr[m.to])) return;
+      const c=arr.slice(); c[m.from]=0; c[m.over]=0; c[m.to]=1; const [lo,hi]=CORE.fromArray(c);
+      const s=CORE.createSearch(game.board,lo,hi,n-1,{target:best,maxNodes:0,seed:3}); let r; do{ r=s.run(2e5); }while(!r.done);
+      (r.best<=best?unab.gut:unab.schlecht).push(mi); });
+    const gleich=a=>[...a].sort((x,y)=>x-y).join(',');
+    return {fertig:!!(g&&g.fertig), zuGross:g&&g.zuGross, dauer, steine:n,
+      app:{gut:gleich(g.gut),schlecht:gleich(g.schlecht)}, unab:{gut:gleich(unab.gut),schlecht:gleich(unab.schlecht)},
+      dreiecke:document.querySelectorAll('#board path.moegl.gut').length, gutZahl:g.gut.size,
+      genutzt:game.gruenGenutzt, rechnet:document.getElementById('btnZuege').classList.contains('rechnet'),
+      toast:document.getElementById('toast').textContent}; });
+  console.log('INFO Gruene Zuege: '+JSON.stringify(grAn));
+  ok('Die Analyse wird fertig und prueft alle Zuege', grAn.fertig===true&&grAn.zuGross===false, JSON.stringify({fertig:grAn.fertig,zuGross:grAn.zuGross,dauer:grAn.dauer}));
+  ok('Gruen und nicht gruen stimmen mit der unabhaengigen Suche ueberein',
+     grAn.app.gut===grAn.unab.gut&&grAn.app.schlecht===grAn.unab.schlecht, JSON.stringify({app:grAn.app,unab:grAn.unab}));
+  ok('Die guten Zuege stehen gruen auf dem Brett', grAn.dreiecke===grAn.gutZahl&&grAn.gutZahl>=1, grAn.dreiecke+' von '+grAn.gutZahl);
+  ok('Nach dem Ende pulst der Chip nicht mehr', grAn.rechnet===false);
+  ok('Die Partie ist als Lerneinheit markiert und sagt es', grAn.genutzt===true&&/Lerneinheit/.test(grAn.toast), grAn.toast);
+
+  /* Sieht man das Gruen? Gezaehlt werden Bildpunkte mit GRUENSTICH gegen das
+     Standbild mit weissen Dreiecken - Weiss hebt alle Kanaele gleich an. */
+  await page.evaluate(()=>{ settings.gruen=false; gruenAbbrechen(); renderOverlay(); });
+  await sleep(200);
+  const grBox=await page.evaluate(()=>{ const r=document.getElementById('board').getBoundingClientRect();
+    return {x:Math.round(r.x),y:Math.round(r.y),width:Math.round(r.width),height:Math.round(r.height)}; });
+  const grWeiss=PNG.sync.read(await page.screenshot({clip:grBox}));
+  await page.evaluate(()=>{ settings.gruen=true; renderOverlay(); });   // Ergebnis liegt noch in game.gruen
+  await sleep(200);
+  const grGruen=PNG.sync.read(await page.screenshot({clip:grBox}));
+  let grPunkte=0;
+  for(let k=0;k<grGruen.data.length;k+=4){ const dR=grGruen.data[k]-grWeiss.data[k], dG=grGruen.data[k+1]-grWeiss.data[k+1], dB=grGruen.data[k+2]-grWeiss.data[k+2];
+    if(dG-Math.max(dR,dB)>30) grPunkte++; }
+  console.log('INFO Gruene Bildpunkte gegen Weiss: '+grPunkte);
+  ok('Gruen ist gegen Weiss wirklich zu sehen', grPunkte>2000, grPunkte+' Bildpunkte mit Gruenstich');
+
+  /* Nach einem Zug darf kein altes Gruen stehen bleiben - das Ergebnis
+     gehoert zur Stellung, nicht zum Brett. */
+  const grZug=await page.evaluate(()=>{
+    gruenAbbrechen(); settings.computer=false;      // keine neue Bewertung, also keine neue Analyse
+    const m=game.board.moves.find(x=>game.pegAt[x.from]>=0&&game.pegAt[x.over]>=0&&game.pegAt[x.to]<0);
+    applyMove(m,true); render();
+    const erg={alt:!!game.gruen, gruen:document.querySelectorAll('#board path.moegl.gut').length, weiss:document.querySelectorAll('#board path.moegl').length};
+    settings.computer=true; return erg; });
+  ok('Nach einem Zug ist kein altes Gruen mehr zu sehen', grZug.alt===true&&grZug.gruen===0&&grZug.weiss>0, JSON.stringify(grZug));
+
+  /* Chip aus bricht die Analyse ab; Computer aus laesst kein Gruen zu. */
+  const grAbbruch=await page.evaluate(async()=>{
+    newGame('english'); for(let n=0;n<4;n++){ const l=currentLine(); applyMove(game.board.moves[l.path[0]],true); }
+    render(); evaluatePosition();
+    for(let i=0;i<40&&!(game.gruen&&game.gruen.laeuft);i++) await new Promise(r=>setTimeout(r,100));
+    const lief=!!(game.gruen&&game.gruen.laeuft);
+    zuegeSetzen(false);
+    const nachChip={cancel:gruenCancel===null, rechnet:document.getElementById('btnZuege').classList.contains('rechnet')};
+    zuegeSetzen(true); settings.computer=false; renderOverlay();
+    const ohneComputer=document.querySelectorAll('#board path.moegl.gut').length;
+    settings.computer=true; gruenAbbrechen(); zuegeSetzen(false); saveSettings();
+    return {lief,nachChip,ohneComputer}; });
+  console.log('INFO Abbruch: '+JSON.stringify(grAbbruch));
+  ok('Chip aus bricht die laufende Analyse ab', grAbbruch.lief===true&&grAbbruch.nachChip.cancel===true&&grAbbruch.nachChip.rechnet===false, JSON.stringify(grAbbruch));
+  ok('Ohne Computer gibt es kein Gruen', grAbbruch.ohneComputer===0);
+
+  /* Rangliste: eine Partie mit gruenen Zuegen setzt keine Bestleistung und
+     sagt das im Ergebnis; ohne sie zaehlt dieselbe Partie. */
+  const grRang=await page.evaluate(()=>{
+    Store.del('stats');
+    const spiele=(lern)=>{ newGame('english'); game.gruenGenutzt=lern;
+      for(;;){ const l=currentLine(); if(!l||!l.path.length) break; applyMove(game.board.moves[l.path[0]],true); }
+      game.startedAt=Date.now()-5000; afterMove(true);
+      const st=Store.get('stats',{}); return {left:pegCount(), best:st.english?st.english.left:null, text:document.getElementById('resText').textContent}; };
+    const mit=spiele(true); const ohne=spiele(false);
+    hideModal('resultModal'); Store.del('stats'); return {mit,ohne}; });
+  console.log('INFO Rangliste: '+JSON.stringify(grRang));
+  ok('Mit gruenen Zuegen: keine Bestleistung, Ergebnis nennt die Lerneinheit',
+     grRang.mit.left===1&&grRang.mit.best===null&&/Lerneinheit/.test(grRang.mit.text), JSON.stringify(grRang.mit));
+  ok('Ohne sie zaehlt dieselbe Partie', grRang.ohne.left===1&&grRang.ohne.best===1&&!/Lerneinheit/.test(grRang.ohne.text), JSON.stringify(grRang.ohne));
+  const grNeu=await page.evaluate(()=>{ game.gruenGenutzt=true; newGame('english'); return game.gruenGenutzt; });
+  ok('Ein neues Spiel zaehlt wieder', grNeu===false);
+  /* Das Ergebnisblatt kommt 350 ms nach dem Spielende von allein hoch -
+     abwarten und schliessen, sonst faengt es die naechsten Klicks ab. */
+  await sleep(500);
+  await page.evaluate(()=>{ hideModal('resultModal'); settings.gruen=false; settings.zuege=false; settings.autoJump=true; saveSettings(); newGame('english'); });
 
   ok('keine Seitenfehler insgesamt', errors.length===0, errors.join(' | '));
   await browser.close();
