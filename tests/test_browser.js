@@ -2277,8 +2277,12 @@ function kurzfassungGleich(proben,voll,erwartet){
        Punkt rot-DOMINANT geworden ist, der es vorher nicht war. */
     const jR=mzJetzt.data[k], jG=mzJetzt.data[k+1], jB=mzJetzt.data[k+2];
     const gR=mzGrund.data[k], gG=mzGrund.data[k+1], gB=mzGrund.data[k+2];
-    const rotJetzt=jR>jG+40&&jR>jB+40, rotVorher=gR>gG+40&&gR>gB+40;
-    if(rotJetzt&&!rotVorher) mzRotPunkte++;
+    /* Vierte Fassung: die Kante eines weissen Dreiecks ueber einer ROTEN
+       Murmel mischt sich zu Rosa (255,200,200) - "R > G+40" hielt das fuer
+       Rot, 40 bis 107 Punkte je nach Stellung. Gemeint ist die Farbe der
+       probierten Zuege (#ff4436): sattes Rot, Gruen und Blau niedrig. */
+    const satt=(r,g,b)=>r>180&&g<130&&b<130;
+    if(satt(jR,jG,jB)&&!satt(gR,gG,gB)) mzRotPunkte++;
   }
   console.log('INFO Weisse Dreiecke sichtbar: '+mzN+' Dreiecke, '+mzHell
     +' hellere Bildpunkte, davon '+mzKraeftig+' kraeftig, staerkster '+mzMax
@@ -2518,6 +2522,49 @@ function kurzfassungGleich(proben,voll,erwartet){
   console.log('INFO Abbruch: '+JSON.stringify(grAbbruch));
   ok('Chip aus bricht die laufende Analyse ab', grAbbruch.lief===true&&grAbbruch.nachChip.cancel===true&&grAbbruch.nachChip.rechnet===false, JSON.stringify(grAbbruch));
   ok('Ohne Computer gibt es kein Gruen', grAbbruch.ohneComputer===0);
+
+  /* Der Stand der Analyse (v1.65): zwei kleine Zahlen unten rechts ueber dem
+     Brett, waehrend des Rechnens mit "Stopp", angehalten mit "Weiter". Lutz
+     am 20.09.2026: "wie viel Zuege ueberprueft sind, einfach nur als zwei
+     Zahlen ... und ob man auf einen Knopf drueckt fuer Weiterarbeiten und
+     Abbruch." Geprueft in der Eroeffnung (30 Steine), wo die Analyse
+     laenger als das Budget braucht. */
+  const grStand=()=>page.evaluate(()=>{ const e=document.getElementById("zuegeStand"); const g=game.gruen;
+    return {hidden:e.hidden,text:e.textContent,laeuft:e.classList.contains('laeuft'),weiter:e.classList.contains('weiter'),
+      g:g?{n:g.gut.size+g.schlecht.size,gesamt:g.gesamt,laeuft:g.laeuft,fertig:g.fertig,zuGross:g.zuGross,sp:g.spaeter.length}:null,
+      brett:Math.round(document.getElementById('board').getBoundingClientRect().width)}; });
+  const grStandAus=await page.evaluate(()=>{ settings.gruen=false; settings.zuege=true; saveSettings(); newGame('english');
+    return {hidden:document.getElementById('zuegeStand').hidden, brett:Math.round(document.getElementById('board').getBoundingClientRect().width)}; });
+  ok('Ohne Gruen-Schalter ist kein Stand zu sehen', grStandAus.hidden===true);
+  await page.evaluate(()=>{ settings.gruen=true; saveSettings(); newGame('english');
+    for(let n=0;n<2;n++){ const l=currentLine(); applyMove(game.board.moves[l.path[0]],true); } render(); evaluatePosition(); });
+  let grS; for(let i=0;i<40;i++){ await sleep(100); grS=await grStand(); if(grS.g&&grS.g.laeuft) break; }
+  await sleep(400); grS=await grStand();
+  console.log('INFO Stand laeuft: '+JSON.stringify(grS));
+  ok('Waehrend des Rechnens stehen die Zahlen mit Stopp da',
+     grS.hidden===false&&grS.laeuft===true&&/^\d+\/\d+ · Stopp$/.test(grS.text)&&grS.g.gesamt>=5, grS.text);
+  ok('Die Zahlen sind geprueft/moeglich', grS.text.startsWith(grS.g.n+'/'+grS.g.gesamt), grS.text+' gegen '+grS.g.n+'/'+grS.g.gesamt);
+  ok('Der Stand kostet keine Brettflaeche', grS.brett===grStandAus.brett, grStandAus.brett+' / '+grS.brett);
+  await page.click('#zuegeStand'); await sleep(150); const grStopp=await grStand();
+  console.log('INFO Stand nach Stopp: '+JSON.stringify(grStopp));
+  ok('Ein Tipp haelt an - Bewiesenes bleibt, Weiter wird angeboten',
+     grStopp.g.laeuft===false&&grStopp.g.fertig===true&&grStopp.weiter===true&&/ · Weiter$/.test(grStopp.text)&&grStopp.g.n===grS.g.n,
+     JSON.stringify(grStopp));
+  await page.click('#zuegeStand'); await sleep(200); const grWeiter=await grStand();
+  ok('Ein zweiter Tipp rechnet weiter', grWeiter.g.laeuft===true&&grWeiter.laeuft===true, grWeiter.text);
+  let grEnde; for(let i=0;i<90;i++){ await sleep(100); grEnde=await grStand(); if(grEnde.g&&grEnde.g.fertig) break; }
+  console.log('INFO Stand am Ende: '+JSON.stringify(grEnde));
+  /* Nach Stopp und Weiter muessen die Zuege, die noch keine Suche gesehen
+     haben, zuerst ihren kleinen Anteil bekommen - sonst frisst der erste
+     offene Zug den ganzen Rest (gemessen: 1/5 statt 4/5). */
+  ok('Nach Weiter sind deutlich mehr Zuege entschieden', grEnde.g.fertig===true&&grEnde.g.n>=grStopp.g.n+2, grStopp.g.n+' -> '+grEnde.g.n+' von '+grEnde.g.gesamt);
+  ok('Fertig ohne Rest zeigt nur die Zahlen, mit Rest Weiter',
+     grEnde.g.zuGross?/ · Weiter$/.test(grEnde.text):/^\d+\/\d+$/.test(grEnde.text), grEnde.text);
+  const grStandZug=await page.evaluate(()=>{ settings.computer=false;
+    const m=game.board.moves.find(x=>game.pegAt[x.from]>=0&&game.pegAt[x.over]>=0&&game.pegAt[x.to]<0); applyMove(m,true); render();
+    const h=document.getElementById('zuegeStand').hidden; settings.computer=true; return h; });
+  ok('Nach einem Zug ist der alte Stand weg', grStandZug===true);
+  await page.evaluate(()=>{ gruenAbbrechen(); settings.gruen=false; settings.zuege=false; saveSettings(); newGame('english'); });
 
   /* Rangliste: eine Partie mit gruenen Zuegen setzt keine Bestleistung und
      sagt das im Ergebnis; ohne sie zaehlt dieselbe Partie. */

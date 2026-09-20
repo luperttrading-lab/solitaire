@@ -114,6 +114,26 @@ header .boardname:active{background:var(--panel2)}
 .pill.on{background:linear-gradient(180deg,#d9b25f,#b88f36);color:#1f1608;border-color:transparent}
 .pill:disabled{opacity:.4}
 #stage{flex:none;display:flex;align-items:center;justify-content:center;padding:8px 0;position:relative}
+/* Stand der Gruen-Analyse (v1.65): zwei kleine Zahlen unten rechts UEBER dem
+   Brett, in der Ecke, die auf den Kreuzbrettern frei ist. Wunsch von Lutz
+   (20.09.2026): "wie viel Zuege ueberprueft sind, einfach nur als zwei
+   Zahlen, die du klein irgendwo hinschreibst ... und ob man auf einen Knopf
+   drueckt fuer Weiterarbeiten und Abbruch. Muss nicht alles gross sein."
+   Absolut ueber #stage, damit sie keine Brettflaeche kostet - eine eigene
+   Zeile haette das Brett um ihre Hoehe geschrumpft. Unter #pause (20). */
+.zstand{position:absolute;right:14px;bottom:14px;z-index:5;font-size:12px;line-height:1;padding:5px 9px;border-radius:999px;
+  background:rgba(20,16,12,.82);color:#e8dcc8;border:1px solid var(--line);font-variant-numeric:tabular-nums;white-space:nowrap}
+.zstand[hidden]{display:none}
+.zstand.laeuft{border-color:#4ade80;color:#4ade80}
+.zstand.weiter{border-color:#d9b25f;color:#d9b25f}
+.zstand b{font-weight:600}
+.zstand.kurz .w{display:none}
+/* Trefferflaeche groesser als das Sichtbare: ohne das Wort ist das Feld nur
+   41 x 24 px (gemessen iPhone SE), Apple verlangt 44 pt. Der unsichtbare
+   Rand von 10 px ringsum macht daraus 61 x 44 - so klein bleibt, was man
+   sieht, gross wird, was man trifft. */
+.zstand{position:absolute}
+.zstand::after{content:"";position:absolute;inset:-10px}
 /* Die Pause verdeckt das Brett. Eine Pause, die es sichtbar laesst, waere
    keine Pause, sondern ein Zeitstopp zum Nachdenken - dann waere jede
    Bestleistung wertlos. Deshalb deckend (kein Durchschimmern) und mit
@@ -473,6 +493,7 @@ header .boardname:active{background:var(--panel2)}
   </div>
   <div class="quick"><button id="btnComputer" class="pill" aria-pressed="false">Computer: aus</button><button type="button" id="btnPause" class="pill"><i class="pzb"></i>Pause</button><button type="button" id="btnZuege" class="pill" aria-pressed="false"><i class="pzt"></i>Züge</button></div>
   <div id="stage"><svg id="board" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Spielbrett"></svg>
+    <button type="button" id="zuegeStand" class="zstand" hidden aria-live="polite"></button>
     <div id="pause" aria-hidden="true"><div class="pt">Pause</div><div class="ps">Das Brett ist verdeckt – sonst wäre die Pause eine Bedenkzeit.</div><button type="button" class="pknopf" id="btnWeiter" aria-label="Weiter spielen"><svg viewBox="0 0 24 24" width="34" height="34" aria-hidden="true"><path d="M8.5 5.2v13.6L19 12z" fill="currentColor"/></svg>Weiter</button></div></div>
   <div id="status"></div>
   <div id="rechenband"><i></i></div>
@@ -579,7 +600,7 @@ header .boardname:active{background:var(--panel2)}
 
 <script>
 'use strict';
-const APP_VERSION='1.64';
+const APP_VERSION='1.65';
 /* =========================================================================
    Kern: Bretter, Züge, Symmetrien, Paritäts-Schranke, Solver
    (als Fabrik, damit derselbe Code im Web Worker läuft)
@@ -1365,6 +1386,9 @@ function renderPegs(){
 }
 function renderOverlay(){
   overlayLayer.innerHTML=''; const lay=game.lay;
+  /* Vor dem fruehen Ausstieg, sonst bliebe der Stand der Gruen-Analyse in
+     der Startstein-Wahl stehen. */
+  renderZuegeStand();
   if(game.phase==='choose'){ return; }
   const ev=game.evalRes; if(settings.computer&&settings.marks&&ev&&ev.key===stateKey()&&ev.optFinal&&ev.best>1){
     const om=ev.optFinal.mask; let gab=false;
@@ -2143,15 +2167,16 @@ function gruenPlanen(){
   /* Die Nachrechnung der Vorgaengerstellung laeuft noch - nicht daneben
      rechnen, sondern kurz spaeter noch einmal nachsehen. */
   if(nachCancel){ setTimeout(gruenPlanen,200); return; }
-  gruenAbbrechen(); const id=gruenSeq;
-  const g={key,gut:new Set(),schlecht:new Set(),offen:[],spaeter:[],fertig:false,laeuft:true,zuGross:false};
+  gruenAbbrechen();
+  const g={key,best:ev.best,n:pegCount(),gesamt:0,gut:new Set(),schlecht:new Set(),offen:[],spaeter:[],laufend:null,fertig:false,laeuft:false,zuGross:false};
   game.gruen=g;
   if(!game.gruenGenutzt){ game.gruenGenutzt=true; toast('Lerneinheit: Diese Partie zählt nicht für die Bestleistungen.',3200); }
-  const best=ev.best, arr=occ(), n=pegCount();
+  const best=ev.best, arr=occ();
   const linie=ev.path&&ev.path.length?ev.path[0]:-1;
   const buch=game.bookLine&&game.bookLine.key===key&&game.bookLine.path.length?game.bookLine.path[0]:-1;
   game.board.moves.forEach((m,mi)=>{
     if(!(arr[m.from]&&arr[m.over]&&!arr[m.to])) return;
+    g.gesamt++;
     if(mi===linie||mi===buch){ g.gut.add(mi); return; }
     const c=arr.slice(); c[m.from]=0; c[m.over]=0; c[m.to]=1;
     if(CORE.parityLowerBound(game.board,c)>best){ g.schlecht.add(mi); return; }
@@ -2160,10 +2185,16 @@ function gruenPlanen(){
     if(ce&&ce.complete){ (ce.best<=best?g.gut:g.schlecht).add(mi); return; }
     g.offen.push({mi,lo,hi,k});
   });
-  renderOverlay();
-  const t0=Date.now();
-  const ende=(zuGross)=>{ g.fertig=true; g.laeuft=false; g.zuGross=!!zuGross; gruenCancel=null; gruenRechnet(false); renderOverlay();
-    if(zuGross) toast('Nicht alle Züge geprüft – die Stellung ist dafür zu groß. Weiß heißt hier nur: nicht als gut bewiesen.',3600); };
+  gruenLauf(g,1);
+}
+/* Der Lauf ueber die offenen Zuege, mit frischem Budget. runde 1 = gedeckelte
+   Anteile, runde 2 = der ganze Rest je Zug (siehe unten). Von gruenWeiter() mit den Zuegen gerufen,
+   die stehen geblieben sind. */
+function gruenLauf(g,rundeStart){
+  const id=gruenSeq; g.laeuft=true; g.fertig=false; renderOverlay();
+  const t0=Date.now(), best=g.best, n=g.n;
+  const ende=(zuGross)=>{ g.fertig=true; g.laeuft=false; g.laufend=null; g.zuGross=!!zuGross; gruenCancel=null; gruenRechnet(false); renderOverlay();
+    if(zuGross) toast('Zeit aus – '+(g.gut.size+g.schlecht.size)+' von '+g.gesamt+' Zügen geprüft. Ein Tipp auf die Zahl rechnet weiter.',3600); };
   /* Zwei Runden. In der ersten bekommt jeder offene Zug nur seinen ANTEIL
      am Budget: ein guter Zug findet seine Linie meist in Bruchteilen davon,
      ein schlechter braeuchte den ganzen Teilbaum und wuerde sonst allein
@@ -2171,7 +2202,7 @@ function gruenPlanen(){
      vollen 6 s, vier weitere blieben ungeprueft, obwohl sie gut waren. Wer
      in Runde eins nicht fertig wird, kommt in Runde zwei mit dem ganzen
      Rest noch einmal dran. */
-  let runde=1;
+  let runde=rundeStart;
   const weiter=()=>{
     if(id!==gruenSeq) return;
     if(!g.offen.length){
@@ -2179,7 +2210,13 @@ function gruenPlanen(){
       else { ende(g.spaeter.length>0); return; } }
     const rest=GRUEN_MS-(Date.now()-t0);
     if(rest<300){ g.spaeter.push(...g.offen); g.offen=[]; ende(true); return; }
-    const o=g.offen.shift(); gruenRechnet(true);
+    const o=g.offen.shift();
+    /* Wer seinen gedeckelten Anteil schon hatte (versucht), bekommt in Runde
+       1 keinen zweiten - er wandert gleich in Runde 2. Gemessen ohne das:
+       nach Stopp und Weiter bei 30 Steinen bekam der erste offene Zug den
+       ganzen Rest, die uebrigen sahen nie eine Suche - 1/5 statt 4/5. */
+    if(runde===1&&o.versucht){ g.spaeter.push(o); weiter(); return; }
+    g.laufend=o; gruenRechnet(true); renderZuegeStand();
     /* Runde 1 hoechstens 900 ms je Zug: ein Fehlversuch an einem schlechten
        Zug ist verlorene Arbeit (die Tabelle wird je Suche geleert), also
        klein halten - Runde 2 bekommt den Loewenanteil. Ohne Deckel wurden
@@ -2187,17 +2224,63 @@ function gruenPlanen(){
        gleichen Anteilen keiner mehr (gemessen). */
     const budget=runde===1?Math.min(900,Math.max(400,Math.floor(rest/(g.offen.length+1)))):rest;
     gruenCancel=runSearch(o.lo,o.hi,n-1,{target:best,maxNodes:0,timeMs:budget,seed:(Date.now()%100000)+5,full:false},null,r=>{
-      if(id!==gruenSeq) return; gruenCancel=null;
+      if(id!==gruenSeq) return; gruenCancel=null; g.laufend=null;
       const fertig=r.complete&&!r.cancelled&&!r.timeout;
       /* Eine gefundene Linie beweist fuer sich, dass der Zug gut ist - auch
          ohne vollstaendige Suche. Schlecht dagegen nur mit Beweis. */
       if(r.best<=best){ g.gut.add(o.mi); evalCache.set(o.k,{best:r.best,complete:true,path:(r.path||[]).slice(),optFinal:null}); }
       else if(fertig){ g.schlecht.add(o.mi); evalCache.set(o.k,{best:r.best,complete:true,path:(r.path||[]).slice(),optFinal:null}); }
-      else g.spaeter.push(o);
+      else { o.versucht=true; g.spaeter.push(o); }
       renderOverlay(); weiter(); });
   };
   weiter();
 }
+/* Stopp von Hand: die laufende Suche wird verworfen, alles Bewiesene bleibt,
+   der angefangene Zug wandert zu den offenen zurueck. */
+function gruenStopp(){
+  const g=game.gruen; if(!g||!g.laeuft) return;
+  const o=g.laufend; gruenAbbrechen();
+  if(o) g.spaeter.push(o); g.spaeter.push(...g.offen); g.offen=[]; g.laufend=null;
+  g.laeuft=false; g.fertig=true; g.zuGross=g.spaeter.length>0; renderOverlay();
+}
+/* Weiter von Hand: frisches Budget fuer die stehen gebliebenen Zuege. Wieder
+   ab Runde 1, damit Zuege, die noch keine Suche gesehen haben, ihren kleinen
+   Anteil bekommen; wer ihn schon hatte, faellt sofort in Runde 2. */
+function gruenWeiter(){
+  const g=game.gruen; if(!g||g.laeuft||!g.spaeter.length||g.key!==stateKey()||!gruenAktiv()) return;
+  gruenAbbrechen(); g.offen=g.spaeter; g.spaeter=[]; gruenLauf(g,1);
+}
+/* Die zwei kleinen Zahlen: geprueft / moeglich. Waehrend des Rechnens gruen
+   mit "Stopp", angehalten mit offenen Zuegen in Messing mit "Weiter",
+   fertig nur die Zahlen. Weg, sobald die Anzeige nicht zu dieser Stellung
+   gehoert. */
+function renderZuegeStand(){
+  const e=$('zuegeStand'); if(!e) return;
+  const g=game.gruen;
+  const zeigen=g&&gruenAktiv()&&g.key===stateKey()&&!game.pauseAn;
+  e.hidden=!zeigen; if(!zeigen) return;
+  const n=g.gut.size+g.schlecht.size;
+  /* An der BRETTkante ausrichten, nicht an der Stage: auf kleinen Geraeten
+     begrenzt die Hoehe das Brett, es ist dann schmaler als die Stage und
+     der Stand laege rechts daneben (gemessen iPhone SE: Brett 317 px in
+     375 px Stage). */
+  const sr=$('stage').getBoundingClientRect(), br=boardSvg.getBoundingClientRect();
+  e.style.right=Math.round(sr.right-br.right+14)+'px'; e.style.bottom=Math.round(sr.bottom-br.bottom+14)+'px';
+  e.classList.toggle('laeuft',!!g.laeuft); e.classList.toggle('weiter',!g.laeuft&&g.zuGross);
+  e.innerHTML='<b>'+n+'/'+g.gesamt+'</b>'+(g.laeuft?'<span class="w"> · Stopp</span>':(g.zuGross?'<span class="w"> · Weiter</span>':''));
+  /* Passt das Wort noch in die freie Ecke? Auf einem 250 px breiten Brett
+     (360 x 600) ragte "4/12 · Weiter" in die Murmelreihe. Frei ist rechts
+     der letzten Murmel, die auf Hoehe des Standes liegt; reicht das nicht,
+     bleiben nur die Zahlen - der Tipp geht weiter (aria-label sagt wozu). */
+  e.classList.remove('kurz');
+  const eb=e.getBoundingClientRect(), m=boardSvg.getScreenCTM(), lay=game.lay;
+  if(m&&lay){ const R=34*m.a; let kante=br.left;
+    for(let i=0;i<game.board.n;i++){ const q=lay.pos[i]; const x=m.a*q.x+m.c*q.y+m.e, y=m.b*q.x+m.d*q.y+m.f;
+      if(y+R>eb.top&&x+R>kante) kante=x+R; }
+    if(eb.width>br.right-14-kante-4) e.classList.add('kurz'); }
+  e.setAttribute('aria-label',n+' von '+g.gesamt+' Zügen geprüft'+(g.laeuft?', tippen zum Anhalten':(g.zuGross?', tippen zum Weiterrechnen':'')));
+}
+$('zuegeStand').addEventListener('click',()=>{ const g=game.gruen; if(!g) return; if(g.laeuft) gruenStopp(); else if(g.zuGross) gruenWeiter(); });
 $('swGruen').addEventListener('click',()=>{ settings.gruen=!settings.gruen; saveSettings(); buildSheet();
   if(settings.gruen) gruenPlanen(); else { gruenAbbrechen(); renderOverlay(); } });
 

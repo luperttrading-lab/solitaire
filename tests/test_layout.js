@@ -411,6 +411,38 @@ const FAELLE=[
    await pc.close();
  }
 
+ /* Der Stand der Gruen-Analyse (v1.65) sitzt als kleines Feld unten rechts
+    UEBER dem Brett - in der Ecke, die auf dem Kreuzbrett frei ist - und darf
+    keine Brettflaeche kosten. */
+ for(const [name,w,h] of [['iPhone 14 Pro',393,852],['iPhone SE',375,667],['sehr klein',360,600]]){
+   const ps=await browser.newPage(); await ps.setViewport({width:w,height:h});
+   await ps.goto(url,{waitUntil:'load'}); await sleep(2300);
+   const r=await ps.evaluate(()=>{ settings.computer=true; settings.gruen=true; settings.zuege=true; newGame('english');
+     const vorher=Math.round(document.getElementById('board').getBoundingClientRect().width);
+     game.gruen={key:stateKey(),gesamt:4,gut:new Set([1,2]),schlecht:new Set(),offen:[],spaeter:[{}],laeuft:false,fertig:true,zuGross:true};
+     renderZuegeStand();
+     const e=document.getElementById('zuegeStand'), b=e.getBoundingClientRect(), bd=document.getElementById('board').getBoundingClientRect();
+     /* Die freie Ecke: rechts der Spalte 4 und unter der Zeile 4 des Kreuzes. */
+     const lay=game.lay, m=document.getElementById('board').getScreenCTM();
+     const eck=game.board.cells.map((c,i)=>i).filter(i=>game.board.cells[i].r>=4&&game.board.cells[i].c>=4)
+       .map(i=>{ const p=lay.pos[i]; return {x:m.a*p.x+m.c*p.y+m.e, y:m.b*p.x+m.d*p.y+m.f}; });
+     const R=34*m.a; // Murmelradius in px
+     const deckt=eck.some(p=>p.x+R>b.left&&p.y+R>b.top);
+     const sichtbar=!e.hidden, text=e.textContent;   // VOR dem Aufraeumen lesen (einmal danach gelesen: immer versteckt)
+     settings.gruen=false; settings.zuege=false; game.gruen=null; renderZuegeStand();
+     /* Trefferflaeche = Kasten plus unsichtbarer Rand (::after, inset) */
+     const rand=-parseFloat(getComputedStyle(e,'::after').top)||0;
+     return {sichtbar, text, imBrett:b.right<=bd.right+1&&b.bottom<=bd.bottom+1&&b.left>=bd.left, hoehe:Math.round(b.height), breite:Math.round(b.width),
+       treffH:Math.round(b.height+2*rand), treffB:Math.round(b.width+2*rand),
+       deckt, brettVorher:vorher, brett:Math.round(bd.width)}; });
+   console.log('INFO Stand '+name+': '+JSON.stringify(r));
+   ok('['+name+'] Der Stand liegt im Brett unten rechts', r.sichtbar===true&&r.imBrett===true, JSON.stringify(r));
+   ok('['+name+'] Und verdeckt keine Murmel des Kreuzes', r.deckt===false);
+   ok('['+name+'] Er kostet keine Brettflaeche', r.brett===r.brettVorher, r.brettVorher+' / '+r.brett);
+   ok('['+name+'] Er ist gross genug zum Treffen', r.treffH>=44&&r.treffB>=44, 'sichtbar '+r.breite+'x'+r.hoehe+', Treffer '+r.treffB+'x'+r.treffH);
+   await ps.close();
+ }
+
  /* Der Sockel legt nur den Schutzrand drauf, der nicht ohnehin schon unter
     dem Viewport liegt. Geprueft in beiden Lagen: Viewport = Bildschirm
     (Home-Bildschirm-App) und Viewport kuerzer (Safari mit Leiste). */
