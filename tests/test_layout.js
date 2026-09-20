@@ -440,6 +440,27 @@ const FAELLE=[
    ok('['+name+'] Und verdeckt keine Murmel des Kreuzes', r.deckt===false);
    ok('['+name+'] Er kostet keine Brettflaeche', r.brett===r.brettVorher, r.brettVorher+' / '+r.brett);
    ok('['+name+'] Er ist gross genug zum Treffen', r.treffH>=44&&r.treffB>=44, 'sichtbar '+r.breite+'x'+r.hoehe+', Treffer '+r.treffB+'x'+r.treffH);
+   /* Der Laufbalken (v1.67) liegt im freien Streifen neben dem Brett - und
+      muss auf jedem Geraet im Bild bleiben, ohne Brettflaeche zu kosten. */
+   const rb=await ps.evaluate(()=>{ settings.computer=true; settings.gruen=true; settings.zuege=true; newGame('english');
+     const vorher=Math.round(document.getElementById('board').getBoundingClientRect().width);
+     game.gruen={key:stateKey(),gesamt:12,gut:new Set([1,2,3,4,5,6,7]),schlecht:new Set(),offen:[],spaeter:[{}],laeuft:false,fertig:true,zuGross:true};
+     const b=document.getElementById('zuegeBalken'), st=document.getElementById('stage');
+     const mess=wie=>{ settings.balken=wie; renderZuegeStand();
+       const r=b.getBoundingClientRect(), sr=st.getBoundingClientRect(), bd=document.getElementById('board').getBoundingClientRect();
+       return {imStage:r.left>=sr.left-1&&r.right<=sr.right+1&&r.top>=sr.top-1&&r.bottom<=sr.bottom+1,
+         amBrett:wie==='rechts'?Math.abs(r.right-bd.right)<=16:Math.abs(r.bottom-bd.bottom)<=16,
+         dick:Math.round(wie==='rechts'?r.width:r.height), lang:Math.round(wie==='rechts'?r.height:r.width),
+         brett:Math.round(bd.width)}; };
+     const erg={rechts:mess('rechts'),unten:mess('unten'),vorher};
+     settings.balken='aus'; settings.gruen=false; settings.zuege=false; game.gruen=null; renderZuegeStand(); return erg; });
+   console.log('INFO Laufbalken '+name+': '+JSON.stringify(rb));
+   ok('['+name+'] Der Balken rechts bleibt im Bild und am Brett',
+      rb.rechts.imStage===true&&rb.rechts.amBrett===true&&rb.rechts.lang>60, JSON.stringify(rb.rechts));
+   ok('['+name+'] Der Balken unten bleibt im Bild und am Brett',
+      rb.unten.imStage===true&&rb.unten.amBrett===true&&rb.unten.lang>60, JSON.stringify(rb.unten));
+   ok('['+name+'] Er kostet keine Brettflaeche',
+      rb.rechts.brett===rb.vorher&&rb.unten.brett===rb.vorher, rb.vorher+' px');
    await ps.close();
  }
 

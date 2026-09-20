@@ -2113,12 +2113,15 @@ function kurzfassungGleich(proben,voll,erwartet){
     erg.subWeg=[...document.querySelectorAll('.row.sub[data-sub="computer"]')].every(r=>r.hidden);
     erg.subZahl=document.querySelectorAll('.row.sub[data-sub="computer"]').length;
     computerSetzen(true); buildSheet();
-    erg.subDa=[...document.querySelectorAll('.row.sub[data-sub="computer"]')].every(r=>!r.hidden);
+    /* Die Laufbalken-Zeile haengt seit v1.67 zusaetzlich am Gruen-Schalter
+       (data-sub2) - sie bleibt versteckt, solange Gruen aus ist, und gehoert
+       deshalb nicht in diese Zaehlung. */
+    erg.subDa=[...document.querySelectorAll('.row.sub[data-sub="computer"]:not([data-sub2])')].every(r=>!r.hidden);
     return erg; });
   console.log('INFO Menue Hilfe: '+JSON.stringify(mh));
   ok('Menue hat einen Abschnitt Hilfe', mh.ueberschrift.includes('Hilfe'), mh.ueberschrift.join(','));
   ok('Der Trainer-Schalter ist weg', mh.keinTrainer===true);
-  ok('Unterpunkte verschwinden, wenn Computer aus ist', mh.subWeg===true&&mh.subZahl===5, JSON.stringify(mh));   // 5 seit v1.62 (Gute Zuege gruen)
+  ok('Unterpunkte verschwinden, wenn Computer aus ist', mh.subWeg===true&&mh.subZahl===6, JSON.stringify(mh));   // 5 seit v1.62 (Gute Zuege gruen), 6 seit v1.67 (Laufbalken)
   ok('Unterpunkte kommen mit Computer an zurueck', mh.subDa===true);
 
   abschnitt='Migration Hilfe';
@@ -2568,10 +2571,63 @@ function kurzfassungGleich(proben,voll,erwartet){
   ok('Nach Weiter sind deutlich mehr Zuege entschieden', grEnde.g.fertig===true&&grEnde.g.n>=grStopp.g.n+2, grStopp.g.n+' -> '+grEnde.g.n+' von '+grEnde.g.gesamt);
   ok('Fertig ohne Rest zeigt nur die Zahlen, mit Rest Weiter',
      grEnde.g.zuGross?/ · Weiter$/.test(grEnde.text):/^\d+\/\d+$/.test(grEnde.text), grEnde.text);
+  /* Laufbalken (v1.67): drei Stellen zur Wahl, Lutz nach den Skizzen:
+     "Ich finde die Variante rechts und unten drunter gut und auch die
+     Variante im Anzeigefeld ... vielleicht kannst du sie ja im Menue zum
+     Auswaehlen machen." Geprueft wird die GEOMETRIE (senkrecht/waagerecht,
+     Fuellung = Anteil), nicht nur die Klasse. */
+  const grBalken=await page.evaluate(()=>{
+    const g=game.gruen; g.gesamt=12; g.gut=new Set([1,2,3,4,5,6,7]); g.schlecht=new Set(); g.laeuft=false; g.zuGross=true; g.fertig=true;
+    const b=document.getElementById('zuegeBalken'), st=document.getElementById('zuegeStand');
+    const mess=wie=>{ settings.balken=wie; renderZuegeStand();
+      const r=b.hidden?null:b.getBoundingClientRect(), f=b.hidden?null:b.firstElementChild.getBoundingClientRect();
+      const sr=st.getBoundingClientRect(), bd=document.getElementById('board').getBoundingClientRect();
+      return {versteckt:b.hidden, cls:b.className,
+        senkrecht:r?r.height>r.width*3:null, waagerecht:r?r.width>r.height*3:null,
+        anteil:r&&f?Math.round(100*(wie==='rechts'?f.height/r.height:f.width/r.width)):null,
+        ueberStand:r?(r.left<sr.right&&r.right>sr.left&&r.top<sr.bottom&&r.bottom>sr.top):null,
+        fort:st.style.getPropertyValue('--fort'), fuellung:st.classList.contains('fuellung'),
+        brett:Math.round(bd.width)}; };
+    const erg={aus:mess('aus'),rechts:mess('rechts'),unten:mess('unten'),feld:mess('feld')};
+    settings.balken='aus'; renderZuegeStand(); return erg; });
+  console.log('INFO Laufbalken: '+JSON.stringify(grBalken));
+  ok('Aus: kein Balken und keine Fuellung im Feld',
+     grBalken.aus.versteckt===true&&grBalken.aus.fuellung===false, JSON.stringify(grBalken.aus));
+  ok('Rechts: senkrechter Balken, Fuellung 58 % (7 von 12)',
+     grBalken.rechts.versteckt===false&&grBalken.rechts.senkrecht===true&&Math.abs(grBalken.rechts.anteil-58)<=1,
+     JSON.stringify(grBalken.rechts));
+  ok('Unten: waagerechter Balken, Fuellung 58 %',
+     grBalken.unten.versteckt===false&&grBalken.unten.waagerecht===true&&Math.abs(grBalken.unten.anteil-58)<=1,
+     JSON.stringify(grBalken.unten));
+  ok('Im Anzeigefeld: kein eigener Balken, Feld gefuellt',
+     grBalken.feld.versteckt===true&&grBalken.feld.fuellung===true&&grBalken.feld.fort==='58%',
+     JSON.stringify(grBalken.feld));
+  ok('Kein Balken verdeckt die Zahlen',
+     grBalken.rechts.ueberStand===false&&grBalken.unten.ueberStand===false);
+  ok('Der Balken kostet keine Brettflaeche',
+     grBalken.aus.brett===grBalken.rechts.brett&&grBalken.aus.brett===grBalken.unten.brett, grBalken.aus.brett+' px');
+  /* Im Menue waehlbar - und die Zeile haengt am Gruen-Schalter: ohne Analyse
+     gaebe es keinen Fortschritt zu zeigen. */
+  const grMenue=await page.evaluate(()=>{ openSheet();
+    const row=document.getElementById('balkenList').closest('.row');
+    const chips=[...document.getElementById('balkenList').children].map(c=>c.textContent);
+    const mitGruen=!row.hidden;
+    settings.gruen=false; buildSheet(); const ohneGruen=row.hidden;
+    settings.gruen=true; buildSheet();
+    document.getElementById('balkenList').children[1].click();
+    const nachKlick={balken:settings.balken, an:[...document.getElementById('balkenList').children].findIndex(c=>c.classList.contains('on'))};
+    settings.balken='aus'; buildSheet(); closeSheet(); renderZuegeStand();
+    return {chips,mitGruen,ohneGruen,nachKlick,sub:row.dataset.sub}; });
+  console.log('INFO Menue Laufbalken: '+JSON.stringify(grMenue));
+  ok('Vier Chips zur Wahl unter Computer', grMenue.chips.length===4&&grMenue.sub==='computer'&&grMenue.mitGruen===true, JSON.stringify(grMenue.chips));
+  ok('Ohne Gruen-Schalter ist die Zeile weg', grMenue.ohneGruen===true);
+  ok('Ein Chip stellt den Balken um', grMenue.nachKlick.balken==='rechts'&&grMenue.nachKlick.an===1, JSON.stringify(grMenue.nachKlick));
+
   const grStandZug=await page.evaluate(()=>{ settings.computer=false;
     const m=game.board.moves.find(x=>game.pegAt[x.from]>=0&&game.pegAt[x.over]>=0&&game.pegAt[x.to]<0); applyMove(m,true); render();
-    const h=document.getElementById('zuegeStand').hidden; settings.computer=true; return h; });
-  ok('Nach einem Zug ist der alte Stand weg', grStandZug===true);
+    const h=document.getElementById('zuegeStand').hidden, hb=document.getElementById('zuegeBalken').hidden;
+    settings.computer=true; return {h,hb}; });
+  ok('Nach einem Zug sind Stand und Balken weg', grStandZug.h===true&&grStandZug.hb===true, JSON.stringify(grStandZug));
   await page.evaluate(()=>{ gruenAbbrechen(); settings.gruen=false; settings.zuege=false; saveSettings(); newGame('english'); });
 
   /* Rangliste: eine Partie mit gruenen Zuegen setzt keine Bestleistung und
