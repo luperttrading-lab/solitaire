@@ -2694,8 +2694,9 @@ function kurzfassungGleich(proben,voll,erwartet){
     await sleep(120);
     const box=await page.evaluate(()=>{ const m=boardSvg.getScreenCTM(), l=currentLine(),
       mv=game.board.moves[l.path[0]], q=game.lay.pos[mv.to];
-      const x=m.a*q.x+m.c*q.y+m.e, y=m.b*q.x+m.d*q.y+m.f, R=60*m.a;
-      return {x:Math.round(x-R),y:Math.round(y-R),width:Math.round(2*R),height:Math.round(2*R)}; });
+      const x=m.a*q.x+m.c*q.y+m.e, y=m.b*q.x+m.d*q.y+m.f, R=95*m.a;
+      return {x:Math.round(x-R),y:Math.round(y-R),width:Math.round(2*R),height:Math.round(2*R),
+        mx:x,my:y,sk:m.a}; });
     const ruhe=PNG.sync.read(await page.screenshot({clip:box}));
     await page.evaluate(()=>{ const l=currentLine(); playMove(game.board.moves[l.path[0]]); });
     await sleep(430);                      // 230 ms Zug + rund 200 ms in den Schein hinein
@@ -2704,6 +2705,8 @@ function kurzfassungGleich(proben,voll,erwartet){
       const alle=[...boardSvg.children];
       return {kreise:document.querySelectorAll('#board circle.landung').length,
         r:c?parseFloat(c.getAttribute('r')):null, op:c?parseFloat(c.getAttribute('fill-opacity')):null,
+        fill:c?c.getAttribute('fill'):null,
+        verlaufDa:c?!!document.querySelector('#board defs radialGradient[id^=mlnd]'):null,
         hinterStein:c?alle.indexOf(c.parentNode)<alle.indexOf(pegsLayer):null,
         imOverlay:c?c.parentNode===overlayLayer:null}; });
     await sleep(800);
@@ -2712,15 +2715,36 @@ function kurzfassungGleich(proben,voll,erwartet){
       const dR=B.data[k]-A.data[k], dG=B.data[k+1]-A.data[k+1], dB=B.data[k+2]-A.data[k+2];
       if(dG-Math.max(dR,dB)>30) n++; } return n; };
     const weg=await page.evaluate(()=>document.querySelectorAll('#board circle.landung').length);
-    return {jetzt, waehrend:gruenstich(ruhe,mitte), danach:gruenstich(ruhe,danach), weg};
+    /* Hof oder Kranz? Ein Kranz haette bis zu seiner harten Kante ueberall
+       dieselbe Staerke. Gemessen wird deshalb die mittlere Gruen-Zunahme auf
+       ZWEI Ringen um das Zielfeld - nah an der Murmel und weit aussen. */
+    const ring=(A,B,radius)=>{ let sum=0,n=0;
+      for(let i=0;i<24;i++){ const w=i/24*2*Math.PI;
+        const px=Math.round((box.mx+Math.cos(w)*radius*box.sk-box.x)*2);
+        const py=Math.round((box.my+Math.sin(w)*radius*box.sk-box.y)*2);
+        const k=(py*A.width+px)*4; if(k<0||k+2>=A.data.length) continue;
+        sum+=(B.data[k+1]-A.data[k+1])-Math.max(B.data[k]-A.data[k],B.data[k+2]-A.data[k+2]); n++; }
+      return n?Math.round(sum/n):0; };
+    return {jetzt, waehrend:gruenstich(ruhe,mitte), danach:gruenstich(ruhe,danach), weg,
+      innen:ring(ruhe,mitte,44), aussen:ring(ruhe,mitte,72)};
   };
   const lsNorm=await lsMess(false);
   console.log('INFO Landeschein normal: '+JSON.stringify(lsNorm));
   ok('Der Schein ist nach dem Sprung wirklich zu sehen', lsNorm.waehrend>500, lsNorm.waehrend+' gruene Bildpunkte');
   ok('Er liegt HINTER dem Stein, nicht im Overlay',
      lsNorm.jetzt.hinterStein===true&&lsNorm.jetzt.imOverlay===false, JSON.stringify(lsNorm.jetzt));
-  ok('Er waechst ueber die Murmel hinaus', lsNorm.jetzt.r>34&&lsNorm.jetzt.r<=54, String(lsNorm.jetzt.r));
+  /* Seit v1.70 ein weicher Hof wie der Ampel-Schein, kein Kranz (Lutz):
+     fester Radius, deutlich groesser als die Murmel, gefuellt mit einem
+     radialen Verlauf - und nach aussen merklich schwaecher. */
+  ok('Er ist deutlich groesser als die Murmel und ein Verlauf, kein Vollton',
+     lsNorm.jetzt.r===80&&/^url\(#mlnd/.test(lsNorm.jetzt.fill||''), JSON.stringify({r:lsNorm.jetzt.r,fill:lsNorm.jetzt.fill}));
+  ok('Er laeuft nach aussen aus - ein Hof, kein Kranz',
+     lsNorm.innen>25&&lsNorm.aussen*2<lsNorm.innen, 'innen '+lsNorm.innen+', aussen '+lsNorm.aussen);
   ok('Danach ist er weg und raeumt sich ab', lsNorm.danach===0&&lsNorm.weg===0, lsNorm.danach+' / '+lsNorm.weg);
+  /* Der Verlauf gehoert zum Lauf und muss mit ihm verschwinden - sonst
+     wuechse defs mit jedem Sprung um einen Eintrag. */
+  const lsDefs=await page.evaluate(()=>document.querySelectorAll('#board defs radialGradient[id^=mlnd]').length);
+  ok('Auch sein Verlauf wird wieder entfernt', lsNorm.jetzt.verlaufDa===true&&lsDefs===0, lsNorm.jetzt.verlaufDa+' / '+lsDefs);
   const lsRed=await lsMess(true);
   console.log('INFO Landeschein mit reduzierter Bewegung: '+JSON.stringify(lsRed));
   ok('Auch mit reduzierter Bewegung ist er zu sehen', lsRed.waehrend>500, lsRed.waehrend+' gruene Bildpunkte');
