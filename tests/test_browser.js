@@ -1369,29 +1369,36 @@ function kurzfassungGleich(proben,voll,erwartet){
     const erg={vorhanden:!!g, ruheFill:g&&g.getAttribute('fill'),
       ruheOpacity:g&&g.getAttribute('fill-opacity'),
       anzahl:pegsLayer.querySelectorAll('.glanz').length, steine:pegCount()};
-    /* Der Glanz ist ein Kreis in Murmelgroesse - er deckt sie, statt von
-       aussen durch einen Ausschnitt hereingeschoben zu werden. Damit gibt es
-       keine Stellung, in der er daneben liegt. */
-    const rg=g.getBoundingClientRect(), rk=kugel.getBoundingClientRect();
-    const ueber=Math.max(0,Math.min(rg.right,rk.right)-Math.max(rg.left,rk.left))
-               *Math.max(0,Math.min(rg.bottom,rk.bottom)-Math.max(rg.top,rk.top));
-    erg.deckung=rk.width*rk.height>0?ueber/(rk.width*rk.height):0;
+    /* Seit v1.74 ein wandernder Lichtpunkt statt eines wandernden Verlaufs.
+       Die entscheidende Frage ist deshalb eine andere: Bleibt er auf JEDEM
+       Schritt seiner Bahn ganz in der Murmel? Nur dann braucht es keinen
+       Ausschnitt - und nur dann kann die Falle aus v1.39 (Streifen neben der
+       Murmel) gar nicht wiederkommen. Gerechnet, nicht gemessen: der
+       aeusserste Punkt ist |w|*sqrt(2) + GLANZ_R. */
+    const k=pegsLayer.querySelector('[data-idx="'+erst+'"] .glanzpunkt');
+    erg.rGlanz=parseFloat(g.getAttribute('r'));
+    erg.weg=GLANZ_WEG; erg.rPeg=R_PEG; erg.ruhePunkt=k&&k.getAttribute('fill-opacity');
+    erg.ragtRaus=Math.abs(GLANZ_WEG)*Math.SQRT2+GLANZ_PR-R_PEG;
     glanzAn(erst);
     await new Promise(r=>setTimeout(r,60));
-    erg.frueh=(g.getAttribute('fill')||'').match(/url\(#(.*)\)/);
-    erg.fruehStops=erg.frueh?[...document.getElementById(erg.frueh[1]).children].map(e=>e.getAttribute('offset')).join(','):'';
-    erg.frueh=!!erg.frueh;
+    erg.fruehPos=k.getAttribute('cx')+','+k.getAttribute('cy');
     await new Promise(r=>setTimeout(r,240));
     erg.mitteOpacity=parseFloat(g.getAttribute('fill-opacity'));
-    const m2=(g.getAttribute('fill')||'').match(/url\(#(.*)\)/);
-    erg.mitteStops=m2?[...document.getElementById(m2[1]).children].map(e=>e.getAttribute('offset')).join(','):'';
-    erg.verlaeufeLaufend=document.querySelectorAll('defs linearGradient[id^="mglz"]').length;
+    erg.mittePunkt=parseFloat(k.getAttribute('fill-opacity'));
+    erg.mittePos=k.getAttribute('cx')+','+k.getAttribute('cy');
+    erg.fill=g.getAttribute('fill');
+    /* EIN gemeinsamer statischer Verlauf - er waechst nicht mit den Laeufen
+       und wird nie veraendert. Genau das war der Verdacht: die animierten
+       Stops waren die einzige Konstruktion dieser Art in der Datei. */
+    erg.verlaeufeLaufend=document.querySelectorAll('defs #glanzHof, defs #glanzKern').length;
+    erg.stopsLaufend=[...document.querySelectorAll('defs #glanzHof stop, defs #glanzKern stop')].map(e=>e.getAttribute('offset')).join(',');
+    erg.alteVerlaeufe=document.querySelectorAll('defs linearGradient[id^="mglz"]').length;
     await new Promise(r=>setTimeout(r,900));
     erg.endeOpacity=parseFloat(g.getAttribute('fill-opacity'));
-    erg.endeFill=g.getAttribute('fill');
-    /* Der eigene Verlauf wird nach dem Lauf wieder abgeraeumt, sonst waechst
-       defs mit jedem Funkeln. */
-    erg.verlaeufeDanach=document.querySelectorAll('defs linearGradient[id^="mglz"]').length;
+    erg.endePunkt=parseFloat(k.getAttribute('fill-opacity'));
+    erg.endePos=k.getAttribute('cx')+','+k.getAttribute('cy');
+    erg.stopsDanach=[...document.querySelectorAll('defs #glanzHof stop, defs #glanzKern stop')].map(e=>e.getAttribute('offset')).join(',');
+    erg.verlaeufeDanach=document.querySelectorAll('defs #glanzHof, defs #glanzKern').length;
     settings.funkeln=false; glanzAn(erst);
     await new Promise(r=>setTimeout(r,120));
     erg.ausOpacity=parseFloat(g.getAttribute('fill-opacity'));
@@ -1411,20 +1418,29 @@ function kurzfassungGleich(proben,voll,erwartet){
      glanz.vorhanden===true&&glanz.anzahl===glanz.steine,
      glanz.anzahl+' Knoten bei '+glanz.steine+' Steinen');
   ok('In Ruhe ist er unsichtbar',
-     glanz.ruheOpacity==='0'&&glanz.ruheFill==='none',
-     glanz.ruheOpacity+' / '+glanz.ruheFill);
-  ok('Der Glanz deckt die Murmel, statt daneben zu liegen',
-     glanz.deckung>0.95, 'Deckung '+(glanz.deckung*100).toFixed(1)+' %');
-  ok('Mitten im Lauf ist er sichtbar', glanz.mitteOpacity>0.3, String(glanz.mitteOpacity));
-  ok('Der Streifen wandert (die Stops verschieben sich)',
-     glanz.frueh===true&&glanz.fruehStops!==''&&glanz.fruehStops!==glanz.mitteStops,
-     glanz.fruehStops+'  ->  '+glanz.mitteStops);
-  ok('Danach ist er wieder unsichtbar',
-     glanz.endeOpacity===0&&glanz.endeFill==='none',
-     glanz.endeOpacity+' / '+glanz.endeFill);
-  ok('Der eigene Verlauf wird abgeraeumt',
-     glanz.verlaeufeLaufend===1&&glanz.verlaeufeDanach===0,
-     glanz.verlaeufeLaufend+' waehrend, '+glanz.verlaeufeDanach+' danach');
+     glanz.ruheOpacity==='0'&&glanz.ruhePunkt==='0'&&/^url\(#glanzHof\)$/.test(glanz.ruheFill||''),
+     glanz.ruheOpacity+' / '+glanz.ruhePunkt+' / '+glanz.ruheFill);
+  /* Der Hof hat Murmelgroesse und steht still, der Punkt wandert - nur er
+     koennte ueberhaupt hinausragen. */
+  ok('Der Hof hat Murmelgroesse', glanz.rGlanz===glanz.rPeg, glanz.rGlanz+' gegen '+glanz.rPeg);
+  ok('Der Lichtpunkt verlaesst die Murmel auf seiner ganzen Bahn nicht',
+     glanz.ragtRaus<0, 'aeusserster Punkt liegt '+(-glanz.ragtRaus).toFixed(2)+' Einheiten innerhalb von R_PEG='+glanz.rPeg);
+  ok('Mitten im Lauf sind Hof und Punkt sichtbar',
+     glanz.mitteOpacity>0.3&&glanz.mittePunkt>0.3, glanz.mitteOpacity+' / '+glanz.mittePunkt);
+  /* v1.74: Bewegt wird der KREIS ueber cx/cy, nicht der Verlauf ueber seine
+     Stops - das ist der ganze Umbau, also wird genau das geprueft. */
+  ok('Der Lichtpunkt wandert ueber cx/cy',
+     glanz.fruehPos!==glanz.mittePos&&glanz.fruehPos!=='0,0',
+     glanz.fruehPos+'  ->  '+glanz.mittePos);
+  ok('Und sein Verlauf bleibt dabei unveraendert',
+     glanz.stopsLaufend===glanz.stopsDanach&&glanz.stopsLaufend!=='',
+     glanz.stopsLaufend+'  ->  '+glanz.stopsDanach);
+  ok('Danach ist er wieder unsichtbar und steht in der Mitte',
+     glanz.endeOpacity===0&&glanz.endePunkt===0&&glanz.endePos==='0,0',
+     glanz.endeOpacity+' / '+glanz.endePunkt+' / '+glanz.endePos);
+  ok('Zwei gemeinsame Verlaeufe, die nicht mitwachsen - und keine alten mehr',
+     glanz.verlaeufeLaufend===2&&glanz.verlaeufeDanach===2&&glanz.alteVerlaeufe===0,
+     glanz.verlaeufeLaufend+' waehrend, '+glanz.verlaeufeDanach+' danach, '+glanz.alteVerlaeufe+' alte');
   ok('Abgeschaltet bleibt er aus', glanz.ausOpacity===0, String(glanz.ausOpacity));
   ok('Ein beruehrter Stein funkelt',
      glanz.beiTipp.length===1&&glanz.beiTipp[0]===glanz.getippt,
@@ -2681,6 +2697,94 @@ function kurzfassungGleich(proben,voll,erwartet){
      abwarten und schliessen, sonst faengt es die naechsten Klicks ab. */
   await sleep(500);
   await page.evaluate(()=>{ hideModal('resultModal'); settings.gruen=false; settings.zuege=false; settings.autoJump=true; saveSettings(); newGame('english'); });
+
+  abschnitt='Farben sortiert oder durcheinander';
+  /* Lutz am 20.09.2026: "bei den bunten Steinen die dritte Version, die sind
+     farblich sortiert. Sie koennten durcheinander sein ... ein Knopf fuer
+     sortiert, so wie sie jetzt sind, oder auf einen anderen Knopf wahllos
+     durcheinander."
+     Die Farbe haengt an der Steinnummer, und die laeuft zeilenweise ueber das
+     Brett - beim Regenbogen ergibt das einen glatten Farbverlauf. Genau das
+     wird zuerst gemessen, sonst waere "sortiert" nur behauptet. */
+  const mixSort=await page.evaluate(()=>{
+    /* Die Farbpunkte wirken nur unter "Eigene Kombination" - unter einem
+       fertigen Thema entscheidet dessen Farbe. Einmal hineingetappt. */
+    settings.theme='eigene'; settings.pegStyle='glas'; settings.boardLook='samtblau';
+    settings.pegColor='regenbogen'; settings.mischung='sortiert'; saveSettings();
+    newGame('english'); applyLook();
+    const n=game.board.n;
+    const h=[]; for(let i=0;i<n;i++) h.push(Math.round(farbId(i)/Math.max(1,n)*360));
+    let steigend=0; for(let i=1;i<n;i++) if(h[i]>h[i-1]) steigend++;
+    return {mix:game.farbMix,steigend,paare:n-1};
+  });
+  console.log('INFO Farben sortiert: '+JSON.stringify(mixSort));
+  ok('Ab Werk stehen die Farben sortiert - der Regenbogen laeuft glatt durch',
+     mixSort.mix===null&&mixSort.steigend===mixSort.paare,
+     mixSort.steigend+' von '+mixSort.paare+' Schritten aufsteigend');
+  const mixZuf=await page.evaluate(()=>{
+    settings.mischung='zufall'; saveSettings(); newGame('english'); applyLook();
+    const n=game.board.n, m=game.farbMix.slice();
+    /* Eine Permutation, keine Zufallszahlen: jede Nummer genau einmal. Damit
+       kommt jede Farbe genauso oft vor wie vorher, nur woanders. */
+    const gesehen=new Array(n).fill(0); m.forEach(v=>{ if(v>=0&&v<n) gesehen[v]++; });
+    const h=[]; for(let i=0;i<n;i++) h.push(Math.round(farbId(i)/Math.max(1,n)*360));
+    let steigend=0; for(let i=1;i<n;i++) if(h[i]>h[i-1]) steigend++;
+    const anders=m.filter((v,i)=>v!==i).length;
+    return {permutation:gesehen.every(v=>v===1),steigend,paare:n-1,anders,n,erst:m.slice()};
+  });
+  console.log('INFO Farben durcheinander: '+JSON.stringify(mixZuf));
+  ok('Durcheinander ist eine echte Permutation - jede Farbe kommt gleich oft vor',
+     mixZuf.permutation===true, JSON.stringify(mixZuf.erst.slice(0,8))+' …');
+  ok('Und der Regenbogen laeuft dann nicht mehr glatt durch',
+     mixZuf.steigend<mixZuf.paare-3&&mixZuf.anders>mixZuf.n/2,
+     mixZuf.steigend+' von '+mixZuf.paare+' aufsteigend, '+mixZuf.anders+' Steine umgefaerbt');
+  /* Was man SIEHT und was die App SAGT, muss dasselbe sein. Der Farbwert
+     steckt im Namen des Verlaufs (mpg_glas_c62828) - damit laesst sich die
+     Murmel unabhaengig von farbId() auslesen. Genau hier waere der Fehler
+     entstanden, haette nur renderPegs die Mischung benutzt und pegName nicht. */
+  const mixName=await page.evaluate(()=>{
+    settings.theme='eigene'; settings.pegColor='bunt'; saveSettings();
+    newGame('english'); applyLook();
+    let geprueft=0, falsch=[];
+    pegsLayer.querySelectorAll('[data-peg]').forEach(gEl=>{
+      const id=+gEl.dataset.peg;
+      const k=gEl.querySelector('circle[fill^="url(#mpg_"]');
+      if(!k) return;
+      const hex='#'+k.getAttribute('fill').replace(/^url\(#|\)$/g,'').split('_').pop();
+      geprueft++;
+      if(HEX_NAMES[hex]!==pegName(id)) falsch.push({id,hex,sagt:pegName(id)});
+    });
+    return {geprueft,falsch:falsch.slice(0,3),zahl:falsch.length};
+  });
+  console.log('INFO Farbname gegen Murmel: '+JSON.stringify(mixName));
+  ok('Der genannte Farbname gehoert zu der Murmel, die man sieht',
+     mixName.geprueft>20&&mixName.zahl===0, mixName.geprueft+' geprueft, '+mixName.zahl+' falsch '+JSON.stringify(mixName.falsch));
+  const mixDauer=await page.evaluate(async()=>{
+    const vor=game.farbMix.slice();
+    playMove(game.board.moves[currentLine().path[0]]);
+    await new Promise(r=>setTimeout(r,400));
+    undo(); await new Promise(r=>setTimeout(r,1300));
+    const nachUndo=game.farbMix.slice();
+    newGame('english');
+    const nachNeu=game.farbMix.slice();
+    return {gleichNachUndo:vor.join()===nachUndo.join(), neuGemischt:vor.join()!==nachNeu.join()};
+  });
+  ok('Dieselbe Partie behaelt ihre Farben, ein neues Spiel mischt neu',
+     mixDauer.gleichNachUndo===true&&mixDauer.neuGemischt===true, JSON.stringify(mixDauer));
+  const mixMenue=await page.evaluate(()=>{
+    settings.theme='eigene'; settings.pegColor='bunt'; buildSheet();
+    const bunt={da:!$('mischList').hidden, chips:[...$('mischList').children].map(c=>c.textContent),
+      an:[...$('mischList').children].filter(c=>c.classList.contains('on')).map(c=>c.textContent)};
+    settings.pegColor='rot'; buildSheet();
+    const einfarbig=!$('mischList').hidden;
+    settings.theme='glas'; settings.pegColor='bunt'; settings.mischung='sortiert';
+    saveSettings(); buildSheet(); newGame('english'); applyLook();
+    return {bunt,einfarbig};
+  });
+  console.log('INFO Menue Mischung: '+JSON.stringify(mixMenue));
+  ok('Zwei Knoepfe unter den Farbpunkten, nur bei den bunten Saetzen',
+     mixMenue.bunt.da===true&&mixMenue.bunt.chips.join('/')==='Sortiert/Durcheinander'
+     &&mixMenue.bunt.an.length===1&&mixMenue.einfarbig===false, JSON.stringify(mixMenue));
 
   abschnitt='Gruener Schein beim Sprung';
   /* Wunsch von Lutz (20.09.2026): "dass der Stein der springt auch im
