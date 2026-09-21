@@ -622,7 +622,7 @@ header .boardname:active{background:var(--panel2)}
 
 <script>
 'use strict';
-const APP_VERSION='1.74';
+const APP_VERSION='1.75';
 /* =========================================================================
    Kern: Bretter, Züge, Symmetrien, Paritäts-Schranke, Solver
    (als Fabrik, damit derselbe Code im Web Worker läuft)
@@ -1069,6 +1069,32 @@ function layoutBoard(board){
   else { const S=board.def.size; W=S*P+2*MARG; H=2*MARG+P+(S-1)*P*0.866; board.cells.forEach(c=>pos.push({x:MARG+P/2+(c.c+(S-1-c.r)/2)*P,y:MARG+P/2+c.r*P*0.866})); }
   return {W,H,pos};
 }
+/* Wie sehr sich das Brett vom Hintergrund abhebt - gerechnet, nicht geschaetzt
+   (v1.75). Lutz am 21.09.2026 mit Screenshot: "Bei den dunklen Spielbrettern
+   verschwindet das Brett unten durch den dunklen Rand."
+   Die Ursache steht im Code: der Rahmen (#edge) laeuft von Weiss .22 oben nach
+   SCHWARZ .35 unten - die Unterkante wird also ausdruecklich abgedunkelt. Auf
+   einem Hintergrund von #17120e ist das bei dunklen Brettern toedlich.
+   Gemessen (Fuellung unten + Kante gegen den Hintergrund, Abstand im RGB-Raum
+   und Helligkeitsunterschied):
+     Samt schwarz  11 / -6   <- dunkler ALS der Hintergrund
+     Neon          23 / -14  <- ebenso
+     Nussbaum      21 / +11  (Lutz' Screenshot)
+     Schiefer      22 / +10
+     Samt blau     27 /  +1  (das Standardthema!)
+     Filz          44 / +25
+     Holz          50 / +28
+     Marmor       172 / +100 <- braucht nichts
+   Die Staerke wird daraus abgeleitet: was an SCHIMMER_SOLL fehlt, wird
+   aufgefuellt. Marmor bekommt damit von allein null. */
+const SCHIMMER_SOLL=70, BG_HEX='#17120e';
+function schimmerStaerke(base){
+  const bg=hexToRgb(BG_HEX);
+  /* Die Unterkante: Fuellung abgedunkelt, darueber die schwarze Kante. */
+  const f=hexToRgb(darken(base,.3)).map(v=>v*0.65);
+  const d=Math.hypot(f[0]-bg[0],f[1]-bg[1],f[2]-bg[2]);
+  return Math.max(0,Math.min(1,(SCHIMMER_SOLL-d)/SCHIMMER_SOLL));
+}
 function trayMarkup(board,lay,look,idPrefix){
   const L=BOARD_LOOKS[look]||BOARD_LOOKS.holz; const base=L.base;
   let defs='', fill=`url(#${idPrefix}tray)`;
@@ -1092,12 +1118,34 @@ function trayMarkup(board,lay,look,idPrefix){
   defs+=`<linearGradient id="${idPrefix}edge" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".22"/><stop offset="1" stop-color="#000" stop-opacity=".35"/></linearGradient>`;
   let shape;
   const m=MARG*0.35;
+  /* Der Schimmer liegt in den 24,5 Einheiten Rand, die zwischen Brettkante und
+     Viewbox ohnehin frei sind (MARG*0.35) - er kostet also KEINE Brettflaeche.
+     3 sigma + Versatz = 3*6 + 4 = 22 < 24,5, damit schneidet die Viewbox ihn
+     unten nicht ab; genau dort wird er am meisten gebraucht.
+     Er traegt die aufgehellte Brettfarbe, nicht Weiss: ein warmer Hof um ein
+     blaues Brett saehe nach Fremdlicht aus. */
+  const st=schimmerStaerke(base);
+  const schimmerFarbe=lighten(base,.55), kante=lighten(base,.62);
+  let schimmer='', saum='';
+  if(st>0.02){
+    defs+=`<filter id="${idPrefix}schimmer" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="6"/></filter>`;
+  }
   if(board.def.type==='grid'){
-    shape=`<rect x="${m}" y="${m}" width="${lay.W-2*m}" height="${lay.H-2*m}" rx="46" fill="${fill}"/><rect x="${m}" y="${m}" width="${lay.W-2*m}" height="${lay.H-2*m}" rx="46" fill="url(#${idPrefix}grain)"/><rect x="${m+3}" y="${m+3}" width="${lay.W-2*m-6}" height="${lay.H-2*m-6}" rx="43" fill="none" stroke="url(#${idPrefix}edge)" stroke-width="6"/>`;
+    if(st>0.02){
+      schimmer=`<rect x="${m}" y="${m+4}" width="${lay.W-2*m}" height="${lay.H-2*m}" rx="46" fill="${schimmerFarbe}" opacity="${(st*0.5).toFixed(3)}" filter="url(#${idPrefix}schimmer)"/>`;
+      /* Der Saum ist die Versicherung: ein weicher Hof kann bei sehr dunklen
+         Brettern untergehen, eine Haarlinie auf der Kante nie. */
+      saum=`<rect x="${m+0.9}" y="${m+0.9}" width="${lay.W-2*m-1.8}" height="${lay.H-2*m-1.8}" rx="45" fill="none" stroke="${kante}" stroke-width="1.8" opacity="${(0.10+st*0.30).toFixed(3)}"/>`;
+    }
+    shape=schimmer+`<rect x="${m}" y="${m}" width="${lay.W-2*m}" height="${lay.H-2*m}" rx="46" fill="${fill}"/><rect x="${m}" y="${m}" width="${lay.W-2*m}" height="${lay.H-2*m}" rx="46" fill="url(#${idPrefix}grain)"/><rect x="${m+3}" y="${m+3}" width="${lay.W-2*m-6}" height="${lay.H-2*m-6}" rx="43" fill="none" stroke="url(#${idPrefix}edge)" stroke-width="6"/>`+saum;
   } else {
     const ax=lay.W/2, ay=m+30, bx=m+24, by=lay.H-m-12, cx=lay.W-m-24, cy=by;
     const pts=`${ax},${ay} ${cx},${cy} ${bx},${by}`;
-    shape=`<polygon points="${pts}" fill="${fill}" stroke="${fill}" stroke-width="70" stroke-linejoin="round"/><polygon points="${pts}" fill="url(#${idPrefix}grain)" stroke="url(#${idPrefix}grain)" stroke-width="70" stroke-linejoin="round"/><polygon points="${pts}" fill="none" stroke="url(#${idPrefix}edge)" stroke-width="6" stroke-linejoin="round" transform="translate(0,-2)"/>`;
+    if(st>0.02){
+      schimmer=`<polygon points="${pts}" fill="${schimmerFarbe}" stroke="${schimmerFarbe}" stroke-width="70" stroke-linejoin="round" opacity="${(st*0.5).toFixed(3)}" filter="url(#${idPrefix}schimmer)" transform="translate(0,4)"/>`;
+      saum=`<polygon points="${pts}" fill="none" stroke="${kante}" stroke-width="1.8" stroke-linejoin="round" opacity="${(0.10+st*0.30).toFixed(3)}" transform="translate(0,0)" style="stroke-dasharray:none"/>`;
+    }
+    shape=schimmer+`<polygon points="${pts}" fill="${fill}" stroke="${fill}" stroke-width="70" stroke-linejoin="round"/><polygon points="${pts}" fill="url(#${idPrefix}grain)" stroke="url(#${idPrefix}grain)" stroke-width="70" stroke-linejoin="round"/><polygon points="${pts}" fill="none" stroke="url(#${idPrefix}edge)" stroke-width="6" stroke-linejoin="round" transform="translate(0,-2)"/>`+saum;
   }
   return {defs,shape};
 }

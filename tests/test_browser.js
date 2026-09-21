@@ -2698,6 +2698,75 @@ function kurzfassungGleich(proben,voll,erwartet){
   await sleep(500);
   await page.evaluate(()=>{ hideModal('resultModal'); settings.gruen=false; settings.zuege=false; settings.autoJump=true; saveSettings(); newGame('english'); });
 
+  abschnitt='Brettkante gegen den Hintergrund';
+  /* Lutz am 21.09.2026 mit Screenshot: "Bei den dunklen Spielbrettern
+     verschwindet das Brett unten durch den dunklen Rand. Vielleicht kannst du
+     unter dem Brett einen leichten Schimmer machen, so wie ein schwebendes
+     Brett."
+     Gemessen wird, was die Frage wirklich stellt: Ist die Unterkante ZU SEHEN?
+     Also der groesste Helligkeitssprung zwischen benachbarten Zeilen quer
+     ueber die Brettbreite. Eine Pruefung auf "Schimmer-Element vorhanden"
+     saehe das nicht - derselbe Fehlertyp wie beim unsichtbaren Glanz. */
+  const kanteMessen=async(L)=>{
+    await page.evaluate(l=>{ settings.theme='eigene'; settings.boardLook=l;
+      settings.pegStyle='glas'; settings.pegColor='bunt'; settings.mischung='sortiert';
+      settings.funkeln=false; settings.computer=false; settings.zuege=false;
+      newGame('english'); applyLook(); },L);
+    await sleep(150);
+    const box=await page.evaluate(()=>{ const r=boardSvg.getBoundingClientRect();
+      return {x:Math.round(r.left+r.width*0.3),y:Math.round(r.bottom-22),
+        width:Math.round(r.width*0.4),height:44,breite:Math.round(r.width)}; });
+    const img=PNG.sync.read(await page.screenshot({clip:{x:box.x,y:box.y,width:box.width,height:box.height}}));
+    const lum=k=>img.data[k]*.299+img.data[k+1]*.587+img.data[k+2]*.114;
+    let best=0;
+    for(let y=1;y<img.height;y++){ let s=0;
+      for(let x=0;x<img.width;x++){ const a=(y*img.width+x)*4, b=((y-1)*img.width+x)*4; s+=Math.abs(lum(a)-lum(b)); }
+      const m=s/img.width; if(m>best) best=m; }
+    return {sprung:+best.toFixed(1), breite:box.breite};
+  };
+  const kLooks=['holz','holzdunkel','filz','samtblau','samtschwarz','schiefer','neon','marmor'];
+  const kErg={}; for(const L of kLooks) kErg[L]=await kanteMessen(L);
+  console.log('INFO Brettkante: '+JSON.stringify(kErg));
+  const kSchwach=Object.entries(kErg).filter(([,v])=>v.sprung<30).map(([k])=>k);
+  ok('Auf JEDEM Brett ist die Unterkante zu sehen',
+     kSchwach.length===0, kSchwach.length?('zu schwach: '+kSchwach.join(', ')):'schwaechster Sprung '+Math.min(...Object.values(kErg).map(v=>v.sprung)));
+  /* Die drei, die vorher praktisch unsichtbar waren (gemessen 5,4 / 7,8 / 8,1),
+     muessen deutlich darueber liegen - eine Schwelle von 30 allein liesse eine
+     spaetere Abschwaechung durchgehen. */
+  ok('Die vorher unsichtbaren Bretter sind jetzt die deutlichsten',
+     kErg.samtschwarz.sprung>45&&kErg.neon.sprung>40&&kErg.samtblau.sprung>35,
+     'samtschwarz '+kErg.samtschwarz.sprung+', neon '+kErg.neon.sprung+', samtblau '+kErg.samtblau.sprung);
+  /* Negativprobe: Marmor hebt sich von allein ab (Abstand 130 gegen den
+     Hintergrund) und bekommt deshalb NICHTS - sonst haette es einen Hof, den
+     niemand braucht. Das ist die Probe darauf, dass die Staerke gerechnet und
+     nicht pauschal gesetzt wird. */
+  const kMarmor=await page.evaluate(()=>{
+    const stark=k=>+schimmerStaerke(BOARD_LOOKS[k].base).toFixed(2);
+    settings.boardLook='marmor'; applyLook();
+    const hof=boardSvg.querySelectorAll('[filter*="schimmer"]').length;
+    settings.boardLook='samtschwarz'; applyLook();
+    const hofDunkel=boardSvg.querySelectorAll('[filter*="schimmer"]').length;
+    const erst=trayLayer.firstElementChild;
+    return {marmorStaerke:stark('marmor'), schwarzStaerke:stark('samtschwarz'),
+      hof, hofDunkel, hofZuerst:!!(erst&&erst.getAttribute('filter')),
+      m:MARG*0.35, reichweite:3*6+4};
+  });
+  console.log('INFO Schimmer-Staerke: '+JSON.stringify(kMarmor));
+  ok('Marmor bekommt keinen Schimmer, Samt schwarz den staerksten',
+     kMarmor.marmorStaerke===0&&kMarmor.schwarzStaerke>0.8&&kMarmor.hof===0&&kMarmor.hofDunkel===1,
+     JSON.stringify(kMarmor));
+  ok('Der Schimmer liegt HINTER dem Brett, nicht darueber', kMarmor.hofZuerst===true);
+  /* Er liegt in dem Rand, der zwischen Brettkante und Viewbox ohnehin frei ist
+     - sonst schnitte ihn die Viewbox unten ab, genau dort, wo er gebraucht
+     wird. Gerechnet, nicht gehofft. */
+  ok('Der Schimmer passt in den freien Rand und wird nicht abgeschnitten',
+     kMarmor.reichweite<kMarmor.m, kMarmor.reichweite+' Einheiten Reichweite gegen '+kMarmor.m+' Einheiten Rand');
+  /* Und er kostet keine Brettflaeche - er liegt im ohnehin freien Rand. */
+  const kBreiten=[...new Set(Object.values(kErg).map(v=>v.breite))];
+  ok('Alle Bretter sind gleich breit geblieben', kBreiten.length===1, kBreiten.join(' / '));
+  await page.evaluate(()=>{ settings.theme='glas'; settings.computer=true; settings.funkeln=true;
+    saveSettings(); newGame('english'); applyLook(); });
+
   abschnitt='Farben sortiert oder durcheinander';
   /* Lutz am 20.09.2026: "bei den bunten Steinen die dritte Version, die sind
      farblich sortiert. Sie koennten durcheinander sein ... ein Knopf fuer
