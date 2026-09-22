@@ -3228,7 +3228,7 @@ function kurzfassungGleich(proben,voll,erwartet){
     const lage=await page.evaluate(()=>{
       const sp=[...document.querySelectorAll('.hud span')].find(s=>/Übrig/.test(s.textContent));
       const b=sp.getBoundingClientRect();
-      return {x:Math.floor(b.x),y:Math.floor(b.y),w:Math.ceil(b.width),h:Math.ceil(b.height)}; });
+      return {x:Math.floor(b.x),y:Math.floor(b.y),width:Math.ceil(b.width),height:Math.ceil(b.height)}; });
     const mess=async()=>{ const buf=await page.screenshot({clip:lage});
       const png=PNG.sync.read(buf); let hell=0,min=255,max=0;
       for(let i=0;i<png.data.length;i+=4){ const L=png.data[i]*.299+png.data[i+1]*.587+png.data[i+2]*.114;
