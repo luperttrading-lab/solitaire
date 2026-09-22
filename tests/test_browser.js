@@ -3191,6 +3191,42 @@ function kurzfassungGleich(proben,voll,erwartet){
   ok('BODY ist durchsichtig, sonst laege ein zweiter Grund darueber',
      /rgba\(0, 0, 0, 0\)|transparent/.test(grund.bodyFarbe), JSON.stringify(grund));
 
+  /* Der Umzug auf HTML allein reichte NICHT (zweiter Anlauf, 22.09.2026).
+     Der Hintergrund des Wurzelelements wird zwar ueber die ganze
+     Zeichenflaeche gemalt, das BILD darin aber nach der Box von HTML
+     bemessen und platziert - unterhalb des Viewports bleibt deshalb nur die
+     Rueckfallfarbe stehen. In Lutz' Screenshot gemessen: rgb(104,92,81) mit
+     Streuung 0 ueber 176 von 2556 Zeilen, also 6,9 % und exakt BG_HEX.
+     ACHTUNG - DIESER FALL IST IN CHROMIUM NICHT NACHSTELLBAR: mit einer
+     verkuerzten html-Box malt Chromium darunter etwas anderes als Safari
+     (gemessen Streuung 9 statt 0). Eine Pixelmessung wuerde hier also eine
+     Sicherheit vortaeuschen, die sie nicht hat. Geprueft wird deshalb die
+     Geometrie, die den Streifen deckt - und die Gegenrechnung der Vignette,
+     die ohne Pruefung beim naechsten Anfassen auseinanderlaeuft. */
+  const ueber=await page.evaluate(()=>{
+    const st=getComputedStyle(document.documentElement);
+    const groessen=st.backgroundSize.split(',').map(t=>t.trim());
+    const lagen=st.backgroundPosition.split(',').map(t=>t.trim());
+    const bild=st.backgroundImage;
+    const hoehe=t=>{ const m=t.match(/(\d+(?:\.\d+)?)%\s+(\d+(?:\.\d+)?)%/); return m?parseFloat(m[2]):null; };
+    const verl=(bild.match(/ellipse\s+[\d.]+%\s+([\d.]+)%\s+at\s+[\d.]+%\s+([\d.]+)%/)||[]).slice(1).map(Number);
+    return {groessen, lagen, hochBild:hoehe(groessen[1]), hochVerlauf:hoehe(groessen[0]),
+            radius:verl[0], mitte:verl[1]}; });
+  console.log('INFO Hintergrund-Ueberhoehe: '+JSON.stringify(ueber));
+  ok('Das Holzbild reicht ueber die html-Box hinaus - sonst bleibt unten die Rueckfallfarbe',
+     ueber.hochBild>=110, JSON.stringify(ueber));
+  ok('Es haengt nach UNTEN - oben ausgerichtet, sonst waere oben abgeschnitten',
+     ueber.lagen.slice(0,2).every(l=>/(^|\s)(0%|top)(\s|$)/.test(l)), JSON.stringify(ueber.lagen));
+  ok('Die Vignette traegt dieselbe Ueberhoehe wie das Bild, sonst laufen sie auseinander',
+     ueber.hochVerlauf===ueber.hochBild, JSON.stringify(ueber));
+  /* Die Gegenrechnung: im Viewport soll die Vignette liegen wie vorher -
+     Mitte bei 42 % und senkrechter Radius 85 % der BOX. Im ueberhoehten
+     Malfeld sind das 42/f bzw. 85/f. Nachgerechnet statt abgeschrieben. */
+  const f=ueber.hochBild/100;
+  ok('Mitte und Radius der Vignette sind gegen die Ueberhoehe gerechnet',
+     Math.abs(ueber.mitte*f-42)<0.6 && Math.abs(ueber.radius*f-85)<0.6,
+     'Mitte '+(ueber.mitte*f).toFixed(2)+'% Radius '+(ueber.radius*f).toFixed(2)+'% (Soll 42 / 85)');
+
   /* "Deutlicher" darf keine Breite kosten. Gemessen wird deshalb die Breite,
      die der Text EINZEILIG braucht, gegen die Spalte, die er hat - nicht die
      Schriftstaerke. Mit font-weight:600 brauchte "Uebrig von 32" 79,4 statt
