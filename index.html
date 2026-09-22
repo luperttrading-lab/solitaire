@@ -483,6 +483,23 @@ header .boardname:active{background:var(--panel2)}
 @media (prefers-reduced-motion:reduce){
   #splash .glint,.sel-ring,.tgt-dot,.hint-ring,.hint-dot,.back-ring{animation:none}
 }
+
+/* Holz-Hintergrund (v1.76): EIN Bild ueber die volle Flaeche, kein Kacheln -
+   senkrechte Maserung vertraegt das Strecken, und wo nichts wiederholt wird,
+   kann keine Naht auffallen. Zwei Versuche vorher waren schlechter:
+   Ueberblenden liess eine helle Querlinie stehen, Spiegeln erzeugte eine
+   Rosette in der Mitte. Der Lichtabfall kommt aus CSS, nicht aus dem Bild,
+   damit er sich der Bildschirmgroesse anpasst. */
+:root{ --muted:#d8c9b0 }
+body{background:
+  radial-gradient(ellipse 130% 85% at 50% 42%, rgba(0,0,0,0) 0%, rgba(0,0,0,.18) 55%, rgba(0,0,0,.55) 100%),
+  url('3-holz.jpg') center/100% 100% no-repeat, #685c51;
+  background-attachment:fixed}
+/* Helle Schrift auf Holz braucht eine Kante, sonst franst sie in die
+   Maserung aus. Chips und Fussleiste haben ihren eigenen dunklen Grund und
+   bleiben ausgenommen. */
+header, .hud, #status{ text-shadow:0 1px 3px rgba(0,0,0,.75) }
+
 </style>
 </head>
 <body>
@@ -622,7 +639,7 @@ header .boardname:active{background:var(--panel2)}
 
 <script>
 'use strict';
-const APP_VERSION='1.75';
+const APP_VERSION='1.76';
 /* =========================================================================
    Kern: Bretter, Züge, Symmetrien, Paritäts-Schranke, Solver
    (als Fabrik, damit derselbe Code im Web Worker läuft)
@@ -826,6 +843,9 @@ function pegName(pegId){ const look=currentLook(); const hex=pegColorFor(look.co
 const PALETTE_JUWEL=['#c0223b','#2247b3','#1e9e5a','#e39b1c','#7c3fb8','#23b5c9'];
 const PEG_STYLES={glas:'Glasmurmel',edel:'Edelstein',holz:'Holz',metall:'Metall',flach:'Flach',neon:'Neon'};
 const BOARD_LOOKS={
+  /* Die Grundfarbe gilt fuer die fuenf Bretter OHNE Foto - sie fallen auf
+     gezeichnetes Nussbaum zurueck, nicht auf eine flache Platte. */
+  altholz:{name:'Altes Holz mit Eisenrahmen',base:'#5a3a22',hole:'#231409',text:'#f1e7d4'},
   holz:{name:'Holz',base:'#8d5a2e',hole:'#3b2210',text:'#f1e7d4'},
   holzdunkel:{name:'Nussbaum',base:'#5a3a22',hole:'#231409',text:'#f1e7d4'},
   filz:{name:'Filz',base:'#2f6b47',hole:'#173622',text:'#f1e7d4'},
@@ -869,6 +889,7 @@ const LESSONS=[
 ];
 
 const THEMES={
+  altholz:{name:'Altes Brett',board:'altholz',peg:'glas',color:'bunt'},
   holz:{name:'Holzbrett',board:'holz',peg:'holz',color:'holzhell'},
   /* Die Kombination aus dem Startbild und dem Icon: Nussbaum mit bunten
      Glasmurmeln. Waehlbar, aber nicht Standard - im Spiel gefaellt Blau. */
@@ -919,7 +940,7 @@ const Store={
   set(k,v){ try{ localStorage.setItem('solitaire.'+k,JSON.stringify(v)); }catch(e){} },
   del(k){ try{ localStorage.removeItem('solitaire.'+k); }catch(e){} }
 };
-const settings=Object.assign({board:'english',theme:'glas',boardLook:'holz',pegStyle:'glas',pegColor:'bunt',autoJump:true,showTargets:true,freeStart:false,sound:true,trainer:true,marks:false,strategy:true,computer:true,tipps:true,alarm:true,alarmTon:'gong',funkeln:true,ampelKraft:6,ampelSkala:0,probiert:true,zuege:false,gruen:false,balken:'aus',landung:true,mischung:'sortiert'},Store.get('settings',{}));
+const settings=Object.assign({board:'english',theme:'altholz',boardLook:'holz',pegStyle:'glas',pegColor:'bunt',autoJump:true,showTargets:true,freeStart:false,sound:true,trainer:true,marks:false,strategy:true,computer:true,tipps:true,alarm:true,alarmTon:'gong',funkeln:true,ampelKraft:6,ampelSkala:0,probiert:true,zuege:false,gruen:false,balken:'aus',landung:true,mischung:'sortiert'},Store.get('settings',{}));
 function saveSettings(){ Store.set('settings',settings); }
 /* Einmalige Umstellung: Trainer und Strategie-Hinweise sind ab Werk an. Wer
    die App vorher installiert hatte, trug den alten Stand (strategy:false) in
@@ -930,6 +951,12 @@ if(!settings.anGestellt){ settings.trainer=true; settings.strategy=true; setting
    Hauptschalter "Computer" (Lutz, 17.09.2026). Wer vorher alle drei aus
    hatte, bekommt ihn aus; sonst an. Laeuft genau einmal. */
 if(!settings.hilfeSortiert){ settings.computer=!!(settings.trainer||settings.strategy||settings.marks); settings.hilfeSortiert=true; saveSettings(); }
+/* Neues Standardthema "Altes Brett" (v1.76). Ein geaenderter Standard allein
+   erreicht niemanden, der die App schon benutzt: Object.assign zieht den
+   gespeicherten Wert vor. Die Umstellung laeuft deshalb genau EINMAL; wer
+   danach ein anderes Thema waehlt, behaelt es. Dieselbe Mechanik wie bei
+   anGestellt, hilfeSortiert und ampelStd. */
+if(!settings.altholzStd){ settings.altholzStd=true; settings.theme='altholz'; saveSettings(); }
 function currentLook(){ const t=THEMES[settings.theme]||THEMES.glas; return t.custom?{board:settings.boardLook,peg:settings.pegStyle,color:settings.pegColor}:{board:t.board,peg:t.peg,color:t.color}; }
 
 /* =========================================================================
@@ -1087,7 +1114,23 @@ function layoutBoard(board){
      Marmor       172 / +100 <- braucht nichts
    Die Staerke wird daraus abgeleitet: was an SCHIMMER_SOLL fehlt, wird
    aufgefuellt. Marmor bekommt damit von allein null. */
-const SCHIMMER_SOLL=70, BG_HEX='#17120e';
+const SCHIMMER_SOLL=70, BG_HEX='#685c51';
+/* Foto-Brett (v1.76): Lutz' Bild eines alten Holzbretts mit Eisenrahmen.
+   Die Lochmitten sind AUSGEMESSEN, nicht geschaetzt - 7 Spalten im Abstand
+   82,43 px, 7 Zeilen im Abstand 79,43 px, Streuung unter 2 %. Das Bild wird
+   NICHT proportional eingepasst, sondern in x und y getrennt skaliert
+   (1,2131 gegen 1,2590, also 3,8 % Unterschied), damit die gebohrten Loecher
+   exakt unter den Feldern der App liegen. Auf Holzmaserung sieht man diese
+   Streckung nicht; proportional eingepasst haette die unterste Reihe um ein
+   Drittel Feld danebengelegen. Gilt nur fuer das ENGLISCHE Brett - fuer die
+   anderen fuenf Formen gibt es kein Foto, die bleiben gezeichnet. */
+const FOTO_BRETT={datei:'3-brett.jpg', bild:[692,654], x0:96.7, y0:80.0, dx:82.43, dy:79.43};
+function fotoBrettMasse(){
+  const sx=P/FOTO_BRETT.dx, sy=P/FOTO_BRETT.dy, mitte=MARG+P/2;
+  return {x:mitte-FOTO_BRETT.x0*sx, y:mitte-FOTO_BRETT.y0*sy,
+          w:FOTO_BRETT.bild[0]*sx, h:FOTO_BRETT.bild[1]*sy};
+}
+let fotoBrettAn=false;
 function schimmerStaerke(base){
   const bg=hexToRgb(BG_HEX);
   /* Die Unterkante: Fuellung abgedunkelt, darueber die schwarze Kante. */
@@ -1125,27 +1168,57 @@ function trayMarkup(board,lay,look,idPrefix){
      Er traegt die aufgehellte Brettfarbe, nicht Weiss: ein warmer Hof um ein
      blaues Brett saehe nach Fremdlicht aus. */
   const st=schimmerStaerke(base);
-  const schimmerFarbe=lighten(base,.55), kante=lighten(base,.62);
-  let schimmer='', saum='';
-  if(st>0.02){
+  /* Auf hellem Grund traegt ein SCHATTEN das Schweben, nicht ein Schimmer -
+     Licht kommt von oben. Auf dunklem Grund waere ein Schatten unsichtbar,
+     dort bleibt es beim Schimmer. Die Staerke haengt an der Helligkeit des
+     Hintergrunds, nicht an einem Schalter. */
+  const bgL=(()=>{const c=hexToRgb(BG_HEX);return c[0]*.299+c[1]*.587+c[2]*.114;})();
+  const sch=Math.max(0,Math.min(1,(bgL-40)/120));
+  /* Der Saum muss sich vom HINTERGRUND abheben, nicht vom Brett: auf hellem
+     Holz eine dunkle Linie, auf dunklem Grund eine helle. */
+  const schimmerFarbe=lighten(base,.55);
+  const kante = bgL>60 ? darken(base,.5) : lighten(base,.62);
+  let schatten='', schimmer='', saum='';
+  if(st>0.02||sch>0.02){
     defs+=`<filter id="${idPrefix}schimmer" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="6"/></filter>`;
   }
+  if(look==='altholz'&&board.def.id==='english'){
+    /* Der Eisenrahmen IST die Kante - Schimmer und Saum entfallen, der
+       Schatten bleibt: das Brett liegt auf dem Holz.
+       Die weiche Maske laesst den geraden Schnitt des Fotos auslaufen; weil
+       Brett und Hintergrund dasselbe Holz sind, verschwindet die Kante ganz.
+       Kostet keine Datei, nur ein <mask>. */
+    const f=fotoBrettMasse();
+    defs+=`<filter id="${idPrefix}weich" x="-15%" y="-15%" width="130%" height="130%"><feGaussianBlur stdDeviation="7"/></filter>`
+       + `<mask id="${idPrefix}brettmaske"><rect x="${(f.x+11).toFixed(2)}" y="${(f.y+11).toFixed(2)}" width="${(f.w-22).toFixed(2)}" height="${(f.h-22).toFixed(2)}" rx="42" fill="#fff" filter="url(#${idPrefix}weich)"/></mask>`;
+    let sh='';
+    if(sch>0.02) sh=`<rect x="${m}" y="${m+6}" width="${lay.W-2*m}" height="${lay.H-2*m}" rx="34" fill="#000" opacity="${(sch*0.55).toFixed(3)}" filter="url(#${idPrefix}schimmer)"/>`;
+    return {defs, shape: sh+`<image href="${FOTO_BRETT.datei}" x="${f.x.toFixed(2)}" y="${f.y.toFixed(2)}" width="${f.w.toFixed(2)}" height="${f.h.toFixed(2)}" preserveAspectRatio="none" mask="url(#${idPrefix}brettmaske)"/>`, foto:true};
+  }
   if(board.def.type==='grid'){
+    if(sch>0.02){
+      schatten=`<rect x="${m}" y="${m+6}" width="${lay.W-2*m}" height="${lay.H-2*m}" rx="46" fill="#000" opacity="${(sch*0.55).toFixed(3)}" filter="url(#${idPrefix}schimmer)"/>`;
+    }
     if(st>0.02){
       schimmer=`<rect x="${m}" y="${m+4}" width="${lay.W-2*m}" height="${lay.H-2*m}" rx="46" fill="${schimmerFarbe}" opacity="${(st*0.5).toFixed(3)}" filter="url(#${idPrefix}schimmer)"/>`;
       /* Der Saum ist die Versicherung: ein weicher Hof kann bei sehr dunklen
          Brettern untergehen, eine Haarlinie auf der Kante nie. */
-      saum=`<rect x="${m+0.9}" y="${m+0.9}" width="${lay.W-2*m-1.8}" height="${lay.H-2*m-1.8}" rx="45" fill="none" stroke="${kante}" stroke-width="1.8" opacity="${(0.10+st*0.30).toFixed(3)}"/>`;
     }
-    shape=schimmer+`<rect x="${m}" y="${m}" width="${lay.W-2*m}" height="${lay.H-2*m}" rx="46" fill="${fill}"/><rect x="${m}" y="${m}" width="${lay.W-2*m}" height="${lay.H-2*m}" rx="46" fill="url(#${idPrefix}grain)"/><rect x="${m+3}" y="${m+3}" width="${lay.W-2*m-6}" height="${lay.H-2*m-6}" rx="43" fill="none" stroke="url(#${idPrefix}edge)" stroke-width="6"/>`+saum;
+    if(st>0.02||sch>0.02){
+      saum=`<rect x="${m+0.9}" y="${m+0.9}" width="${lay.W-2*m-1.8}" height="${lay.H-2*m-1.8}" rx="45" fill="none" stroke="${kante}" stroke-width="1.8" opacity="${(0.10+Math.max(st,sch)*0.55).toFixed(3)}"/>`;
+    }
+    shape=schatten+schimmer+`<rect x="${m}" y="${m}" width="${lay.W-2*m}" height="${lay.H-2*m}" rx="46" fill="${fill}"/><rect x="${m}" y="${m}" width="${lay.W-2*m}" height="${lay.H-2*m}" rx="46" fill="url(#${idPrefix}grain)"/><rect x="${m+3}" y="${m+3}" width="${lay.W-2*m-6}" height="${lay.H-2*m-6}" rx="43" fill="none" stroke="url(#${idPrefix}edge)" stroke-width="6"/>`+saum;
   } else {
     const ax=lay.W/2, ay=m+30, bx=m+24, by=lay.H-m-12, cx=lay.W-m-24, cy=by;
     const pts=`${ax},${ay} ${cx},${cy} ${bx},${by}`;
+    if(sch>0.02){
+      schatten=`<polygon points="${pts}" fill="#000" stroke="#000" stroke-width="70" stroke-linejoin="round" opacity="${(sch*0.55).toFixed(3)}" filter="url(#${idPrefix}schimmer)" transform="translate(0,7)"/>`;
+    }
     if(st>0.02){
       schimmer=`<polygon points="${pts}" fill="${schimmerFarbe}" stroke="${schimmerFarbe}" stroke-width="70" stroke-linejoin="round" opacity="${(st*0.5).toFixed(3)}" filter="url(#${idPrefix}schimmer)" transform="translate(0,4)"/>`;
       saum=`<polygon points="${pts}" fill="none" stroke="${kante}" stroke-width="1.8" stroke-linejoin="round" opacity="${(0.10+st*0.30).toFixed(3)}" transform="translate(0,0)" style="stroke-dasharray:none"/>`;
     }
-    shape=schimmer+`<polygon points="${pts}" fill="${fill}" stroke="${fill}" stroke-width="70" stroke-linejoin="round"/><polygon points="${pts}" fill="url(#${idPrefix}grain)" stroke="url(#${idPrefix}grain)" stroke-width="70" stroke-linejoin="round"/><polygon points="${pts}" fill="none" stroke="url(#${idPrefix}edge)" stroke-width="6" stroke-linejoin="round" transform="translate(0,-2)"/>`+saum;
+    shape=schatten+schimmer+`<polygon points="${pts}" fill="${fill}" stroke="${fill}" stroke-width="70" stroke-linejoin="round"/><polygon points="${pts}" fill="url(#${idPrefix}grain)" stroke="url(#${idPrefix}grain)" stroke-width="70" stroke-linejoin="round"/><polygon points="${pts}" fill="none" stroke="url(#${idPrefix}edge)" stroke-width="6" stroke-linejoin="round" transform="translate(0,-2)"/>`+saum;
   }
   return {defs,shape};
 }
@@ -1555,7 +1628,7 @@ function buildBoardSvg(){
   const b=game.board, lay=game.lay, look=currentLook();
   boardSvg.setAttribute('viewBox',`0 0 ${lay.W} ${lay.H}`);
   boardSvg.innerHTML='';
-  const t=trayMarkup(b,lay,look.board,'m_');
+  const t=trayMarkup(b,lay,look.board,'m_'); fotoBrettAn=!!t.foto;
   defsEl=el('defs'); defsEl.innerHTML=t.defs+`<marker id="arrowHead" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="4" markerHeight="4" orient="auto"><path d="M0 0L10 5 0 10z" fill="#7fd3ff"/></marker><marker id="arrowHeadWhite" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="4" markerHeight="4" orient="auto"><path d="M0 0L10 5 0 10z" fill="rgba(255,255,255,.55)"/></marker><marker id="arrowHeadRed" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="4" markerHeight="4" orient="auto"><path d="M0 0L10 5 0 10z" fill="#e0574a"/></marker>`;
   const pegDefs=el('g'); pegDefs.setAttribute('id','pegDefs'); defsEl.appendChild(pegDefs);
   boardSvg.appendChild(defsEl);
@@ -1564,8 +1637,12 @@ function buildBoardSvg(){
   b.cells.forEach((c,i)=>{ const p=lay.pos[i];
     const g=el('g',{class:'hole','data-idx':i});
     g.appendChild(el('circle',{cx:p.x,cy:p.y,r:R_HOLE+8,fill:'transparent'}));
-    g.appendChild(el('circle',{cx:p.x,cy:p.y,r:R_HOLE,fill:'url(#m_hole)'}));
-    g.appendChild(el('circle',{cx:p.x,cy:p.y+1.5,r:R_HOLE,fill:'none',stroke:'#fff','stroke-opacity':'.09','stroke-width':'2'}));
+    /* Beim Foto sind die Loecher schon gebohrt - ein zweites darueber
+       gezeichnetes waere ein Ring im Ring. */
+    if(!fotoBrettAn){
+      g.appendChild(el('circle',{cx:p.x,cy:p.y,r:R_HOLE,fill:'url(#m_hole)'}));
+      g.appendChild(el('circle',{cx:p.x,cy:p.y+1.5,r:R_HOLE,fill:'none',stroke:'#fff','stroke-opacity':'.09','stroke-width':'2'}));
+    }
     holesLayer.appendChild(g); });
   /* Zwischen Loechern und Steinen: hier liegt der gruene Schein beim Landen
      (v1.69). Er muss HINTER die Murmel - im Overlay laege er darueber und
@@ -2900,6 +2977,15 @@ const AMPEL_MAX=10;
    darunter bleibt der Raum dunkel, sonst flackert schon die kleinste Stufe
    ueber den ganzen Bildschirm. */
 const AMPEL_HOF_AB=3;
+/* Die Ampel wurde auf fast schwarzem Grund eingestellt (v1.43-46). Auf dem
+   Holz von v1.76 ist derselbe Schein schwaecher, ohne dass sich an der Ampel
+   etwas geaendert haette - gemessen fiel die Farbabweichung von 35 auf 20
+   bei Rot und von 10 auf 3 bei Gruen. Skaliert wird deshalb die
+   VERAENDERLICHE Haelfte mit der Hintergrundhelligkeit. Stufe 0 bleibt exakt
+   der alte Zustand, und ampelWerte() selbst bleibt unangetastet: die Zahlen
+   im Menue sollen die Stufe beschreiben, nicht den Hintergrund. */
+const AMPEL_BG=(()=>{ const c=hexToRgb(BG_HEX), L=c[0]*.299+c[1]*.587+c[2]*.114;
+  return 1+Math.max(0,Math.min(1,(L-20)/90))*1.2; })();
 function ampelWerte(n){
   n=Math.max(0,Math.min(AMPEL_MAX,n|0));
   const t=n/AMPEL_MAX;
@@ -2919,9 +3005,9 @@ function ampelKraftSetzen(n,speichern){
   const w=ampelWerte(n);
   settings.ampelKraft=w.n; if(speichern) saveSettings();
   const st=document.documentElement.style;
-  st.setProperty('--aschein',w.schein.toFixed(1)+'px');
-  st.setProperty('--adicht',w.dicht.toFixed(1)+'px');
-  st.setProperty('--ahof',w.hof.toFixed(1)+'px');
+  st.setProperty('--aschein',(8+(w.schein-8)*AMPEL_BG).toFixed(1)+'px');
+  st.setProperty('--adicht',(w.dicht*AMPEL_BG).toFixed(1)+'px');
+  st.setProperty('--ahof',(w.hof*AMPEL_BG).toFixed(1)+'px');
   const e=$('ampelStufe'); if(e) e.textContent=ampelName(w.n);
   const r=$('ampelRegler'); if(r&&+r.value!==w.n) r.value=String(w.n);
 }
@@ -2953,7 +3039,7 @@ function ampelHof(cls){
      (gefunden, weil die Pruefung ampelHof direkt rief - v1.46). */
   if(cls==='bad'&&warnblitzGleich()) return;
   const e=$('ampelhof'); if(!e) return;
-  ampelHofSetzen(e,cls,w.bild);
+  ampelHofSetzen(e,cls,Math.min(1,w.bild*AMPEL_BG));
   e.classList.remove('halten');
   e.classList.remove('an'); void e.offsetWidth; e.classList.add('an');
   clearTimeout(ampelHofTimer); ampelHofTimer=setTimeout(()=>e.classList.remove('an'),900);
@@ -2966,7 +3052,7 @@ function ampelHofHalten(cls){
   clearTimeout(ampelHofTimer);
   e.classList.remove('an');
   if(!(w.bild>0)){ e.classList.remove('halten'); return; }
-  ampelHofSetzen(e,cls,w.bild);
+  ampelHofSetzen(e,cls,Math.min(1,w.bild*AMPEL_BG));
   e.classList.add('halten');
   ampelHofTimer=setTimeout(()=>e.classList.remove('halten'),1100);
 }

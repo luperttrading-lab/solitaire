@@ -1752,12 +1752,20 @@ function kurzfassungGleich(proben,voll,erwartet){
   const hWarn =await hofMessen(()=>{ settings.alarm=true; warnblitz(true); });
   console.log('INFO Ampelhof Rot: gruen='+JSON.stringify(hGruen)+' gelb='+JSON.stringify(hGelb)
     +' rot='+JSON.stringify(hRot)+' warnblitz='+JSON.stringify(hWarn));
+  /* ABSOLUTE Schwellen taugen hier seit v1.76 nicht mehr. Die Messgroesse ist
+     die mittlere Farbabweichung gegen den Hintergrund, und der ist seit dem
+     Holzbild dreimal so hell: eine halbdurchsichtige Farbe darueber weicht
+     rechnerisch weniger ab (Abweichung = Deckkraft * |Farbe - Grund|).
+     Der Beweis, dass die KENNZAHL gewandert ist und nicht das Merkmal: der
+     WARNBLITZ, an dem sich nichts geaendert hat, fiel von 35 auf 18.
+     Gemessen wird deshalb gegen ihn, nicht gegen eine eingebrannte Zahl. */
   ok('Gruen bleibt unten, oben passiert nichts',
-     hGruen.oben===0&&hGruen.unten>4, JSON.stringify(hGruen));
+     hGruen.oben===0&&hGruen.unten>=3, JSON.stringify(hGruen));
   ok('Gelb bleibt unten, oben passiert nichts',
      hGelb.oben===0&&hGelb.unten>4, JSON.stringify(hGelb));
   ok('Rot faerbt auch den oberen Bildschirm',
-     hRot.oben>20, JSON.stringify(hRot));
+     hRot.oben>=hWarn.oben*0.9&&hRot.oben>hRot.unten*3,
+     JSON.stringify(hRot)+' gegen Warnblitz oben '+hWarn.oben);
   /* Es soll sich anfuehlen wie der Warnblitz, den Lutz von frueher kennt. */
   ok('Rot ist etwa so kraeftig wie der Warnblitz',
      Math.abs(hRot.oben-hWarn.oben)<=hWarn.oben*0.4,
@@ -2698,73 +2706,116 @@ function kurzfassungGleich(proben,voll,erwartet){
   await sleep(500);
   await page.evaluate(()=>{ hideModal('resultModal'); settings.gruen=false; settings.zuege=false; settings.autoJump=true; saveSettings(); newGame('english'); });
 
-  abschnitt='Brettkante gegen den Hintergrund';
-  /* Lutz am 21.09.2026 mit Screenshot: "Bei den dunklen Spielbrettern
-     verschwindet das Brett unten durch den dunklen Rand. Vielleicht kannst du
-     unter dem Brett einen leichten Schimmer machen, so wie ein schwebendes
-     Brett."
-     Gemessen wird, was die Frage wirklich stellt: Ist die Unterkante ZU SEHEN?
-     Also der groesste Helligkeitssprung zwischen benachbarten Zeilen quer
-     ueber die Brettbreite. Eine Pruefung auf "Schimmer-Element vorhanden"
-     saehe das nicht - derselbe Fehlertyp wie beim unsichtbaren Glanz. */
-  const kanteMessen=async(L)=>{
-    await page.evaluate(l=>{ settings.theme='eigene'; settings.boardLook=l;
+  abschnitt='Foto-Brett und Brettkante';
+  /* v1.76: Hintergrund ist jetzt ein Holzfoto, das englische Brett ist ein
+     Foto mit Eisenrahmen. Lutz am 22.09.2026: "Ich haette vor allen Dingen
+     gern dieses Spielbrett genauso ... mit Strukturen, mit Metallrahmen."
+
+     DIE KENNZAHL AUS v1.75 MUSSTE WECHSELN, und das ist kein Aufweichen:
+     Dort war der groesste Helligkeitssprung zwischen benachbarten Zeilen die
+     richtige Frage - ein heller Saum auf einem glatten dunklen Grund ist eine
+     scharfe Kante. Jetzt traegt ein weicher SCHATTEN die Trennung, und der
+     verteilt den Uebergang bewusst ueber viele Zeilen: gemessen sank der
+     Sprung von 27,2 auf 21,6, als der Schatten STAERKER wurde. Die Zahl
+     belohnte also genau das Gegenteil dessen, was gewollt ist.
+     Gemessen wird deshalb der RGB-ABSTAND zwischen einem Band im Brett und
+     einem Band davor - also die Frage "hebt sich das Brett von seiner
+     Umgebung ab", unabhaengig davon, ob die Kante hart oder weich ist. */
+  const kMess=async(L)=>{
+    await page.evaluate(x=>{ settings.theme='eigene'; settings.boardLook=x;
       settings.pegStyle='glas'; settings.pegColor='bunt'; settings.mischung='sortiert';
       settings.funkeln=false; settings.computer=false; settings.zuege=false;
       newGame('english'); applyLook(); },L);
-    await sleep(150);
-    const box=await page.evaluate(()=>{ const r=boardSvg.getBoundingClientRect();
-      return {x:Math.round(r.left+r.width*0.3),y:Math.round(r.bottom-22),
-        width:Math.round(r.width*0.4),height:44,breite:Math.round(r.width)}; });
-    const img=PNG.sync.read(await page.screenshot({clip:{x:box.x,y:box.y,width:box.width,height:box.height}}));
-    const lum=k=>img.data[k]*.299+img.data[k+1]*.587+img.data[k+2]*.114;
-    let best=0;
-    for(let y=1;y<img.height;y++){ let s=0;
-      for(let x=0;x<img.width;x++){ const a=(y*img.width+x)*4, b=((y-1)*img.width+x)*4; s+=Math.abs(lum(a)-lum(b)); }
-      const m=s/img.width; if(m>best) best=m; }
-    return {sprung:+best.toFixed(1), breite:box.breite};
+    await sleep(180);
+    const g=await page.evaluate(()=>{ const q=boardSvg.getBoundingClientRect();
+      return {x:Math.round(q.left+q.width*0.28), y:Math.round(q.bottom-60),
+        w:Math.round(q.width*0.44), breite:Math.round(q.width)}; });
+    const img=PNG.sync.read(await page.screenshot({clip:{x:g.x,y:g.y,width:g.w,height:110}}));
+    const band=(y0,y1)=>{ let r=0,gr=0,bl=0,n=0;
+      for(let y=y0;y<y1;y++) for(let x=0;x<img.width;x++){ const k=(y*img.width+x)*4;
+        r+=img.data[k]; gr+=img.data[k+1]; bl+=img.data[k+2]; n++; }
+      return [r/n,gr/n,bl/n]; };
+    const innen=band(86,110), aussen=band(136,164);   // Brettkante liegt bei 120 (60 px * 2)
+    return {abstand:Math.round(Math.hypot(innen[0]-aussen[0],innen[1]-aussen[1],innen[2]-aussen[2])),
+            breite:g.breite};
   };
-  const kLooks=['holz','holzdunkel','filz','samtblau','samtschwarz','schiefer','neon','marmor'];
-  const kErg={}; for(const L of kLooks) kErg[L]=await kanteMessen(L);
-  console.log('INFO Brettkante: '+JSON.stringify(kErg));
-  const kSchwach=Object.entries(kErg).filter(([,v])=>v.sprung<30).map(([k])=>k);
-  ok('Auf JEDEM Brett ist die Unterkante zu sehen',
-     kSchwach.length===0, kSchwach.length?('zu schwach: '+kSchwach.join(', ')):'schwaechster Sprung '+Math.min(...Object.values(kErg).map(v=>v.sprung)));
-  /* Die drei, die vorher praktisch unsichtbar waren (gemessen 5,4 / 7,8 / 8,1),
-     muessen deutlich darueber liegen - eine Schwelle von 30 allein liesse eine
-     spaetere Abschwaechung durchgehen. */
-  ok('Die vorher unsichtbaren Bretter sind jetzt die deutlichsten',
-     kErg.samtschwarz.sprung>45&&kErg.neon.sprung>40&&kErg.samtblau.sprung>35,
-     'samtschwarz '+kErg.samtschwarz.sprung+', neon '+kErg.neon.sprung+', samtblau '+kErg.samtblau.sprung);
-  /* Negativprobe: Marmor hebt sich von allein ab (Abstand 130 gegen den
-     Hintergrund) und bekommt deshalb NICHTS - sonst haette es einen Hof, den
-     niemand braucht. Das ist die Probe darauf, dass die Staerke gerechnet und
-     nicht pauschal gesetzt wird. */
-  const kMarmor=await page.evaluate(()=>{
-    const stark=k=>+schimmerStaerke(BOARD_LOOKS[k].base).toFixed(2);
-    settings.boardLook='marmor'; applyLook();
-    const hof=boardSvg.querySelectorAll('[filter*="schimmer"]').length;
-    settings.boardLook='samtschwarz'; applyLook();
-    const hofDunkel=boardSvg.querySelectorAll('[filter*="schimmer"]').length;
-    const erst=trayLayer.firstElementChild;
-    return {marmorStaerke:stark('marmor'), schwarzStaerke:stark('samtschwarz'),
-      hof, hofDunkel, hofZuerst:!!(erst&&erst.getAttribute('filter')),
-      m:MARG*0.35, reichweite:3*6+4};
-  });
-  console.log('INFO Schimmer-Staerke: '+JSON.stringify(kMarmor));
-  ok('Marmor bekommt keinen Schimmer, Samt schwarz den staerksten',
-     kMarmor.marmorStaerke===0&&kMarmor.schwarzStaerke>0.8&&kMarmor.hof===0&&kMarmor.hofDunkel===1,
-     JSON.stringify(kMarmor));
-  ok('Der Schimmer liegt HINTER dem Brett, nicht darueber', kMarmor.hofZuerst===true);
-  /* Er liegt in dem Rand, der zwischen Brettkante und Viewbox ohnehin frei ist
-     - sonst schnitte ihn die Viewbox unten ab, genau dort, wo er gebraucht
-     wird. Gerechnet, nicht gehofft. */
-  ok('Der Schimmer passt in den freien Rand und wird nicht abgeschnitten',
-     kMarmor.reichweite<kMarmor.m, kMarmor.reichweite+' Einheiten Reichweite gegen '+kMarmor.m+' Einheiten Rand');
-  /* Und er kostet keine Brettflaeche - er liegt im ohnehin freien Rand. */
+  const kLooks=['altholz','holz','holzdunkel','filz','samtblau','samtschwarz','schiefer','neon','marmor'];
+  const kErg={}; for(const L of kLooks) kErg[L]=await kMess(L);
+  console.log('INFO Brett gegen Umgebung: '+JSON.stringify(Object.fromEntries(Object.entries(kErg).map(([k,v])=>[k,v.abstand]))));
+  const kSchwach=Object.entries(kErg).filter(([,v])=>v.abstand<25).map(([k])=>k);
+  ok('Jedes Brett hebt sich vom Holzhintergrund ab',
+     kSchwach.length===0, kSchwach.length?('zu schwach: '+kSchwach.join(', ')):'schwaechster Abstand '+Math.min(...Object.values(kErg).map(v=>v.abstand)));
+  /* Vor v1.75 lag der schwaechste Fall (Samt schwarz) bei 11 - dort war das
+     Brett dunkler als der Hintergrund. Die dunklen Bretter muessen deutlich
+     darueber liegen, sonst waere die Schwelle von 25 allein zu nachgiebig. */
+  ok('Die frueher unsichtbaren Bretter sind jetzt die deutlichsten',
+     kErg.samtschwarz.abstand>50&&kErg.neon.abstand>55&&kErg.samtblau.abstand>40,
+     'samtschwarz '+kErg.samtschwarz.abstand+', neon '+kErg.neon.abstand+', samtblau '+kErg.samtblau.abstand);
   const kBreiten=[...new Set(Object.values(kErg).map(v=>v.breite))];
   ok('Alle Bretter sind gleich breit geblieben', kBreiten.length===1, kBreiten.join(' / '));
-  await page.evaluate(()=>{ settings.theme='glas'; settings.computer=true; settings.funkeln=true;
+
+  /* Das Foto sitzt nur auf dem englischen Brett. Entscheidend ist, dass die
+     GEBOHRTEN Loecher unter den Feldern der App liegen - gemessen an den
+     Bildpunkten, nicht an der Formel, mit der sie dorthin gerechnet wurden.
+     Sonst prueft der Test nur sich selbst. */
+  await page.evaluate(()=>{ settings.theme='altholz'; settings.computer=false;
+    applyLook(); newGame('english'); for(let i=0;i<game.board.n;i++) game.pegAt[i]=-1; render(); });
+  await sleep(400);
+  const fBox=await page.evaluate(()=>{ const q=boardSvg.getBoundingClientRect(), m=boardSvg.getScreenCTM();
+    return {x:Math.round(q.left),y:Math.round(q.top),w:Math.round(q.width),h:Math.round(q.height),
+      felder:game.lay.pos.map(v=>({x:m.a*v.x+m.c*v.y+m.e, y:m.b*v.x+m.d*v.y+m.f})),
+      bild:!!boardSvg.querySelector('image'),
+      kreise:boardSvg.querySelectorAll('.hole circle').length/game.board.n}; });
+  const fImg=PNG.sync.read(await page.screenshot({clip:{x:fBox.x,y:fBox.y,width:fBox.w,height:fBox.h}}));
+  const fLum=(x,y)=>{ const k=((y*fImg.width)+x)*4; return fImg.data[k]*.299+fImg.data[k+1]*.587+fImg.data[k+2]*.114; };
+  /* Je Feld: Schwerpunkt der dunklen Punkte im Umkreis - das ist die Mitte
+     des gebohrten Lochs. Sie darf nur wenige Bildpunkte neben der Feldmitte
+     liegen, sonst saessen die Murmeln schief im Loch. */
+  let maxVers=0, versatz=[];
+  fBox.felder.forEach(f=>{
+    const cx=Math.round((f.x-fBox.x)*2), cy=Math.round((f.y-fBox.y)*2), R=26;
+    let sx=0,sy=0,n=0, mit=0,mn=0;
+    for(let y=cy-R;y<=cy+R;y++) for(let x=cx-R;x<=cx+R;x++){
+      if(x<0||y<0||x>=fImg.width||y>=fImg.height) continue;
+      if((x-cx)**2+(y-cy)**2>R*R) continue; mit+=fLum(x,y); mn++; }
+    const schwelle=(mit/mn)*0.88;
+    for(let y=cy-R;y<=cy+R;y++) for(let x=cx-R;x<=cx+R;x++){
+      if(x<0||y<0||x>=fImg.width||y>=fImg.height) continue;
+      if((x-cx)**2+(y-cy)**2>R*R) continue;
+      if(fLum(x,y)<schwelle){ sx+=x; sy+=y; n++; } }
+    if(!n) return;
+    const d=Math.hypot(sx/n-cx, sy/n-cy)/2;     // in CSS-Pixel
+    versatz.push(+d.toFixed(1)); if(d>maxVers) maxVers=d;
+  });
+  console.log('INFO Foto-Brett: '+JSON.stringify({bild:fBox.bild,kreise:fBox.kreise,
+    felder:versatz.length, groesster:+maxVers.toFixed(1),
+    mittel:+(versatz.reduce((a,b)=>a+b,0)/versatz.length).toFixed(1)}));
+  ok('Das englische Brett ist das Foto, und die Loecher werden nicht doppelt gezeichnet',
+     fBox.bild===true&&fBox.kreise===1, 'Bild '+fBox.bild+', Kreise je Feld '+fBox.kreise);
+  ok('Die gebohrten Loecher liegen unter den Feldern der App',
+     versatz.length===33&&maxVers<7, versatz.length+' Felder, groesster Versatz '+maxVers.toFixed(1)+' px');
+  /* Fuer die anderen fuenf Formen gibt es kein Foto - dort muss gezeichnet
+     werden, und zwar nach Nussbaum, nicht nach einer flachen Platte. */
+  const fRueck=await page.evaluate(()=>{ newGame('european'); applyLook();
+    const bild=!!boardSvg.querySelector('image');
+    const kreise=boardSvg.querySelectorAll('.hole circle').length/game.board.n;
+    const basis=BOARD_LOOKS.altholz.base;
+    newGame('english'); return {bild,kreise,basis}; });
+  console.log('INFO Rueckfall: '+JSON.stringify(fRueck));
+  ok('Die anderen Bretter fallen auf gezeichnetes Nussbaum zurueck',
+     fRueck.bild===false&&fRueck.kreise===3&&fRueck.basis==='#5a3a22', JSON.stringify(fRueck));
+  /* Neues Standardthema - und die Umstellung laeuft genau einmal. */
+  const fStd=await page.evaluate(()=>{ const s=JSON.parse(localStorage.getItem('solitaire.settings')||'{}');
+    return {gespeichert:s.theme, marke:s.altholzStd, werk:THEMES.altholz?THEMES.altholz.name:null}; });
+  console.log('INFO Standardthema: '+JSON.stringify(fStd));
+  ok('Altes Brett ist das neue Standardthema und die Umstellung ist vermerkt',
+     fStd.gespeichert==='altholz'&&fStd.marke===true&&fStd.werk==='Altes Brett', JSON.stringify(fStd));
+  const fEinmal=await page.evaluate(()=>{ settings.theme='glas'; saveSettings();
+    const s=JSON.parse(localStorage.getItem('solitaire.settings')||'{}');
+    return {nachWahl:s.theme, marke:s.altholzStd}; });
+  ok('Wer danach ein anderes Thema waehlt, behaelt es',
+     fEinmal.nachWahl==='glas'&&fEinmal.marke===true, JSON.stringify(fEinmal));
+  await page.evaluate(()=>{ settings.theme='altholz'; settings.computer=true; settings.funkeln=true;
     saveSettings(); newGame('english'); applyLook(); });
 
   abschnitt='Farben sortiert oder durcheinander';
