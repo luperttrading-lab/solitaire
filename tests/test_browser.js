@@ -3235,6 +3235,13 @@ function kurzfassungGleich(proben,voll,erwartet){
       const ab=document.getElementById('ampelBlatt'); if(ab) ab.classList.remove('on');
       const t=document.getElementById('toast'); if(t) t.classList.remove('on');
       document.getElementById('backdrop').classList.remove('on'); });
+    /* Das Startbild steht 2 s und deckt die Kopfzeile zu. Laedt ein frueherer
+       Block die Seite neu, laeuft diese Messung mitten hinein - gemessen
+       wurde dann das Startbild (elementFromPoint meldete "splash", Spanne 6
+       in beiden Fassungen). Also warten, bis es wirklich weg ist. */
+    await page.waitForFunction(()=>{ const sp=document.getElementById('splash');
+      return !sp || sp.hidden || getComputedStyle(sp).opacity==='0'
+             || getComputedStyle(sp).display==='none'; },{timeout:6000}).catch(()=>{});
     await new Promise(r=>setTimeout(r,420));
     const lage=await page.evaluate(()=>{
       const sp=[...document.querySelectorAll('.hud span')].find(s=>/Übrig/.test(s.textContent));
