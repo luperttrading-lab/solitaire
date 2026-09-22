@@ -3208,10 +3208,12 @@ function kurzfassungGleich(proben,voll,erwartet){
     const groessen=st.backgroundSize.split(',').map(t=>t.trim());
     const lagen=st.backgroundPosition.split(',').map(t=>t.trim());
     const bild=st.backgroundImage;
-    const hoehe=t=>{ const m=t.match(/(\d+(?:\.\d+)?)%\s+(\d+(?:\.\d+)?)%/); return m?parseFloat(m[2]):null; };
-    const verl=(bild.match(/ellipse\s+[\d.]+%\s+([\d.]+)%\s+at\s+[\d.]+%\s+([\d.]+)%/)||[]).slice(1).map(Number);
+    /* Der berechnete Stil laesst das Wort "ellipse" weg und schreibt die
+       Breite als "auto" - beide Muster muessen das vertragen. */
+    const hoehe=t=>{ const m=t.match(/(?:[\d.]+%|auto)\s+([\d.]+)%/); return m?parseFloat(m[1]):null; };
+    const verl=(bild.match(/(?:ellipse\s+)?[\d.]+%\s+([\d.]+)%\s+at\s+[\d.]+%\s+([\d.]+)%/)||[]).slice(1).map(Number);
     return {groessen, lagen, hochBild:hoehe(groessen[1]), hochVerlauf:hoehe(groessen[0]),
-            radius:verl[0], mitte:verl[1]}; });
+            breiteBild:groessen[1].split(/\s+/)[0], radius:verl[0], mitte:verl[1]}; });
   console.log('INFO Hintergrund-Ueberhoehe: '+JSON.stringify(ueber));
   ok('Das Holzbild reicht ueber die html-Box hinaus - sonst bleibt unten die Rueckfallfarbe',
      ueber.hochBild>=110, JSON.stringify(ueber));
@@ -3226,6 +3228,38 @@ function kurzfassungGleich(proben,voll,erwartet){
   ok('Mitte und Radius der Vignette sind gegen die Ueberhoehe gerechnet',
      Math.abs(ueber.mitte*f-42)<0.6 && Math.abs(ueber.radius*f-85)<0.6,
      'Mitte '+(ueber.mitte*f).toFixed(2)+'% Radius '+(ueber.radius*f).toFixed(2)+'% (Soll 42 / 85)');
+  /* Das Bild wird SEITENRICHTIG skaliert. Bis v1.78 stand dort 100 %, also
+     eine feste Breite - zusammen mit 120 % Hoehe war das ein Zerren. */
+  ok('Die Breite des Holzbildes ist frei, es wird also nicht gezerrt',
+     ueber.breiteBild==='auto', JSON.stringify(ueber.groessen));
+
+  /* GEMESSEN WIRD, OB IN BEIDEN RICHTUNGEN STRUKTUR STEHT - nicht, wie
+     scharf es in einer ist. Lutz am 22.09.2026: "das auch unscharf aus."
+     Ursache war ein 708x320 QUERFORMAT, mit 100 % auf hochkant gezogen:
+     waagerecht 1,65-fach, senkrecht 9,5-fach.
+     Der Fehler steckte auch in meiner ersten Messung: die "Schaerfe quer"
+     war beim GEZERRTEN Bild HOEHER (19 gegen 13,9) - sie zaehlte die
+     langen senkrechten Streifen mit, die das Zerren erst erzeugt hat. Die
+     Kennzahl belohnte also den Fehler. Ein gezerrtes Bild verliert seine
+     Struktur nur in EINER Richtung, echte Maserung hat beide: alt quer 19
+     zu laengs 2,8 (Verhaeltnis 6,8), neu 13,9 zu 6,1 (Verhaeltnis 2,3). */
+  const mas=await (async()=>{
+    await page.addStyleTag({content:'#app{visibility:hidden!important}'});
+    await new Promise(r=>setTimeout(r,320));
+    const buf=await page.screenshot({clip:{x:0,y:250,width:390,height:300}});
+    await page.addStyleTag({content:'#app{visibility:visible!important}'});
+    const png=PNG.sync.read(buf), W=png.width, H=png.height;
+    const L=(x,y)=>{const i=(y*W+x)*4; return png.data[i]*.299+png.data[i+1]*.587+png.data[i+2]*.114;};
+    let q=0,l=0,n=0;
+    for(let y=3;y<H-3;y+=2) for(let x=3;x<W-3;x+=2){
+      q+=Math.abs(L(x+2,y)-L(x-2,y)); l+=Math.abs(L(x,y+2)-L(x,y-2)); n++; }
+    q=q/n; l=l/n;
+    return {quer:Math.round(q*10)/10, laengs:Math.round(l*10)/10,
+            verhaeltnis:Math.round(q/l*100)/100};
+  })();
+  console.log('INFO Maserung des Hintergrunds: '+JSON.stringify(mas));
+  ok('Der Hintergrund hat Struktur in BEIDER Richtung, ist also nicht gezerrt',
+     mas.laengs>4 && mas.verhaeltnis<3.5, JSON.stringify(mas));
 
   /* "Deutlicher" darf keine Breite kosten. Gemessen wird deshalb die Breite,
      die der Text EINZEILIG braucht, gegen die Spalte, die er hat - nicht die

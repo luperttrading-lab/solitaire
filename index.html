@@ -508,10 +508,17 @@ header .boardname:active{background:var(--panel2)}
    ist. Die Vignette ist gegengerechnet, damit im Viewport alles bleibt wie
    vorher: ihre Mitte lag bei 42 % der Box, in einem 120 % hohen Malfeld
    sind das 42/1,2 = 35 %; ihr senkrechter Radius 85 % wird zu
-   85/1,2 = 70,83 %. Waagerecht aendert sich nichts. */
+   85/1,2 = 70,83 %. Waagerecht aendert sich nichts.
+   DAS BILD WIRD SEITENRICHTIG SKALIERT (auto 120%), nicht mehr gezerrt.
+   Bis v1.78 war 3-holz.jpg 708x320 QUER und wurde mit 100% auf hochkant
+   gezogen: waagerecht 1,65-fach, senkrecht 9,5-fach - jedes senkrechte
+   Detail neunfach verschmiert, und genau das hat Lutz als "unscharf"
+   gesehen. Jetzt ein hochkantes Bild (636x1297) und ein einziger,
+   gleichmaessiger Faktor; die Breite laeuft ueber den Rand hinaus und wird
+   beschnitten, das faellt bei Maserung nicht auf. */
 html{background:
   radial-gradient(ellipse 130% 70.83% at 50% 35%, rgba(0,0,0,0) 0%, rgba(0,0,0,.18) 55%, rgba(0,0,0,.55) 100%) top center/100% 120% no-repeat,
-  url('3-holz.jpg') top center/100% 120% no-repeat, #685c51}
+  url('3-holz.jpg') top center/auto 120% no-repeat, #685c51}
 body{background:transparent}
 /* Helle Schrift auf Holz braucht eine Kante, sonst franst sie in die
    Maserung aus. Chips und Fussleiste haben ihren eigenen dunklen Grund und
