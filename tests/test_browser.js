@@ -1736,11 +1736,25 @@ function kurzfassungGleich(proben,voll,erwartet){
   const mittelAb=(a,g)=>{ let s=0; for(let k=0;k<a.data.length;k+=4)
     s+=Math.abs(a.data[k]-g.data[k])+Math.abs(a.data[k+1]-g.data[k+1])+Math.abs(a.data[k+2]-g.data[k+2]);
     return Math.round(s/(a.data.length/4)/3); };
+  /* Gemessen wird die SPITZE der Animation, nicht ein Zeitpunkt. Beide
+     Erscheinungen laufen 0,62 s, und bis v1.77 tastete der Test sie bei
+     nominell 150 ms ab - Rot und Warnblitz aber in getrennten Durchlaeufen,
+     ihre Abtastpunkte konnten also unabhaengig voneinander verrutschen.
+     Unter Last (npm test faehrt drei Suiten nebenlaeufig) reichte das:
+     gemessen 18 gegen eine Schwelle von 19,8, waehrend derselbe Test allein
+     laufend gruen war. Die Frage lautet "ist Rot so kraeftig wie der
+     Warnblitz" - und die Antwort darauf ist der Hoechstwert, nicht der Wert
+     nach 150 ms. Damit haengt die Pruefung nicht mehr an der Maschinenlast. */
   async function hofMessen(fn){
-    await page.evaluate(fn); await sleep(150);
-    const o=PNG.sync.read(await page.screenshot({clip:rOben}));
-    const u=PNG.sync.read(await page.screenshot({clip:rUnten}));
-    const w={oben:mittelAb(o,rGO),unten:mittelAb(u,rGU)};
+    await page.evaluate(fn);
+    let oben=0, unten=0;
+    for(const t of [90,90,100,120]){
+      await sleep(t);
+      const o=PNG.sync.read(await page.screenshot({clip:rOben}));
+      const u=PNG.sync.read(await page.screenshot({clip:rUnten}));
+      oben=Math.max(oben,mittelAb(o,rGO)); unten=Math.max(unten,mittelAb(u,rGU));
+    }
+    const w={oben,unten};
     await page.evaluate(()=>{ $('ampelhof').classList.remove('an','halten');
       $('warnblitz').classList.remove('an'); });
     await sleep(320);
