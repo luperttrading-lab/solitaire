@@ -3225,10 +3225,24 @@ function kurzfassungGleich(proben,voll,erwartet){
      alten Grau (#a8977f) erreichte KEIN Buchstabe Helligkeit ueber 170; mit
      dem hellen Grau und dem dunklen Hof sind es hunderte. */
   const kontrast=await (async()=>{
+    /* Der Ausschnitt muss wirklich frei liegen: laeuft dieser Block hinter
+       einem offenen Blatt oder einer Abdunklung, misst er die Abdeckung und
+       beide Fassungen kommen gleich heraus (einmal erlebt: Spanne 6 statt
+       216). Deshalb erst aufraeumen und danach nachsehen, WAS an der Stelle
+       oben liegt - eine Messung, die ihren eigenen Ausschnitt nicht prueft,
+       misst irgendetwas. */
+    await page.evaluate(()=>{ closeSheet(); closeDetail();
+      const ab=document.getElementById('ampelBlatt'); if(ab) ab.classList.remove('on');
+      const t=document.getElementById('toast'); if(t) t.classList.remove('on');
+      document.getElementById('backdrop').classList.remove('on'); });
+    await new Promise(r=>setTimeout(r,420));
     const lage=await page.evaluate(()=>{
       const sp=[...document.querySelectorAll('.hud span')].find(s=>/Übrig/.test(s.textContent));
       const b=sp.getBoundingClientRect();
-      return {x:Math.floor(b.x),y:Math.floor(b.y),width:Math.ceil(b.width),height:Math.ceil(b.height)}; });
+      const oben=document.elementFromPoint(b.x+b.width/2, b.y+b.height/2);
+      return {x:Math.floor(b.x),y:Math.floor(b.y),width:Math.ceil(b.width),height:Math.ceil(b.height),
+              oben:oben?(oben.id||oben.className||oben.tagName):'—', text:sp.textContent}; });
+    console.log('INFO Ausschnitt Beschriftung: '+JSON.stringify(lage));
     const mess=async()=>{ const buf=await page.screenshot({clip:lage});
       const png=PNG.sync.read(buf); let hell=0,min=255,max=0;
       for(let i=0;i<png.data.length;i+=4){ const L=png.data[i]*.299+png.data[i+1]*.587+png.data[i+2]*.114;
