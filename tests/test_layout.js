@@ -672,6 +672,33 @@ const FAELLE=[
    await p.close();
  }
 
+ /* ===================================================================
+    v1.77: Bleibt das Brett beim ersten Zug gleich gross?
+    Frage von Lutz am 22.09.2026: "ob am Start das Spielfeld am ersten Zug
+    gleich gross bleibt oder ob sich die Groesse aendert". Der Verdacht ist
+    berechtigt: ensureStatusFits() gibt Brettflaeche ab, sobald eine Meldung
+    sonst hinter der Fussleiste laege - und die erste Bewertung kommt erst
+    NACH dem ersten Zug. Gemessen wird deshalb dieselbe Breite vor dem Zug,
+    nach dem ersten und nach mehreren, ueber vier Bildschirme.
+    =================================================================== */
+ for(const g of [[390,844,'iPhone 14 Pro'],[390,730,'Safari mit Leisten'],[375,667,'iPhone SE'],[320,568,'sehr enges Geraet']]){
+   const q=await browser.newPage(); await q.setViewport({width:g[0],height:g[1]});
+   await q.goto(url,{waitUntil:'load'}); await sleep(2400);
+   const breit=()=>q.evaluate(()=>Math.round(document.getElementById('board').getBoundingClientRect().width));
+   const zug=async(n)=>{ await q.evaluate((n)=>{ for(let i=0;i<n;i++){ const a=game.pegAt;
+       const m=game.board.moves.filter(x=>a[x.from]>=0&&a[x.over]>=0&&a[x.to]<0);
+       if(!m.length) break; playMove(m[0]); } },n); await sleep(2600); };
+   const start=await breit(); await zug(1);
+   const nach1=await breit(); await zug(5);
+   const nach6=await breit();
+   const rest=await q.evaluate(()=>({shrink:typeof stageShrink==='number'?stageShrink:null,
+     status:Math.round(document.getElementById('status').getBoundingClientRect().height)}));
+   console.log('INFO Brettbreite '+g[2]+': Start '+start+' / nach 1 Zug '+nach1+' / nach 6 '+nach6+' '+JSON.stringify(rest));
+   ok('Das Brett bleibt beim ersten Zug genau gleich gross ('+g[2]+')',
+      start===nach1&&nach1===nach6, start+'/'+nach1+'/'+nach6);
+   await q.close();
+ }
+
  await p.close();
  await browser.close();
  console.log(fails?`\n${fails} FEHLER`:'\nLAYOUT-TESTS OK'); process.exitCode=fails?1:0;

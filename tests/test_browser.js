@@ -3155,6 +3155,150 @@ function kurzfassungGleich(proben,voll,erwartet){
      lsMenueAus.aus===true&&lsMenueAus.wiederDa===true, JSON.stringify(lsMenueAus));
   await page.evaluate(()=>{ settings.computer=true; settings.funkeln=true; saveSettings(); newGame('english'); });
 
+  /* ===================================================================
+     v1.77: Hintergrund unten, Schriftbreite, Ton nach Unterbrechung
+     =================================================================== */
+  abschnitt='Hintergrund, Schriftbreite und Ton (v1.77)';
+
+  /* Lutz am 22.09.2026: "unten haben wir kein Holzmuster, sondern ein
+     einfaches Braun." Ursache war NICHT ein fehlendes Stueck Bild, sondern
+     die Frage, WELCHES Element den Hintergrund traegt: Hat HTML einen
+     eigenen, nimmt die Zeichenflaeche ihn - und der Streifen, den Safari
+     unter dem Layout-Viewport freigibt, gehoert zur Zeichenflaeche. Bis
+     v1.76 stand dort noch var(--bg), das flache Braun. Eine Pruefung auf
+     "body hat das Bild" haette das nie gesehen, denn das stimmte ja. */
+  const grund=await page.evaluate(()=>{
+    const h=getComputedStyle(document.documentElement), b=getComputedStyle(document.body);
+    return {htmlBild:/3-holz/.test(h.backgroundImage), htmlFarbe:h.backgroundColor,
+            bodyBild:/3-holz/.test(b.backgroundImage), bodyFarbe:b.backgroundColor}; });
+  console.log('INFO Hintergrund: '+JSON.stringify(grund));
+  ok('Das Holz sitzt auf HTML - nur so deckt es den Streifen unter dem Viewport',
+     grund.htmlBild===true, JSON.stringify(grund));
+  ok('BODY ist durchsichtig, sonst laege ein zweiter Grund darueber',
+     /rgba\(0, 0, 0, 0\)|transparent/.test(grund.bodyFarbe), JSON.stringify(grund));
+
+  /* "Deutlicher" darf keine Breite kosten. Gemessen wird deshalb die Breite,
+     die der Text EINZEILIG braucht, gegen die Spalte, die er hat - nicht die
+     Schriftstaerke. Mit font-weight:600 brauchte "Uebrig von 32" 79,4 statt
+     70,8 px und passte bei 360-390 px nicht mehr; die Kopfzeile wuchs von 75
+     auf 82 px. Eine Pruefung auf "ist fett" haette genau das durchgelassen. */
+  const breiten=[];
+  for(const vw of [360,390]){
+    await page.setViewport({width:vw,height:800,deviceScaleFactor:1});
+    await new Promise(r=>setTimeout(r,320));
+    breiten.push(await page.evaluate((vw)=>{
+      const sp=[...document.querySelectorAll('.hud span')].find(s=>/Übrig/.test(s.textContent));
+      const r=sp.getBoundingClientRect(), st=getComputedStyle(sp);
+      const d=document.createElement('span');
+      d.style.cssText='position:absolute;white-space:nowrap;visibility:hidden;font-size:'
+        +st.fontSize+';font-weight:'+st.fontWeight+';letter-spacing:'+st.letterSpacing;
+      d.textContent=sp.textContent; document.body.appendChild(d);
+      const noetig=d.getBoundingClientRect().width; d.remove();
+      return {vw, spalte:Math.round(sp.parentElement.getBoundingClientRect().width),
+              noetig:Math.round(noetig*10)/10, hoehe:Math.round(r.height),
+              hud:Math.round(document.querySelector('.hud').getBoundingClientRect().height)};
+    },vw));
+  }
+  await page.setViewport({width:390,height:844,deviceScaleFactor:1});
+  await new Promise(r=>setTimeout(r,320));
+  console.log('INFO Zaehlerbeschriftung: '+JSON.stringify(breiten));
+  ok('"Uebrig von 32" bleibt bei 360 und 390 px einzeilig',
+     breiten.every(b=>b.noetig<=b.spalte&&b.hoehe<20), JSON.stringify(breiten));
+  ok('Die Kopfzeile bleibt dadurch unter 80 px hoch',
+     breiten.every(b=>b.hud<80), JSON.stringify(breiten));
+
+  /* Die Statuszeile ist hart einzeilig. Eine 32-Zeichen-Kurzfassung muss in
+     ihre Textspalte passen - genau daran waere die Fettschrift gescheitert
+     (278 statt 243 px bei 192-262 px Spalte). */
+  const zeile=await page.evaluate(()=>{
+    const s=document.querySelector('#status .saeule'); const st=getComputedStyle(s);
+    const d=document.createElement('span');
+    d.style.cssText='position:absolute;white-space:nowrap;visibility:hidden;font-size:15px;font-weight:'+st.fontWeight;
+    d.textContent='Fehler: Luecke an wichtiger Stelle'; document.body.appendChild(d);
+    const w=Math.round(d.getBoundingClientRect().width); d.remove();
+    return {spalte:Math.round(s.getBoundingClientRect().width), gewicht:st.fontWeight, lang:w}; });
+  console.log('INFO Statuszeile: '+JSON.stringify(zeile));
+  ok('Die Statuszeile bleibt im normalen Schnitt - fett wuerde jede lange Kurzfassung abschneiden',
+     Number(zeile.gewicht)<600, JSON.stringify(zeile));
+
+  /* Der Kontrast ist die Groesse, um die es geht - nicht die Staerke. Auf dem
+     alten Grau (#a8977f) erreichte KEIN Buchstabe Helligkeit ueber 170; mit
+     dem hellen Grau und dem dunklen Hof sind es hunderte. */
+  const kontrast=await (async()=>{
+    const lage=await page.evaluate(()=>{
+      const sp=[...document.querySelectorAll('.hud span')].find(s=>/Übrig/.test(s.textContent));
+      const b=sp.getBoundingClientRect();
+      return {x:Math.floor(b.x),y:Math.floor(b.y),w:Math.ceil(b.width),h:Math.ceil(b.height)}; });
+    const mess=async()=>{ const buf=await page.screenshot({clip:lage});
+      const png=PNG.sync.read(buf); let hell=0,min=255,max=0;
+      for(let i=0;i<png.data.length;i+=4){ const L=png.data[i]*.299+png.data[i+1]*.587+png.data[i+2]*.114;
+        if(L<min)min=L; if(L>max)max=L; if(L>170)hell++; }
+      return {hell, spanne:Math.round(max-min)}; };
+    const jetzt=await mess();
+    await page.addStyleTag({content:'.hud span{color:#a8977f!important;text-shadow:0 1px 3px rgba(0,0,0,.75)!important}'});
+    await new Promise(r=>setTimeout(r,220));
+    const alt=await mess();
+    await page.reload({waitUntil:'networkidle0'}); await new Promise(r=>setTimeout(r,2400));
+    return {jetzt, alt};
+  })();
+  console.log('INFO Beschriftung Kontrast: '+JSON.stringify(kontrast));
+  ok('Die Beschriftungen sind deutlicher als vorher - helle Punkte und Spanne steigen',
+     kontrast.jetzt.hell>kontrast.alt.hell&&kontrast.jetzt.spanne>kontrast.alt.spanne,
+     JSON.stringify(kontrast));
+
+  /* Lutz am 22.09.2026: "manchmal ist der Ton an und wenn ich dann ins Menue
+     gehe oder sonst irgendwas zurueck mache oder ein neues Spiel startet,
+     dann hab ich keinen Soundeffekt mehr." Im Testbrowser laeuft der Kontext
+     durchgehend - der SCHLIESSENDE Zustand laesst sich aber sehr wohl
+     nachstellen, indem man ihn selbst schliesst. Genau das ist der Fall, den
+     resume() nie wieder heilt: bis v1.76 blieb die App danach dauerhaft
+     stumm, weil ensure() denselben toten Kontext zurueckgab. */
+  const ton=await page.evaluate(async()=>{
+    settings.sound=true;
+    const a=Sound.ensure(); const vorher=a?a.state:'—';
+    await a.close(); const tot=a.state;
+    const b=Sound.ensure();
+    return {vorher, tot, neu:b?b.state:'—', anderer:!!b&&b!==a, wartend:Sound.wartend.length}; });
+  console.log('INFO Ton nach Unterbrechung: '+JSON.stringify(ton));
+  ok('Ein geschlossener Audio-Kontext wird verworfen und neu gebaut, statt stumm zu bleiben',
+     ton.tot==='closed'&&ton.anderer===true&&ton.neu!=='closed', JSON.stringify(ton));
+  const tonZug=await page.evaluate(async()=>{
+    const a=Sound.ensure(); await a.close();
+    let gespielt=false; try{ Sound.jump(); gespielt=true; }catch(e){ gespielt=false; }
+    return {gespielt, zustand:Sound.ctx?Sound.ctx.state:'—'}; });
+  console.log('INFO Ton danach: '+JSON.stringify(tonZug));
+  ok('Nach dem Neubau spielt ein Sprungton wieder, ohne Ausnahme',
+     tonZug.gespielt===true&&tonZug.zustand!=='closed', JSON.stringify(tonZug));
+
+  /* Der zweite, schwerere Weg in die dauerhafte Stille: der Kontext bleibt
+     haengen und resume() heilt ihn nicht. Dann wandert in tone() JEDER Ton
+     nur noch in die Warteschlange - Zug, Menue, Zurueck, neues Spiel, alles
+     still, bis die Seite neu geladen wird. Das laesst sich nachstellen,
+     indem resume() dauerhaft scheitert. Verlangt wird, dass die App den
+     Kontext nach zwei erfolglosen Versuchen wegwirft und neu baut. */
+  const haenger=await page.evaluate(async()=>{
+    settings.sound=true;
+    const alt=Sound.ensure();
+    Object.defineProperty(alt,'state',{get:()=>'suspended',configurable:true});
+    alt.resume=()=>Promise.reject(new Error('geht nicht'));
+    Sound.weckVersuche=0;
+    const schritte=[];
+    for(let i=0;i<4;i++){ const c=Sound.ensure();
+      schritte.push({i, gleich:c===alt, zustand:c?c.state:'—'});
+      await new Promise(r=>setTimeout(r,30)); }
+    return {schritte, neuGebaut:Sound.ctx!==alt, endZustand:Sound.ctx?Sound.ctx.state:'—'}; });
+  console.log('INFO haengender Kontext: '+JSON.stringify(haenger));
+  ok('Ein haengender Kontext wird nach zwei erfolglosen Weckversuchen neu gebaut',
+     haenger.neuGebaut===true&&haenger.endZustand!=='suspended', JSON.stringify(haenger));
+  ok('Die ersten Versuche wecken noch, statt sofort neu zu bauen',
+     haenger.schritte[0].gleich===true, JSON.stringify(haenger.schritte));
+  const tonNach=await page.evaluate(()=>{ let ging=false;
+    try{ Sound.jump(); ging=true; }catch(e){}
+    return {ging, zustand:Sound.ctx?Sound.ctx.state:'—', wartend:Sound.wartend.length}; });
+  console.log('INFO Ton nach Neubau: '+JSON.stringify(tonNach));
+  ok('Danach spielt ein Sprungton wieder, statt in der Warteschlange zu landen',
+     tonNach.ging===true&&tonNach.zustand==='running'&&tonNach.wartend===0, JSON.stringify(tonNach));
+
   ok('keine Seitenfehler insgesamt', errors.length===0, errors.join(' | '));
   await browser.close();
   console.log(fails?`\n${fails} FEHLER`:'\nALLE BROWSER-TESTS OK'); process.exitCode=fails?1:0;

@@ -491,14 +491,34 @@ header .boardname:active{background:var(--panel2)}
    Rosette in der Mitte. Der Lichtabfall kommt aus CSS, nicht aus dem Bild,
    damit er sich der Bildschirmgroesse anpasst. */
 :root{ --muted:#d8c9b0 }
-body{background:
+/* Das Bild sitzt auf HTML, nicht auf BODY (v1.77). Lutz am 22.09.2026:
+   "unten haben wir kein Holzmuster, sondern ein einfaches Braun."
+   Ursache: body traegt zwar das Bild, aber der Streifen, den Safari unter
+   dem Layout-Viewport freigibt, gehoert zur Zeichenflaeche - und die nimmt
+   ihren Hintergrund von HTML. Dort stand noch var(--bg). Jetzt traegt HTML
+   das Holz, body ist durchsichtig; damit ist die ganze Flaeche gedeckt. */
+html{background:
   radial-gradient(ellipse 130% 85% at 50% 42%, rgba(0,0,0,0) 0%, rgba(0,0,0,.18) 55%, rgba(0,0,0,.55) 100%),
-  url('3-holz.jpg') center/100% 100% no-repeat, #685c51;
-  background-attachment:fixed}
+  url('3-holz.jpg') center/100% 100% no-repeat, #685c51}
+body{background:transparent}
 /* Helle Schrift auf Holz braucht eine Kante, sonst franst sie in die
    Maserung aus. Chips und Fussleiste haben ihren eigenen dunklen Grund und
    bleiben ausgenommen. */
 header, .hud, #status{ text-shadow:0 1px 3px rgba(0,0,0,.75) }
+/* "Deutlicher" heisst hier NICHT "fetter" (v1.77). Gemessen: mit
+   font-weight:600 braucht "Uebrig von 32" 79,4 statt 70,8 px und passt bei
+   360-390 px Breite nicht mehr in seine Spalte - die Zeile wurde zweizeilig
+   und die Kopfzeile wuchs von 75 auf 82 px. In der Statuszeile ist es
+   schlimmer: die Textspalte hat nur 192-262 px, eine 32-Zeichen-Kurzfassung
+   braucht schon mit Gewicht 400 ganze 243 px und mit 600 dann 278 - sie
+   waere auf JEDEM Geraet abgeschnitten worden. Gewicht 500 ist wirkungslos,
+   die Schrift hat keinen solchen Schnitt (gleiche Breite wie 400).
+   Also der Weg, der keine Breite kostet: ein dunkler Hof um die Buchstaben,
+   damit die Maserung nicht mehr zwischen ihnen durchlaeuft, und ein
+   helleres Grau fuer die kleinen Beschriftungen. */
+.hud span, .hud .neben dt, .hud .neben dd, #status .saeule, header .boardname{
+  text-shadow:0 1px 2px rgba(0,0,0,.92), 0 0 7px rgba(0,0,0,.78) }
+.hud span, .hud .neben dt, .hud .neben dd{ color:#e6d9c2 }
 
 </style>
 </head>
@@ -639,7 +659,7 @@ header, .hud, #status{ text-shadow:0 1px 3px rgba(0,0,0,.75) }
 
 <script>
 'use strict';
-const APP_VERSION='1.76';
+const APP_VERSION='1.77';
 /* =========================================================================
    Kern: Bretter, Züge, Symmetrien, Paritäts-Schranke, Solver
    (als Fabrik, damit derselbe Code im Web Worker läuft)
@@ -972,10 +992,44 @@ function currentLook(){ const t=THEMES[settings.theme]||THEMES.glas; return t.cu
       Alarm kommen aber aus der Bewertung, also aus einem Timer - dort waere
       es zu spaet. Deshalb weckt jede Beruehrung des Bildschirms den Kontext.
    weckAudio() deckt beides ab, toene werden bis zum Aufwachen zurueckgestellt. */
-const Sound={ctx:null,wartend:[],
+const Sound={ctx:null,wartend:[],weckVersuche:0,
   ensure(){ if(!settings.sound) return null;
-    try{ if(!this.ctx) this.ctx=new (window.AudioContext||window.webkitAudioContext)(); }catch(e){ return null; }
-    if(this.ctx.state!=='running'){ try{ const pr=this.ctx.resume(); if(pr&&pr.then) pr.then(()=>this.nachholen(),()=>{}); }catch(e){} }
+    try{
+      /* iOS kann den Kontext nach einer Unterbrechung (Anruf, anderes
+         Medium, Wegschalten) auf 'closed' setzen. resume() hilft dort NIE
+         wieder - jeder weitere Ton landete in der Warteschlange und war
+         still, dauerhaft. Genau das beschreibt Lutz am 22.09.2026: "manchmal
+         ist der Ton an und dann hab ich keinen Soundeffekt mehr."
+         Ein geschlossener Kontext wird deshalb weggeworfen und neu gebaut.
+         NICHT im Testbrowser nachstellbar - dort bleibt der Zustand
+         durchgehend 'running'; das ist eine Haertung nach den
+         dokumentierten iOS-Zustaenden, kein bewiesener Fix. */
+      if(this.ctx&&this.ctx.state==='closed'){ this.ctx=null; }
+      if(!this.ctx) this.ctx=new (window.AudioContext||window.webkitAudioContext)();
+    }catch(e){ return null; }
+    if(this.ctx.state==='running'){ this.weckVersuche=0; return this.ctx; }
+    /* DAUERHAFTE Stille entsteht so: bleibt der Kontext haengen, wandert in
+       tone() jeder Ton nur noch in die Warteschlange und nichts kommt je
+       heraus - auch nach Zuegen, Menue, Zurueck und neuem Spiel nicht.
+       resume() heilt einen 'interrupted' Kontext auf iOS nicht immer. Nach
+       zwei erfolglosen Versuchen wird er deshalb verworfen und neu gebaut;
+       das geschieht hier fast immer in einer Nutzergeste (ensure() haengt am
+       pointerdown), und ein frisch in einer Geste gebauter Kontext laeuft. */
+    if(this.weckVersuche>=2){
+      this.weckVersuche=0;
+      try{ const tot=this.ctx; this.ctx=null;
+        this.ctx=new (window.AudioContext||window.webkitAudioContext)();
+        if(tot&&tot.close) tot.close().catch(()=>{});
+      }catch(e){ return null; }
+      if(this.ctx.state==='running'){ this.nachholen(); return this.ctx; }
+    }
+    this.weckVersuche++;
+    try{ const pr=this.ctx.resume();
+      if(pr&&pr.then) pr.then(()=>this.nachholen(),()=>{});
+      /* Aeltere WebKit-Fassungen geben kein Versprechen zurueck - dann
+         haette nie jemand nachgeholt. */
+      else if(this.ctx.state==='running') this.nachholen();
+    }catch(e){}
     return this.ctx; },
   /* Toene, die waehrend des Schlafs aufliefen, jetzt abspielen - aber nur,
      solange sie frisch sind. Ein Sprungton von vor zehn Sekunden waere
