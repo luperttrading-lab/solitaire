@@ -3261,6 +3261,41 @@ function kurzfassungGleich(proben,voll,erwartet){
   ok('Der Hintergrund hat Struktur in BEIDER Richtung, ist also nicht gezerrt',
      mas.laengs>4 && mas.verhaeltnis<3.5, JSON.stringify(mas));
 
+  /* v1.79: Die Ueberhoehe allein hat es NICHT geloest. Lutz' zweiter
+     Screenshot zeigte denselben Balken, wieder rgb(104,92,81) mit
+     Streuung 0 - Safari beschneidet das Bild des Wurzelelements auf
+     dessen Box und reicht darunter nur die Farbe weiter. Daran aendert
+     keine background-size etwas; die BOX muss wachsen. lvh ist die Hoehe
+     des Viewports mit eingefahrenen Leisten und deckt den Streifen damit
+     per Definition. Auch das ist in Chromium nicht nachweisbar (dort ist
+     lvh gleich vh) - geprueft wird, dass die Regel da ist, dass sie
+     nichts scrollbar macht und dass das Layout unveraendert bleibt. */
+  const box=await page.evaluate(()=>{
+    const h=document.documentElement;
+    const roh=[...document.styleSheets].flatMap(sh=>{ try{ return [...sh.cssRules]; }catch(e){ return []; } })
+      .filter(r=>r.selectorText==='html').map(r=>r.style.minHeight).filter(Boolean);
+    const vor=window.scrollY; window.scrollTo(0,300); const nach=window.scrollY; window.scrollTo(0,vor);
+    return {regel:roh, ueberlauf:getComputedStyle(h).overflow,
+            scrollHoehe:h.scrollHeight, sicht:window.innerHeight, gescrollt:nach,
+            app:Math.round(document.getElementById('app').getBoundingClientRect().height),
+            brett:Math.round(document.getElementById('board').getBoundingClientRect().width),
+            rueckfall:getComputedStyle(h).backgroundColor}; });
+  console.log('INFO html-Box: '+JSON.stringify(box));
+  ok('HTML traegt eine min-height in lvh - nur so deckt seine Box den Streifen',
+     box.regel.some(r=>/lvh/.test(r)), JSON.stringify(box.regel));
+  ok('Dadurch wird nichts scrollbar - #app ist fixed, der Rest bleibt stehen',
+     box.gescrollt===0, JSON.stringify(box));
+  ok('Das Layout bleibt unveraendert - App fuellt den Viewport, Brett unveraendert',
+     box.app===box.sicht && box.brett>300, JSON.stringify(box));
+  /* Das Netz dahinter: wenn das Bild eine Flaeche doch nicht erreicht,
+     darf dort kein HELLER Balken stehen. Die Rueckfallfarbe traegt
+     deshalb die Farbe der vignettierten Unterkante (gemessen rgb(39,33,28)
+     direkt ueber dem Balken), nicht mehr die mittlere Bildhelligkeit
+     BG_HEX (rgb(104,92,81)) - genau die war zweimal der sichtbare Fehler. */
+  const rf=(box.rueckfall.match(/\d+/g)||[]).map(Number);
+  ok('Die Rueckfallfarbe ist dunkel, nicht die helle mittlere Bildfarbe',
+     rf.length>=3 && rf[0]*.299+rf[1]*.587+rf[2]*.114 < 60, box.rueckfall);
+
   /* "Deutlicher" darf keine Breite kosten. Gemessen wird deshalb die Breite,
      die der Text EINZEILIG braucht, gegen die Spalte, die er hat - nicht die
      Schriftstaerke. Mit font-weight:600 brauchte "Uebrig von 32" 79,4 statt

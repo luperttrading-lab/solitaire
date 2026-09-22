@@ -23,6 +23,18 @@
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-family:var(--sans);overflow:hidden;
   -webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+/* DIE BOX VON HTML MUSS DEN GANZEN SCHIRM DECKEN (v1.79). Safari
+   beschneidet das Hintergrundbild des Wurzelelements auf dessen Box und
+   reicht darunter nur die FARBE weiter - zweimal gemessen, in zwei
+   Screenshots von Lutz, beide Male rgb(104,92,81) mit Streuung 0 ueber
+   rund 7 % der Hoehe, also exakt BG_HEX. Daran aendert keine Groesse des
+   Hintergrunds etwas, auch keine Ueberhoehe (v1.78 versuchte 120 % und
+   kam nicht hin). Also waechst die Box selbst: lvh ist die Hoehe des
+   Viewports MIT eingefahrenen Safari-Leisten, deckt den Streifen also per
+   Definition. #app ist position:fixed und bleibt davon unberuehrt,
+   overflow:hidden verhindert, dass etwas scrollbar wird. Browser ohne lvh
+   behalten schlicht die 100 % darueber. */
+html{min-height:100lvh}
 button{font:inherit;color:inherit;background:none;border:0;padding:0;margin:0;cursor:pointer}
 button:focus-visible,[tabindex]:focus-visible{outline:2px solid var(--brass2);outline-offset:2px}
 [hidden]{display:none!important}
@@ -518,7 +530,15 @@ header .boardname:active{background:var(--panel2)}
    beschnitten, das faellt bei Maserung nicht auf. */
 html{background:
   radial-gradient(ellipse 130% 70.83% at 50% 35%, rgba(0,0,0,0) 0%, rgba(0,0,0,.18) 55%, rgba(0,0,0,.55) 100%) top center/100% 120% no-repeat,
-  url('3-holz.jpg') top center/auto 120% no-repeat, #685c51}
+  url('3-holz.jpg') top center/auto 120% no-repeat, #27211c}
+/* Die Rueckfallfarbe ist BEWUSST NICHT BG_HEX (v1.79). Sie ist das, was
+   man sieht, wenn das Bild eine Flaeche nicht erreicht - und genau als
+   heller Balken ist sie Lutz zweimal aufgefallen (rgb(104,92,81) gegen
+   rgb(39,33,28) direkt darueber). Sie traegt jetzt die gemessene Farbe
+   der vignettierten Unterkante, ist also selbst im Fehlerfall kaum zu
+   sehen. Das ist ein NETZ, nicht die Loesung - die ist die lvh-Box oben.
+   BG_HEX im Skript bleibt #685c51: das ist die mittlere Helligkeit des
+   Bildes und steuert Brettkante und Ampel, eine ganz andere Frage. */
 body{background:transparent}
 /* Helle Schrift auf Holz braucht eine Kante, sonst franst sie in die
    Maserung aus. Chips und Fussleiste haben ihren eigenen dunklen Grund und
@@ -678,7 +698,7 @@ header, .hud, #status{ text-shadow:0 1px 3px rgba(0,0,0,.75) }
 
 <script>
 'use strict';
-const APP_VERSION='1.78';
+const APP_VERSION='1.79';
 /* =========================================================================
    Kern: Bretter, Züge, Symmetrien, Paritäts-Schranke, Solver
    (als Fabrik, damit derselbe Code im Web Worker läuft)
