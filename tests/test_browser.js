@@ -1778,7 +1778,15 @@ function kurzfassungGleich(proben,voll,erwartet){
     }
     hofProben.push(proben);
     const w={oben,unten};
-    await page.evaluate(()=>{ $('ampelhof').classList.remove('an','halten');
+    /* cancel() ist Pflicht: eine per Skript angehaltene Animation haengt in
+       Chromium nicht mehr an der CSS-Klasse. Ohne das blieb der rote Schein
+       nach dem Entfernen von .an stehen - er blaehte die folgende
+       Warnblitz-Messung auf (57 statt des echten Werts) und faerbte spaetere
+       Pruefungen rot: beim Richtungsdreieck "rot nah am Ziel" 40 statt 4
+       von 41 Punkten. */
+    await page.evaluate(()=>{ for(const a of document.getAnimations()){ const el=a.effect&&a.effect.target;
+        if(el&&(el.id==='ampelhof'||el.id==='warnblitz')) a.cancel(); }
+      $('ampelhof').classList.remove('an','halten');
       $('warnblitz').classList.remove('an'); });
     await sleep(320);
     return w;
