@@ -2754,7 +2754,19 @@ function kurzfassungGleich(proben,voll,erwartet){
             breite:g.breite};
   };
   const kLooks=['altholz','holz','holzdunkel','filz','samtblau','samtschwarz','schiefer','neon','marmor'];
+  /* Seit v1.80 liegt 19-21 px unter der Brettkante die Glastafel der
+     Statuszeile - und das Messband "aussen" (19-33 px unter der Kante) lag
+     damit groesstenteils AUF der Tafel. Die Pruefung mass ploetzlich Brett
+     gegen Tafel: samtschwarz 60 -> 8. Die Frage ist aber unveraendert "hebt
+     sich das Brett vom HOLZ ab" - also wird die Tafel fuer diese Messung
+     ausgeblendet. Dass zwischen Brett und Tafel wirklich Holz liegt, die
+     Voraussetzung dieser Messung, prueft ein eigener Block (v1.80). Am Bild
+     nachgesehen: bei allen dunklen Brettern steht ein klarer Holzstreifen
+     zwischen Kante und Tafel. */
+  await page.evaluate(()=>{ const st=document.createElement('style'); st.id='ohneTafel';
+    st.textContent='html.holzgrund #status::before{display:none!important}'; document.head.appendChild(st); });
   const kErg={}; for(const L of kLooks) kErg[L]=await kMess(L);
+  await page.evaluate(()=>{ const st=document.getElementById('ohneTafel'); if(st) st.remove(); });
   console.log('INFO Brett gegen Umgebung: '+JSON.stringify(Object.fromEntries(Object.entries(kErg).map(([k,v])=>[k,v.abstand]))));
   const kSchwach=Object.entries(kErg).filter(([,v])=>v.abstand<25).map(([k])=>k);
   ok('Jedes Brett hebt sich vom Holzhintergrund ab',
@@ -3466,6 +3478,27 @@ function kurzfassungGleich(proben,voll,erwartet){
      kopp.mit.holz&&kopp.mit.tafel&&!kopp.ohne.holz&&!kopp.ohne.tafel, JSON.stringify(kopp));
   ok('Die Tafel kostet kein Layout - Statuszeile und Brett bleiben gleich',
      kopp.mit.status===kopp.ohne.status&&kopp.mit.brett===kopp.ohne.brett, JSON.stringify(kopp));
+
+  /* Zwischen Brettkante und Tafel muss Holz liegen. Sonst stiesse ein
+     dunkles Brett (Samt schwarz, Neon) direkt an die dunkle Tafel und beide
+     liefen optisch ineinander - das waere der echte Fehler hinter der
+     Brettkanten-Messung. Die Brettkante liegt MARG*0,35 innerhalb der
+     viewBox; gemessen 19-21 px Abstand. */
+  const luecken=[];
+  for(const [vw,vh] of [[390,844],[375,667]]){
+    await page.setViewport({width:vw,height:vh,deviceScaleFactor:1});
+    await new Promise(r=>setTimeout(r,350));
+    luecken.push(await page.evaluate((vw)=>{ const q=boardSvg.getBoundingClientRect();
+      const sk=q.height/boardSvg.viewBox.baseVal.height; const kante=q.bottom-MARG*0.35*sk;
+      const tafel=document.getElementById('status').getBoundingClientRect().top
+        +parseFloat(getComputedStyle(document.getElementById('status'),'::before').top);
+      return {vw, luecke:Math.round(tafel-kante)}; },vw));
+  }
+  await page.setViewport({width:390,height:844,deviceScaleFactor:1});
+  await new Promise(r=>setTimeout(r,350));
+  console.log('INFO Holz zwischen Brett und Tafel: '+JSON.stringify(luecken));
+  ok('Zwischen Brettkante und Tafel liegen mindestens 12 px Holz',
+     luecken.every(l=>l.luecke>=12), JSON.stringify(luecken));
 
   /* Die eigentliche Frage: ist die WICHTIGSTE Meldung lesbar? Vorher kam das
      gruene "1 Stein bleibt erreichbar" im schlechtesten Zehntel auf 2,6 : 1 -
