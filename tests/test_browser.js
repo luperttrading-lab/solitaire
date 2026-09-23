@@ -1808,9 +1808,24 @@ function kurzfassungGleich(proben,voll,erwartet){
      hGruen.oben===0&&hGruen.unten>=3, JSON.stringify(hGruen));
   ok('Gelb bleibt unten, oben passiert nichts',
      hGelb.oben===0&&hGelb.unten>4, JSON.stringify(hGelb));
+  /* "oben > 3 x unten" (v1.76) war auf VERZERRTE Zahlen geeicht. Die alte
+     Messung machte zwei Fotos NACHEINANDER - oben nahe der Spitze, unten gut
+     100 ms spaeter auf der abklingenden Flanke. Daher 31 zu 6. Eingefroren
+     (v1.81) zeigt sich die echte Form: ein Kreisverlauf mit Mitte bei 62 %
+     der Hoehe, der nach aussen staerker wird - Profil von oben nach unten
+     53 ... 22 (Minimum nahe der Mitte) ... 38. Oben kann damit nur etwa
+     1,4-mal so stark sein wie unten, nie dreimal. Beweis, dass die Kennzahl
+     falsch war und nicht das Merkmal: der UNVERAENDERTE Warnblitz hat
+     eingefroren dasselbe Verhaeltnis (42 zu 32).
+     Gefragt wird jetzt, was gemeint war: so kraeftig wie der Warnblitz, und
+     oben mindestens so stark wie unten - das Gegenteil von Gruen und Gelb,
+     die oben 0 haben. */
   ok('Rot faerbt auch den oberen Bildschirm',
-     hRot.oben>=hWarn.oben*0.9&&hRot.oben>hRot.unten*3,
+     hRot.oben>=hWarn.oben*0.9&&hRot.oben>=hRot.unten&&hRot.oben>0,
      JSON.stringify(hRot)+' gegen Warnblitz oben '+hWarn.oben);
+  ok('Rot hat dieselbe Form wie der Warnblitz (Verhaeltnis oben zu unten)',
+     hWarn.unten>0&&hRot.unten>0&&Math.abs(hRot.oben/hRot.unten-hWarn.oben/hWarn.unten)<0.5,
+     'rot '+(hRot.oben/hRot.unten).toFixed(2)+' gegen Warnblitz '+(hWarn.oben/hWarn.unten).toFixed(2));
   /* Es soll sich anfuehlen wie der Warnblitz, den Lutz von frueher kennt. */
   ok('Rot ist etwa so kraeftig wie der Warnblitz',
      Math.abs(hRot.oben-hWarn.oben)<=hWarn.oben*0.4,
