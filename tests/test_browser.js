@@ -1745,15 +1745,22 @@ function kurzfassungGleich(proben,voll,erwartet){
      laufend gruen war. Die Frage lautet "ist Rot so kraeftig wie der
      Warnblitz" - und die Antwort darauf ist der Hoechstwert, nicht der Wert
      nach 150 ms. Damit haengt die Pruefung nicht mehr an der Maschinenlast. */
+  const hofProben=[];
   async function hofMessen(fn){
     await page.evaluate(fn);
-    let oben=0, unten=0;
-    for(const t of [90,90,100,120]){
-      await sleep(t);
+    /* DICHT abtasten, nicht an festen Punkten (v1.81). Mit vier Punkten bei
+       90/180/280/400 ms lag die Spitze (18 % von 0,62 s = 112 ms) zwischen
+       zwei Abtastungen; je nach Zufall der Bildschirmfotos schwankte der
+       gemessene Hoechstwert um rund 10 % - und die Schwelle von 90 % lag
+       mitten in diesem Rauschen (gemessen 33 gegen 33,3, im Lauf davor
+       gruen). Jetzt so viele Fotos, wie in 480 ms gehen. */
+    let oben=0, unten=0, proben=0; const t0=Date.now();
+    while(Date.now()-t0<480){
       const o=PNG.sync.read(await page.screenshot({clip:rOben}));
       const u=PNG.sync.read(await page.screenshot({clip:rUnten}));
-      oben=Math.max(oben,mittelAb(o,rGO)); unten=Math.max(unten,mittelAb(u,rGU));
+      oben=Math.max(oben,mittelAb(o,rGO)); unten=Math.max(unten,mittelAb(u,rGU)); proben++;
     }
+    hofProben.push(proben);
     const w={oben,unten};
     await page.evaluate(()=>{ $('ampelhof').classList.remove('an','halten');
       $('warnblitz').classList.remove('an'); });
@@ -1765,7 +1772,7 @@ function kurzfassungGleich(proben,voll,erwartet){
   const hRot  =await hofMessen(()=>ampelHof('bad'));
   const hWarn =await hofMessen(()=>{ settings.alarm=true; warnblitz(true); });
   console.log('INFO Ampelhof Rot: gruen='+JSON.stringify(hGruen)+' gelb='+JSON.stringify(hGelb)
-    +' rot='+JSON.stringify(hRot)+' warnblitz='+JSON.stringify(hWarn));
+    +' rot='+JSON.stringify(hRot)+' warnblitz='+JSON.stringify(hWarn)+' Abtastungen je Messung '+hofProben.join('/'));
   /* ABSOLUTE Schwellen taugen hier seit v1.76 nicht mehr. Die Messgroesse ist
      die mittlere Farbabweichung gegen den Hintergrund, und der ist seit dem
      Holzbild dreimal so hell: eine halbdurchsichtige Farbe darueber weicht
