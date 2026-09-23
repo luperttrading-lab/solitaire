@@ -1748,14 +1748,30 @@ function kurzfassungGleich(proben,voll,erwartet){
   const hofProben=[];
   async function hofMessen(fn){
     await page.evaluate(fn);
-    /* DICHT abtasten, nicht an festen Punkten (v1.81). Mit vier Punkten bei
-       90/180/280/400 ms lag die Spitze (18 % von 0,62 s = 112 ms) zwischen
-       zwei Abtastungen; je nach Zufall der Bildschirmfotos schwankte der
-       gemessene Hoechstwert um rund 10 % - und die Schwelle von 90 % lag
-       mitten in diesem Rauschen (gemessen 33 gegen 33,3, im Lauf davor
-       gruen). Jetzt so viele Fotos, wie in 480 ms gehen. */
-    let oben=0, unten=0, proben=0; const t0=Date.now();
-    while(Date.now()-t0<480){
+    /* DIE ANIMATION WIRD ANGEHALTEN UND GESTELLT, nicht im Lauf fotografiert
+       (v1.81). Zwei Fehlversuche davor, beide gemessen:
+       1. Vier feste Zeitpunkte (90/180/280/400 ms) - die Spitze von Rot und
+          Warnblitz liegt bei 18 % von 0,62 s = 112 ms, ZWISCHEN zwei
+          Punkten. Der Hoechstwert schwankte um rund 10 %, die Schwelle von
+          90 % lag mitten im Rauschen (33 gegen 33,3).
+       2. "So viele Fotos, wie in 480 ms gehen" - es gingen ZWEI. Ein Foto
+          braucht hier ueber 100 ms. Die Zahl der Abtastungen stand zum Glueck
+          in der Ausgabe, sonst haette der Fix noch schlechter gemessen als
+          der Fehler.
+       Jetzt wird jede Animation ueber die Web Animations API angehalten und
+       auf Bruchteile ihrer EIGENEN Dauer gestellt - darunter genau 18 %
+       (Spitze Rot/Warnblitz, 0,62 s) und 22 % (Spitze Gruen/Gelb, 0,8 s).
+       Damit ist jede Abtastung exakt, egal wie langsam das Foto ist. */
+    await sleep(40);
+    let oben=0, unten=0, proben=0;
+    for(const f of [0.10,0.14,0.18,0.22,0.27,0.34,0.45]){
+      const gestellt=await page.evaluate(f=>{ let n=0;
+        for(const a of document.getAnimations()){ const el=a.effect&&a.effect.target;
+          if(el&&(el.id==='ampelhof'||el.id==='warnblitz')){ const d=a.effect.getComputedTiming().duration;
+            a.pause(); a.currentTime=f*d; n++; } }
+        return n; },f);
+      if(!gestellt) continue;
+      await sleep(30);
       const o=PNG.sync.read(await page.screenshot({clip:rOben}));
       const u=PNG.sync.read(await page.screenshot({clip:rUnten}));
       oben=Math.max(oben,mittelAb(o,rGO)); unten=Math.max(unten,mittelAb(u,rGU)); proben++;
