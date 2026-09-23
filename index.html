@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="de">
+<html lang="de" class="holzgrund">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
@@ -528,9 +528,50 @@ header .boardname:active{background:var(--panel2)}
    gesehen. Jetzt ein hochkantes Bild (636x1297) und ein einziger,
    gleichmaessiger Faktor; die Breite laeuft ueber den Rand hinaus und wird
    beschnitten, das faellt bei Maserung nicht auf. */
-html{background:
+/* EIN SCHALTER FUER DAS HOLZ UND ALLES, WAS ES BRAUCHT (v1.80). Die
+   Klasse holzgrund steht fest am Wurzelelement. Holz und Lesbarkeits-Hilfen
+   haengen an DERSELBEN Klasse, damit sie nicht auseinanderlaufen koennen:
+   kommt spaeter ein anderer Hintergrund, faellt mit der Klasse auch die
+   Tafel weg - Lutz am 23.09.2026: "nur fuer diesen Fall mit dem
+   Spezialhintergrund". */
+html.holzgrund{background:
   radial-gradient(ellipse 130% 70.83% at 50% 35%, rgba(0,0,0,0) 0%, rgba(0,0,0,.18) 55%, rgba(0,0,0,.55) 100%) top center/100% 120% no-repeat,
   url('3-holz.jpg') top center/auto 120% no-repeat, #27211c}
+/* LESBARKEIT AUF HOLZ (v1.80, Variante A "Tafel", von Lutz gewaehlt).
+   Gemessen VORHER: Kopfzeile und Zaehler sind in Ordnung (Kontrast im
+   schlechtesten Zehntel 4,3 bis 6,9 : 1) und bleiben unangetastet. Schwach
+   waren genau vier Stellen:
+   1. Die Statuszeile - ausgerechnet die wichtigste Meldung. Das gruene
+      "1 Stein bleibt erreichbar" kam im schlechtesten Zehntel auf 2,6 : 1
+      (Mindestmass fuer 15-px-Schrift 4,5 : 1), dahinter die unruhigste
+      Maserung des Schirms. Eine dunkle Glasflaeche mit Weichzeichner
+      beruhigt genau diese Stelle: 6,3 : 1, Unruhe 4,6 -> 0,5. Sie sitzt
+      absolut hinter der Zeile und kostet keinen Bildpunkt Layout.
+   2. Ausgegraute Knoepfe loesten sich auf (Abhebung 12,8 gegen 38 bei
+      aktiven): opacity machte den GANZEN Knopf durchsichtig, auch seinen
+      dunklen Grund. Jetzt bleibt der Knopf stehen und nur Zeichen und
+      Schrift werden blass (29,7 bis 35,3). Ausgenommen sind die hellen
+      Messing-Knoepfe (Tipp, eingeschaltete Chips): dort staende blasse helle
+      Schrift auf hellem Grund, die behalten das alte Abblenden.
+   3. Das Ampelgehaeuse: dunkler, mit feinem Messingrand; gedimmte Lichter
+      0,16 -> 0,26. Das Lauflicht bekommt dafuer einen EIGENEN Keyframe-Satz
+      mit demselben Wert - sonst waere es in seiner dunklen Phase dunkler als
+      die ruhende Ampel. Bewusst kein var() in Keyframes: das laesst sich in
+      Safari hier nicht pruefen, und ein Fehler dort braeche das Lauflicht.
+      Die Probe im Ampel-Regler zieht mit (gemeinsame Selektoren, wie seit
+      v1.43), leuchtende Lichter (.an) sind ausgenommen - sonst verloere
+      ".aprobe b.an" die Spezifitaet und die Probe bliebe gedimmt.
+   4. Der Pfeil-Knopf: dunkle Fuellung statt eines Rings auf Holz. */
+html.holzgrund #status{position:relative;isolation:isolate}
+html.holzgrund #status::before{content:'';position:absolute;left:-2px;right:-2px;top:2px;bottom:4px;border-radius:16px;
+  background:rgba(20,15,10,.56);-webkit-backdrop-filter:blur(5px);backdrop-filter:blur(5px);z-index:-1;pointer-events:none}
+html.holzgrund .toolbar button:disabled:not(.primary){opacity:1;color:rgba(241,231,212,.34)}
+html.holzgrund .pill:disabled:not(.on){opacity:1;color:rgba(216,201,176,.36)}
+html.holzgrund #status .dot,html.holzgrund .aprobe{background:rgba(12,9,6,.72);box-shadow:inset 0 1px 3px rgba(0,0,0,.7),0 0 0 1px rgba(201,162,77,.30)}
+html.holzgrund #status .dot b,html.holzgrund .aprobe b:not(.an){opacity:.26}
+html.holzgrund #status.rechnet .dot b{animation-name:ampellaufholz}
+@keyframes ampellaufholz{0%{opacity:1}33%{opacity:1}40%{opacity:.26}100%{opacity:.26}}
+html.holzgrund #status .mehr{background:rgba(22,16,11,.62)}
 /* Die Rueckfallfarbe ist BEWUSST NICHT BG_HEX (v1.79). Sie ist das, was
    man sieht, wenn das Bild eine Flaeche nicht erreicht - und genau als
    heller Balken ist sie Lutz zweimal aufgefallen (rgb(104,92,81) gegen
@@ -698,7 +739,7 @@ header, .hud, #status{ text-shadow:0 1px 3px rgba(0,0,0,.75) }
 
 <script>
 'use strict';
-const APP_VERSION='1.79';
+const APP_VERSION='1.80';
 /* =========================================================================
    Kern: Bretter, Züge, Symmetrien, Paritäts-Schranke, Solver
    (als Fabrik, damit derselbe Code im Web Worker läuft)

@@ -3439,6 +3439,101 @@ function kurzfassungGleich(proben,voll,erwartet){
   ok('Danach spielt ein Sprungton wieder, statt in der Warteschlange zu landen',
      tonNach.ging===true&&tonNach.zustand==='running'&&tonNach.wartend===0, JSON.stringify(tonNach));
 
+  /* ===================================================================
+     v1.80: Lesbarkeit auf Holz - Variante A "Tafel", von Lutz gewaehlt
+     =================================================================== */
+  abschnitt='Lesbarkeit auf Holz (v1.80)';
+  await page.evaluate(()=>{ closeSheet(); closeDetail(); newGame('english'); });
+  await page.waitForFunction(()=>{ const sp=document.getElementById('splash');
+    return !sp||sp.hidden||getComputedStyle(sp).opacity==='0'||getComputedStyle(sp).display==='none'; },{timeout:6000}).catch(()=>{});
+  await new Promise(r=>setTimeout(r,500));
+
+  /* EIN Schalter fuer Holz und Tafel. Lutz am 23.09.2026: "nur fuer diesen
+     Fall mit dem Spezialhintergrund". Geprueft wird die KOPPLUNG, nicht nur
+     das Vorhandensein: ohne die Klasse muessen Holz und Tafel GEMEINSAM
+     verschwinden - und das Layout darf sich dabei nicht bewegen, denn die
+     Tafel liegt absolut hinter der Zeile. */
+  const kopp=await page.evaluate(()=>{
+    const h=document.documentElement;
+    const lies=()=>({holz:/3-holz/.test(getComputedStyle(h).backgroundImage),
+      tafel:getComputedStyle(document.getElementById('status'),'::before').content!=='none',
+      status:Math.round(document.getElementById('status').getBoundingClientRect().height),
+      brett:Math.round(document.getElementById('board').getBoundingClientRect().width)});
+    const mit=lies(); h.classList.remove('holzgrund'); const ohne=lies(); h.classList.add('holzgrund');
+    return {mit,ohne}; });
+  console.log('INFO Holz-Schalter: '+JSON.stringify(kopp));
+  ok('Holz und Tafel haengen an derselben Klasse am Wurzelelement',
+     kopp.mit.holz&&kopp.mit.tafel&&!kopp.ohne.holz&&!kopp.ohne.tafel, JSON.stringify(kopp));
+  ok('Die Tafel kostet kein Layout - Statuszeile und Brett bleiben gleich',
+     kopp.mit.status===kopp.ohne.status&&kopp.mit.brett===kopp.ohne.brett, JSON.stringify(kopp));
+
+  /* Die eigentliche Frage: ist die WICHTIGSTE Meldung lesbar? Vorher kam das
+     gruene "1 Stein bleibt erreichbar" im schlechtesten Zehntel auf 2,6 : 1 -
+     unter dem Mindestmass von 4,5 : 1 fuer 15-px-Schrift. Gemessen wird die
+     Schriftfarbe gegen die Bildpunkte, die WIRKLICH hinter ihr liegen (Schrift
+     unsichtbar geschaltet), nicht gegen eine angenommene Hintergrundfarbe. */
+  await page.evaluate(()=>{ const a=game.pegAt;
+    const m=game.board.moves.filter(x=>a[x.from]>=0&&a[x.over]>=0&&a[x.to]<0); playMove(m[0]); });
+  await page.waitForFunction(()=>document.getElementById('status').classList.contains('ok'),{timeout:8000}).catch(()=>{});
+  await new Promise(r=>setTimeout(r,700));
+  const lumW=(r,g,b)=>{const f=c=>{c/=255;return c<=0.03928?c/12.92:Math.pow((c+0.055)/1.055,2.4);};return 0.2126*f(r)+0.7152*f(g)+0.0722*f(b);};
+  const sInfo=await page.evaluate(()=>{ const e=document.querySelector('#status .kurz'); const r=e.getBoundingClientRect();
+    const c=getComputedStyle(e).color.match(/\d+/g).map(Number); e.style.color='transparent'; e.style.textShadow='none';
+    return {box:{x:Math.floor(r.x),y:Math.floor(r.y),width:Math.ceil(r.width),height:Math.ceil(r.height)},c,txt:e.textContent,
+      oben:(()=>{const q=document.elementFromPoint(r.x+r.width/2,r.y+r.height/2);return q?(q.id||q.className):'-';})()}; });
+  const sBg=PNG.sync.read(await page.screenshot({clip:sInfo.box}));
+  await page.evaluate(()=>{ const e=document.querySelector('#status .kurz'); e.style.color=''; e.style.textShadow=''; });
+  const sL=[]; for(let i=0;i<sBg.data.length;i+=4) sL.push(lumW(sBg.data[i],sBg.data[i+1],sBg.data[i+2])); sL.sort((a,b)=>a-b);
+  const sP90=sL[Math.floor(sL.length*0.9)], sLt=lumW(...sInfo.c.slice(0,3));
+  const sK=(Math.max(sLt,sP90)+0.05)/(Math.min(sLt,sP90)+0.05);
+  console.log('INFO Statuszeile auf Holz: "'+sInfo.txt+'" Kontrast schlechtestes Zehntel '+sK.toFixed(2)+' : 1, Messstelle '+sInfo.oben);
+  ok('Die Statuszeile erreicht auch im schlechtesten Zehntel 4,5 : 1 (vorher 2,6)',
+     sK>=4.5, sK.toFixed(2)+' : 1 fuer "'+sInfo.txt+'"');
+
+  /* Ausgegraute Knoepfe: der Knopf bleibt stehen, nur Zeichen und Schrift
+     werden blass. Gemessen als Abhebung vom Holz (mit/ohne Element) - vorher
+     12,8 gegen 38 bei aktiven. */
+  await page.evaluate(()=>{ newGame('english'); });
+  await new Promise(r=>setTimeout(r,500));
+  const abh=async(sel)=>{
+    const box=await page.evaluate(s=>{const r=document.querySelector(s).getBoundingClientRect();
+      return {x:Math.floor(r.x),y:Math.floor(r.y),width:Math.ceil(r.width),height:Math.ceil(r.height)};},sel);
+    const mit=PNG.sync.read(await page.screenshot({clip:box}));
+    await page.evaluate(s=>document.querySelector(s).style.visibility='hidden',sel);
+    const ohne=PNG.sync.read(await page.screenshot({clip:box}));
+    await page.evaluate(s=>document.querySelector(s).style.visibility='',sel);
+    let d=0,n=0; for(let i=0;i<mit.data.length;i+=4){ d+=(Math.abs(mit.data[i]-ohne.data[i])+Math.abs(mit.data[i+1]-ohne.data[i+1])+Math.abs(mit.data[i+2]-ohne.data[i+2]))/3; n++; }
+    return Math.round(d/n*10)/10; };
+  const knopf={vor:await abh('#btnRedo'), zurueck:await abh('#btnUndo'),
+    aus:await page.evaluate(()=>({vor:document.getElementById('btnRedo').disabled, zurueck:document.getElementById('btnUndo').disabled}))};
+  console.log('INFO ausgegraute Knoepfe: '+JSON.stringify(knopf));
+  ok('Ausgegraute Knoepfe loesen sich nicht mehr im Holz auf (Abhebung >= 25, vorher 12,8)',
+     knopf.aus.vor&&knopf.aus.zurueck&&knopf.vor>=25&&knopf.zurueck>=25, JSON.stringify(knopf));
+  /* Die hellen Messing-Knoepfe sind ausgenommen: dort staende blasse helle
+     Schrift auf hellem Grund. Sie blenden weiter als Ganzes ab. */
+  const tipp=await page.evaluate(()=>{ const t=document.getElementById('btnHint'); const war=t.disabled;
+    t.disabled=true; const o=getComputedStyle(t).opacity; t.disabled=war; return {opacity:o, primary:t.classList.contains('primary')}; });
+  ok('Der Messing-Knopf Tipp blendet ausgegraut weiter als Ganzes ab',
+     tipp.primary&&Number(tipp.opacity)<1, JSON.stringify(tipp));
+
+  /* Ampel: gedimmte Lichter und die dunkle Phase des Lauflichts muessen
+     DENSELBEN Wert haben, sonst waere die laufende Ampel dunkler als die
+     ruhende. Und die Probe im Regler darf beim Aufleuchten nicht gedimmt
+     bleiben - ".aprobe b.an" haette gegen eine unbedachte Regel die
+     Spezifitaet verloren. */
+  const amp=await page.evaluate(()=>{
+    const dim=Number(getComputedStyle(document.querySelector('#status .dot b.r')).opacity);
+    let kf=null; for(const sh of document.styleSheets){ let rs=[]; try{ rs=[...sh.cssRules]; }catch(e){}
+      for(const ru of rs) if(ru.name==='ampellaufholz') kf=[...ru.cssRules].map(k=>Number(k.style.opacity)); }
+    const pr=document.createElement('div'); pr.className='aprobe'; pr.innerHTML='<b class="r an"></b><b class="g"></b>';
+    document.body.appendChild(pr); const an=Number(getComputedStyle(pr.children[0]).opacity), aus=Number(getComputedStyle(pr.children[1]).opacity); pr.remove();
+    return {dim, kfAus:kf?Math.min(...kf):null, probeAn:an, probeAus:aus}; });
+  console.log('INFO Ampel auf Holz: '+JSON.stringify(amp));
+  ok('Ruhende Ampel und Lauflicht blenden auf denselben Wert ab',
+     amp.kfAus!==null&&Math.abs(amp.dim-amp.kfAus)<0.001, JSON.stringify(amp));
+  ok('Die Probe im Ampel-Regler leuchtet voll und dimmt wie die echte Ampel',
+     amp.probeAn===1&&Math.abs(amp.probeAus-amp.dim)<0.001, JSON.stringify(amp));
+
   ok('keine Seitenfehler insgesamt', errors.length===0, errors.join(' | '));
   await browser.close();
   console.log(fails?`\n${fails} FEHLER`:'\nALLE BROWSER-TESTS OK'); process.exitCode=fails?1:0;
