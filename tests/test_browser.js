@@ -3567,6 +3567,74 @@ function kurzfassungGleich(proben,voll,erwartet){
   ok('Die Probe im Ampel-Regler leuchtet voll und dimmt wie die echte Ampel',
      amp.probeAn===1&&Math.abs(amp.probeAus-amp.dim)<0.001, JSON.stringify(amp));
 
+  /* ===================================================================
+     v1.81: Ton - Heilung in der Beruehrung, Uhr-Probe, Protokoll
+     Lutz am 23.09.2026: "Es gibt immer wieder Probleme, dass kein Ton zu
+     hoeren ist, obwohl angeschaltet ... manchmal geht's, manchmal nicht."
+     Im Testbrowser nicht nachstellbar. Geprueft wird die MECHANIK an
+     nachgestellten Zustaenden - und vor allem die Gegenprobe, dass ein
+     gesunder Kontext nie angefasst wird.
+     =================================================================== */
+  abschnitt='Ton: Heilung und Protokoll (v1.81)';
+  const tGeste=await page.evaluate(()=>{ settings.sound=true; Sound.letzterNeubau=0;
+    const alt=Sound.ensure(true); const n0=Sound.neubauten;
+    Object.defineProperty(alt,'state',{get:()=>'suspended',configurable:true}); Sound.letzterNeubau=0;
+    const neu=Sound.ensure(true);
+    return {anders:neu!==alt, zustand:neu&&neu.state, neubauten:Sound.neubauten-n0,
+      log:Sound.protokoll.slice(-3).join(' | ')}; });
+  console.log('INFO Ton, Beruehrung bei haengendem Kontext: '+JSON.stringify(tGeste));
+  ok('In einer Beruehrung wird ein nicht laufender Kontext sofort neu gebaut, nicht geweckt',
+     tGeste.anders&&tGeste.zustand==='running'&&tGeste.neubauten===1&&/Berührung, war suspended/.test(tGeste.log), JSON.stringify(tGeste));
+
+  /* Schnelles Tippen in einer Lage, in der iOS gar keinen Ton erlaubt
+     (laufendes Telefonat), darf keine Kontexte auftuermen. */
+  const tSperre=await page.evaluate(()=>{ const n0=Sound.neubauten;
+    for(let i=0;i<3;i++){ const c=Sound.ctx; Object.defineProperty(c,'state',{get:()=>'suspended',configurable:true}); Sound.ensure(true); }
+    return {neubauten:Sound.neubauten-n0}; });
+  ok('Hoechstens ein Neubau je 1,5 s, auch bei schnellem Tippen',
+     tSperre.neubauten===0, JSON.stringify(tSperre)+' (der Neubau davor liegt keine 1,5 s zurueck)');
+
+  /* Der Fall, der durch alle Netze fiel: meldet 'running', ist aber tot.
+     Erkannt an der stehenden Uhr - ohne Beruehrung nur protokolliert (ein
+     dort gebauter Kontext liefe auf iOS nicht an), mit Beruehrung neu. */
+  const tUhr=await page.evaluate(()=>{ Sound.letzterNeubau=0;
+    const c=Sound.neu('Testaufbau'); const n0=Sound.neubauten; const t=c.currentTime;
+    Object.defineProperty(c,'currentTime',{get:()=>t,configurable:true});
+    Sound.pruef={wand:performance.now()-1000,ctx:t};
+    const ohne=Sound.ensure(false); const nachOhne=Sound.neubauten-n0;
+    Sound.pruef={wand:performance.now()-1000,ctx:t};
+    const mit=Sound.ensure(true);
+    return {ohneGleich:ohne===c, nachOhne, mitNeu:mit!==c, nachMit:Sound.neubauten-n0, zustand:mit.state,
+      log:Sound.protokoll.slice(-4).join(' | ')}; });
+  console.log('INFO Ton, Uhr steht bei running: '+JSON.stringify(tUhr));
+  ok('Steht die Uhr trotz "running", wird das protokolliert - ohne Beruehrung aber nicht neu gebaut',
+     tUhr.ohneGleich&&tUhr.nachOhne===0&&/Uhr steht/.test(tUhr.log), JSON.stringify(tUhr));
+  ok('In der naechsten Beruehrung wird der tote Kontext ersetzt und laeuft',
+     tUhr.mitNeu&&tUhr.nachMit===1&&tUhr.zustand==='running', JSON.stringify(tUhr));
+
+  /* GEGENPROBE: ein gesunder Kontext bleibt unangetastet, auch wenn ueber
+     mehr als eine Sekunde immer wieder beruehrt wird. Schluege die Uhr-Probe
+     hier an, schnitte sie selbst Toene ab - der Fehler, den sie heilen soll. */
+  const tGesund=await page.evaluate(async()=>{ Sound.letzterNeubau=0; Sound.neu('Gegenprobe');
+    await new Promise(r=>setTimeout(r,50)); const n0=Sound.neubauten, c0=Sound.ctx;
+    for(let i=0;i<5;i++){ Sound.ensure(true); await new Promise(r=>setTimeout(r,280)); }
+    return {neubauten:Sound.neubauten-n0, gleich:Sound.ctx===c0, zustand:Sound.ctx.state}; });
+  console.log('INFO Ton, gesunder Kontext: '+JSON.stringify(tGesund));
+  ok('Ein gesunder Kontext wird bei Beruehrungen nie neu gebaut',
+     tGesund.neubauten===0&&tGesund.gleich&&tGesund.zustand==='running', JSON.stringify(tGesund));
+
+  /* Das Protokoll ist fuer einen Screenshot im Fehlerfall da - die neuesten
+     Eintraege muessen OBEN stehen, sonst schneidet der Rahmen genau sie ab. */
+  const tMenue=await page.evaluate(async()=>{ openSheet(); await new Promise(r=>setTimeout(r,400));
+    document.getElementById('btnTestton').click(); await new Promise(r=>setTimeout(r,450));
+    const z=document.getElementById('tonZustand').textContent, pr=document.getElementById('tonProtokoll').textContent.split('\n');
+    const k=document.getElementById('btnTestton').getBoundingClientRect(); closeSheet();
+    return {zustand:z, erste:pr[0], zeilen:pr.length, knopfHoehe:Math.round(k.height)}; });
+  console.log('INFO Ton pruefen im Menue: '+JSON.stringify(tMenue));
+  ok('"Ton pruefen" zeigt Zustand, Neubauten und die neuesten Eintraege oben',
+     /Kontext: running/.test(tMenue.zustand)&&/Neubauten \d+/.test(tMenue.zustand)&&/Testton/.test(tMenue.erste), JSON.stringify(tMenue));
+  ok('Der Testton-Knopf ist mindestens 40 px hoch', tMenue.knopfHoehe>=40, tMenue.knopfHoehe+' px');
+
   ok('keine Seitenfehler insgesamt', errors.length===0, errors.join(' | '));
   await browser.close();
   console.log(fails?`\n${fails} FEHLER`:'\nALLE BROWSER-TESTS OK'); process.exitCode=fails?1:0;

@@ -572,6 +572,14 @@ html.holzgrund #status .dot b,html.holzgrund .aprobe b:not(.an){opacity:.26}
 html.holzgrund #status.rechnet .dot b{animation-name:ampellaufholz}
 @keyframes ampellaufholz{0%{opacity:1}33%{opacity:1}40%{opacity:.26}100%{opacity:.26}}
 html.holzgrund #status .mehr{background:rgba(22,16,11,.62)}
+/* Ton pruefen (v1.81): Diagnose fuer den Screenshot im Fehlerfall. Eigene
+   Knopfklasse statt .btn - der traegt flex:1 und streckte sich (v1.37). */
+.tonpruef{align-items:flex-start}
+.tonpruefText{min-width:0;flex:1}
+.tonkopf{display:flex;align-items:center;gap:10px;margin-top:8px}
+.tonzustand{flex:1;min-width:0;font-size:12px;color:var(--ink)}
+.tonprot{margin:6px 0 0;font:11px/1.35 ui-monospace,Menlo,monospace;color:var(--muted);white-space:pre-wrap;max-height:9.5em;overflow:auto}
+.tonknopf{flex:none;min-height:40px;padding:8px 14px;border-radius:10px;background:var(--panel2);border:1px solid var(--brass);color:var(--brass2);font-size:13px}
 /* Die Rueckfallfarbe ist BEWUSST NICHT BG_HEX (v1.79). Sie ist das, was
    man sieht, wenn das Bild eine Flaeche nicht erreicht - und genau als
    heller Balken ist sie Lutz zweimal aufgefallen (rgb(104,92,81) gegen
@@ -676,6 +684,7 @@ header, .hud, #status{ text-shadow:0 1px 3px rgba(0,0,0,.75) }
     <div class="row"><div><div class="t">Startloch frei wählen</div><div class="d">Beim Start alle Steine setzen und selbst einen herausnehmen.</div></div><button class="switch" id="swFree" role="switch" aria-label="Startloch frei wählen"></button></div>
     <div class="row"><div><div class="t">Funkeln</div><div class="d">Ein Streiflicht wandert über die Murmel, die du antippst, und über die, die gerade gesprungen ist. Sonst bleibt das Brett still.</div></div><button class="switch" id="swFunkeln" role="switch" aria-label="Funkeln"></button></div>
     <div class="row"><div><div class="t">Ton</div><div class="d">Kurze Klicks beim Ziehen, Jingle am Ende.</div></div><button class="switch" id="swSound" role="switch" aria-label="Ton"></button></div>
+    <div class="row tonpruef" id="tonPruef"><div class="tonpruefText"><div class="t">Ton prüfen</div><div class="d">Bleibt es still, hier einen Screenshot machen – das Protokoll zeigt, was der Ton gerade tut. Neueste Einträge oben.</div><div class="tonkopf"><div class="tonzustand" id="tonZustand">–</div><button type="button" class="tonknopf" id="btnTestton">Testton</button></div><pre class="tonprot" id="tonProtokoll"></pre></div></div>
     <h2>So geht's</h2>
     <p>Ein Stein springt waagerecht, senkrecht (auf dem Dreieck auch schräg) über einen direkten Nachbarn in ein leeres Loch dahinter. Der übersprungene Stein wird entfernt. Ziel: nur ein Stein bleibt übrig – auf den Kreuzbrettern idealerweise in der Mitte.</p>
     <p>Tipp: Die Suche berechnet, mit welchem Zug sich die kleinste Restzahl erreichen lässt. Ist das nachweisbar, steht „bewiesen" dabei; sonst gilt der beste gefundene Zug innerhalb des Rechenbudgets.</p>
@@ -739,7 +748,7 @@ header, .hud, #status{ text-shadow:0 1px 3px rgba(0,0,0,.75) }
 
 <script>
 'use strict';
-const APP_VERSION='1.80';
+const APP_VERSION='1.81';
 /* =========================================================================
    Kern: Bretter, Züge, Symmetrien, Paritäts-Schranke, Solver
    (als Fabrik, damit derselbe Code im Web Worker läuft)
@@ -1073,51 +1082,93 @@ function currentLook(){ const t=THEMES[settings.theme]||THEMES.glas; return t.cu
       es zu spaet. Deshalb weckt jede Beruehrung des Bildschirms den Kontext.
    weckAudio() deckt beides ab, toene werden bis zum Aufwachen zurueckgestellt. */
 const Sound={ctx:null,wartend:[],weckVersuche:0,
-  ensure(){ if(!settings.sound) return null;
-    try{
-      /* iOS kann den Kontext nach einer Unterbrechung (Anruf, anderes
-         Medium, Wegschalten) auf 'closed' setzen. resume() hilft dort NIE
-         wieder - jeder weitere Ton landete in der Warteschlange und war
-         still, dauerhaft. Genau das beschreibt Lutz am 22.09.2026: "manchmal
-         ist der Ton an und dann hab ich keinen Soundeffekt mehr."
-         Ein geschlossener Kontext wird deshalb weggeworfen und neu gebaut.
-         NICHT im Testbrowser nachstellbar - dort bleibt der Zustand
-         durchgehend 'running'; das ist eine Haertung nach den
-         dokumentierten iOS-Zustaenden, kein bewiesener Fix. */
-      if(this.ctx&&this.ctx.state==='closed'){ this.ctx=null; }
-      if(!this.ctx) this.ctx=new (window.AudioContext||window.webkitAudioContext)();
-    }catch(e){ return null; }
-    if(this.ctx.state==='running'){ this.weckVersuche=0; return this.ctx; }
-    /* DAUERHAFTE Stille entsteht so: bleibt der Kontext haengen, wandert in
-       tone() jeder Ton nur noch in die Warteschlange und nichts kommt je
-       heraus - auch nach Zuegen, Menue, Zurueck und neuem Spiel nicht.
-       resume() heilt einen 'interrupted' Kontext auf iOS nicht immer. Nach
-       zwei erfolglosen Versuchen wird er deshalb verworfen und neu gebaut;
-       das geschieht hier fast immer in einer Nutzergeste (ensure() haengt am
-       pointerdown), und ein frisch in einer Geste gebauter Kontext laeuft. */
+  protokoll:[],neubauten:0,zurueckgestellt:0,verworfen:0,pruef:null,letzterNeubau:0,
+  /* PROTOKOLL (v1.81). Lutz am 23.09.2026: "Es gibt immer wieder Probleme,
+     dass kein Ton zu hoeren ist, obwohl angeschaltet ... manchmal geht's,
+     manchmal nicht." Zwei Haertungen (v1.22, v1.77) beruhten auf
+     dokumentierten iOS-Zustaenden; der Fehler kommt trotzdem wieder, und im
+     Testbrowser (Chromium) ist er nicht nachzustellen. Ein dritter Versuch
+     ohne Daten waere geraten. Deshalb schreibt der Ton jetzt mit, was er
+     tut - sichtbar im Menue unter "Ton pruefen", fuer einen Screenshot im
+     Moment des Fehlers. */
+  log(t){ const d=new Date(), z=[d.getHours(),d.getMinutes(),d.getSeconds()].map(n=>String(n).padStart(2,'0')).join(':');
+    this.protokoll.push(z+'  '+t); if(this.protokoll.length>30) this.protokoll.shift(); },
+  /* Frischer Kontext, alter wird geschlossen. Ein Kontext, der in einer
+     Nutzergeste entsteht, laeuft auf iOS sofort - das ist der verlaessliche
+     Weg aus JEDEM kaputten Zustand, nicht nur aus den gemeldeten. */
+  neu(grund){ const tot=this.ctx; this.ctx=null;
+    try{ this.ctx=new (window.AudioContext||window.webkitAudioContext)(); }
+    catch(e){ this.log('Neubau gescheitert: '+(e&&e.message||e)); return null; }
+    if(tot&&tot.state!=='closed'&&tot.close){ try{ tot.close().catch(()=>{}); }catch(e){} }
+    this.neubauten++; this.pruef=null; this.weckVersuche=0; this.letzterNeubau=performance.now();
+    const c=this.ctx; c.onstatechange=()=>{ if(c===this.ctx) this.log('Zustand: '+c.state); };
+    this.log('Neubau ('+grund+') → '+c.state);
+    return c; },
+  /* geste = true, wenn aus einer Beruehrung gerufen (pointerdown). Nur dort
+     laesst iOS einen neuen Kontext sicher anlaufen. */
+  ensure(geste){ if(!settings.sound) return null;
+    /* iOS kann den Kontext nach einer Unterbrechung auf 'closed' setzen;
+       resume() hilft dort nie wieder (v1.77). */
+    if(!this.ctx||this.ctx.state==='closed'){ if(!this.neu(this.ctx?'war geschlossen':'erster Ton')) return null; }
+    const c=this.ctx, jetzt=performance.now();
+    const darfNeu=geste&&jetzt-this.letzterNeubau>1500;
+    if(c.state==='running'){
+      /* UHR-PROBE (v1.81): Der Fall, der durch alle bisherigen Netze fiel.
+         Meldet der Kontext 'running', griff keine Heilung - auch wenn er
+         in Wahrheit stumm ist. Ein lebender Kontext zaehlt seine Zeit in
+         Echtzeit weiter (im Testbrowser gemessen: 0,813 s in 0,8 s). Steht
+         seine Uhr, ist er tot, egal was er meldet. Geprueft wird ueber
+         mindestens 400 ms; der Messpunkt wird nur nach einer Pruefung neu
+         gesetzt, sonst verschoebe ihn jede Beruehrung und die Probe liefe
+         nie. */
+      if(!this.pruef) this.pruef={wand:jetzt,ctx:c.currentTime};
+      else if(jetzt-this.pruef.wand>400){
+        const dw=(jetzt-this.pruef.wand)/1000, dc=c.currentTime-this.pruef.ctx;
+        this.pruef={wand:jetzt,ctx:c.currentTime};
+        if(dc<dw*0.25){
+          this.log('Uhr steht ('+dc.toFixed(2).replace('.',',')+' s in '+dw.toFixed(1).replace('.',',')+' s), meldet running');
+          if(darfNeu){ const n=this.neu('Uhr stand'); if(n&&n.state==='running') this.nachholen(); return n; }
+        }
+      }
+      this.weckVersuche=0; return c; }
+    /* NICHT running, aber in einer Beruehrung (v1.81): sofort neu bauen statt
+       zu wecken. Ein frisch in der Geste gebauter Kontext laeuft; resume()
+       dagegen heilt 'interrupted' auf iOS nicht verlaesslich - und jeder
+       vergebliche Versuch ist ein Tipp ohne Ton. Hoechstens alle 1,5 s, damit
+       schnelles Tippen in einer Lage, in der iOS gar keinen Ton erlaubt
+       (laufendes Telefonat), keine Kontexte auftuermt. */
+    if(darfNeu){ const n=this.neu('Berührung, war '+c.state); if(n&&n.state==='running'){ this.nachholen(); return n; } if(!n) return null; }
+    /* Gedrosselte Beruehrung: nur wecken. Sie darf den Zaehler unten NICHT
+       hochtreiben - sonst baute die dritte schnelle Beruehrung ueber den
+       Weck-Zweig doch neu und die Drossel waere umgangen (beim Schreiben der
+       Pruefung gefunden). */
+    if(geste){ this.wecken(); return this.ctx; }
+    /* Ohne Geste (Timer, Rueckkehr aus dem Hintergrund): wecken versuchen,
+       nach zwei vergeblichen Versuchen neu bauen (v1.77). */
     if(this.weckVersuche>=2){
-      this.weckVersuche=0;
-      try{ const tot=this.ctx; this.ctx=null;
-        this.ctx=new (window.AudioContext||window.webkitAudioContext)();
-        if(tot&&tot.close) tot.close().catch(()=>{});
-      }catch(e){ return null; }
-      if(this.ctx.state==='running'){ this.nachholen(); return this.ctx; }
+      const n=this.neu('zwei Weckversuche vergeblich'); if(!n) return null;
+      if(n.state==='running'){ this.nachholen(); return n; }
     }
     this.weckVersuche++;
-    try{ const pr=this.ctx.resume();
-      if(pr&&pr.then) pr.then(()=>this.nachholen(),()=>{});
+    this.wecken();
+    return this.ctx; },
+  wecken(){ const w=this.ctx; if(!w) return;
+    try{ const pr=w.resume();
+      if(pr&&pr.then) pr.then(()=>this.nachholen(),()=>this.log('Wecken abgelehnt: '+w.state));
       /* Aeltere WebKit-Fassungen geben kein Versprechen zurueck - dann
          haette nie jemand nachgeholt. */
-      else if(this.ctx.state==='running') this.nachholen();
-    }catch(e){}
-    return this.ctx; },
+      else if(w.state==='running') this.nachholen();
+    }catch(e){ this.log('Wecken warf: '+(e&&e.message||e)); } },
   /* Toene, die waehrend des Schlafs aufliefen, jetzt abspielen - aber nur,
      solange sie frisch sind. Ein Sprungton von vor zehn Sekunden waere
      Unfug. */
   nachholen(){ const w=this.wartend; this.wartend=[];
-    w.forEach(a=>{ if(Date.now()-a.zeit<400) this.tone(a.f0,a.f1,a.dur,a.type,a.gain,a.when); }); },
+    let alt=0; w.forEach(a=>{ if(Date.now()-a.zeit<400) this.tone(a.f0,a.f1,a.dur,a.type,a.gain,a.when); else alt++; });
+    if(alt){ this.verworfen+=alt; this.log(alt+' Ton'+(alt>1?'e':'')+' zu alt, verworfen'); } },
   tone(f0,f1,dur,type,gain,when){ const c=this.ensure(); if(!c) return;
-    if(c.state!=='running'){ if(this.wartend.length<24) this.wartend.push({f0,f1,dur,type,gain,when,zeit:Date.now()}); return; }
+    if(c.state!=='running'){ this.zurueckgestellt++;
+      if(!this.wartend.length) this.log('Ton zurückgestellt, Kontext '+c.state);
+      if(this.wartend.length<24) this.wartend.push({f0,f1,dur,type,gain,when,zeit:Date.now()}); return; }
     const t=c.currentTime+(when||0); const o=c.createOscillator(), g=c.createGain();
     o.type=type||'sine'; o.frequency.setValueAtTime(f0,t); if(f1) o.frequency.exponentialRampToValueAtTime(f1,t+dur);
     g.gain.setValueAtTime(0.0001,t); g.gain.exponentialRampToValueAtTime(gain||0.2,t+0.01); g.gain.exponentialRampToValueAtTime(0.0001,t+dur);
@@ -3015,7 +3066,14 @@ function previewSvg(board,markStart){
   board.cells.forEach((c,i)=>{ const p=lay.pos[i]; const empty=markStart&&i===board.startIdx&&!settings.freeStart; s+=`<circle cx="${p.x}" cy="${p.y}" r="${empty?R_HOLE:R_PEG}" fill="${empty?L.hole:'#e9cd7c'}"/>`; });
   return s+'</svg>';
 }
-function buildSheet(){
+/* Zustandszeile und die letzten Protokolleintraege fuer "Ton pruefen". */
+function tonAnzeige(){ const z=$('tonZustand'), pr=$('tonProtokoll'); if(!z||!pr) return;
+  const c=Sound.ctx;
+  z.textContent=!settings.sound?'Ton ist aus.':
+    'Kontext: '+(c?c.state:'noch keiner')+(c?' · '+c.sampleRate+' Hz · Uhr '+c.currentTime.toFixed(1).replace('.',',')+' s':'')
+    +' · Neubauten '+Sound.neubauten+' · zurückgestellt '+Sound.zurueckgestellt+' · verworfen '+Sound.verworfen;
+  pr.textContent=Sound.protokoll.slice(-12).reverse().join('\n')||'(noch keine Einträge)'; }
+function buildSheet(){ tonAnzeige();
   const stats=Store.get('stats',{});
   const bl=$('boardList'); bl.innerHTML='';
   CORE.BOARD_DEFS.forEach(d=>{ const b=boards[d.id]; const card=document.createElement('button'); card.className='boardcard'+(settings.board===d.id?' on':''); card.setAttribute('aria-label',d.name);
@@ -3277,6 +3335,13 @@ $('swLandung').addEventListener('click',()=>{ settings.landung=!settings.landung
 $('swFunkeln').addEventListener('click',()=>{ settings.funkeln=!settings.funkeln; saveSettings(); buildSheet();
   if(settings.funkeln){ const i=game.pegAt.findIndex(v=>v>=0); if(i>=0) glanzAn(i); } });
 $('swSound').addEventListener('click',()=>{ settings.sound=!settings.sound; saveSettings(); buildSheet(); if(settings.sound){ Sound.ensure(); Sound.select(); } });
+/* Testton: klingt er, arbeitet die Tonausgabe - dann liegt ein Aussetzer an
+   der Spielstelle. Bleibt auch er still, zeigt das Protokoll darunter, in
+   welchem Zustand der Kontext war (v1.81). */
+$('btnTestton').addEventListener('click',()=>{
+  if(!settings.sound){ toast('Der Ton ist ausgeschaltet.'); return; }
+  Sound.log('Testton'); Sound.ensure(true); Sound.tone(660,0,0.3,'sine',0.25);
+  setTimeout(tonAnzeige,350); });
 $('swFree').addEventListener('click',()=>{ settings.freeStart=!settings.freeStart; saveSettings(); buildSheet(); confirmDiscard(()=>newGame()); });
 $('btnUndo').addEventListener('click',undo); $('btnRedo').addEventListener('click',redo);
 $('btnHint').addEventListener('click',()=>requestHint());
@@ -3291,8 +3356,11 @@ document.addEventListener('keydown',e=>{ if(e.key==='z'&&(e.metaKey||e.ctrlKey))
 /* Jede Beruehrung ist eine Nutzergeste - die einzige Gelegenheit, in der iOS
    den Audio-Kontext wieder anlaufen laesst. Passiv und in der Erfassungsphase,
    damit kein anderer Handler das Wecken verhindern kann. */
-document.addEventListener('pointerdown',()=>{ Sound.ensure(); },{capture:true,passive:true});
-document.addEventListener('visibilitychange',()=>{ if(!document.hidden) Sound.ensure(); });
+/* Jede Beruehrung ist eine Geste - nur hier darf ensure() neu bauen (v1.81). */
+document.addEventListener('pointerdown',()=>{ Sound.ensure(true); },{capture:true,passive:true});
+document.addEventListener('visibilitychange',()=>{
+  if(document.hidden){ Sound.pruef=null; if(settings.sound) Sound.log('App verborgen'); }
+  else { if(settings.sound) Sound.log('App sichtbar, Kontext '+(Sound.ctx?Sound.ctx.state:'keiner')); Sound.ensure(); } });
 document.addEventListener('visibilitychange',()=>{ if(document.hidden&&game.startedAt&&!game.finished){ game.elapsedBefore=elapsedMs(); game.startedAt=0; game.paused=true; } else if(!document.hidden&&game.paused){ game.paused=false; if(game.history.length&&!game.finished&&!game.pauseAn) game.startedAt=Date.now(); } });
 
 /* ---------- Startbild ---------- */
