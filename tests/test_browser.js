@@ -3603,6 +3603,11 @@ function kurzfassungGleich(proben,voll,erwartet){
     Sound.pruef={wand:performance.now()-1000,ctx:t};
     const ohne=Sound.ensure(false); const nachOhne=Sound.neubauten-n0;
     Sound.pruef={wand:performance.now()-1000,ctx:t};
+    /* Der Kontext ist hier gerade erst gebaut - die Drossel (1,5 s) wuerde den
+       Neubau zu Recht verweigern. Nachgestellt wird ein Kontext, der schon
+       laenger laeuft; der erste Entwurf setzte die Drossel VOR dem Neubau
+       zurueck, und neu() setzt sie selbst wieder. */
+    Sound.letzterNeubau=0;
     const mit=Sound.ensure(true);
     return {ohneGleich:ohne===c, nachOhne, mitNeu:mit!==c, nachMit:Sound.neubauten-n0, zustand:mit.state,
       log:Sound.protokoll.slice(-4).join(' | ')}; });
