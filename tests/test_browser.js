@@ -3777,8 +3777,52 @@ function kurzfassungGleich(proben,voll,erwartet){
   const rms=q=>Math.sqrt(q.reduce((a,v,k)=>a+(v-med[k])**2,0)/q.length);
   const dA=andere.map(rms).sort((a,b)=>a-b), dM=rms(Pr[mitteIdx]), dTyp=dA[Math.floor(dA.length/2)];
   console.log('INFO Foto-Brett, Profilabstand zum typischen Loch: Mitte '+dM.toFixed(1)+', andere Median '+dTyp.toFixed(1)+', schlechtestes '+dA[dA.length-1].toFixed(1));
-  ok('Das Mittelloch sieht aus wie ein typisches Loch (Profilabstand <= 1,25 x Median der anderen)',
-     dM<=dTyp*1.25, dM.toFixed(1)+' gegen '+dTyp.toFixed(1));
+  // Die Pruefung dazu steht unten, auf das Holz um jedes Loch bezogen (v1.83).
+  /* v1.83: Lutz am 24.09.2026: "Auch die Einfraesung soll identisch sein
+     ... zu viel Lichtreflex unten rechts auf dem gefraesten Rand." Gemessen
+     am gerenderten Brett, Holz um jedes Loch = 1:
+     (1) die helle Kante: Ring 46-58 Einheiten, Sektor 15-75 Grad (unten
+         rechts) - Original Median 1,10, schlimmstes Loch 1,34; v1.83 0,99/1,02;
+     (2) wie gleich die Fraesungen sind: je Loch acht Sektoren x 12 Radien
+         bis 48 Einheiten (halber Lochabstand - weiter aussen laege schon
+         das Nachbarloch, und das fehlt den Randloechern) gegen den Median
+         aller Loecher - Original 90 % bei 0,164, max 0,251; v1.83 0,086. */
+  const frRing=(z,r0,r1,a0,a1)=>{ let s=0,n=0; for(let r=r0;r<=r1;r+=0.5) for(let a=a0;a<=a1;a+=3){ const t=a*Math.PI/180;
+    s+=fbL(z.cx+r*fbE*Math.cos(t),z.cy+r*fbE*Math.sin(t)); n++; } return s/n; };
+  /* Holz-Bezug: nur Punkte innerhalb des Eisenrahmens und mindestens 60
+     Einheiten von JEDEM Loch. Ein Ring 62-67 um das Loch lag waagerecht und
+     senkrecht 33-38 Einheiten von der Mitte des Nachbarlochs - in dessen
+     Fraesung. Loecher mit vielen Nachbarn bekamen so zu wenig "Holz". */
+  const frHolz=z=>{ const v=[]; for(let r=60;r<=76;r+=1) for(let a=0;a<360;a+=2){ const t=a*Math.PI/180, X=z.cx+r*fbE*Math.cos(t), Y=z.cy+r*fbE*Math.sin(t);
+      const u=X/fbE, w=Y/fbE; if(u<84||u>784||w<88||w>772) continue; if(lo.some(o=>Math.hypot(X-o.cx,Y-o.cy)<60*fbE)) continue; v.push(fbL(X,Y)); }
+    v.sort((x,y)=>x-y); return v.length>20?v[Math.floor(v.length/2)]:null; };
+  const frHz=lo.map(frHolz), frHm=frHz.filter(v=>v!==null).sort((x,y)=>x-y)[Math.floor(frHz.filter(v=>v!==null).length/2)];
+  const frM=lo.map((z,iz)=>{ const holz=frHz[iz]===null?frHm:frHz[iz]; const sek=[];
+    for(let q=0;q<8;q++) for(let r=4;r<=48;r+=4) sek.push(frRing(z,r-2,r+2,q*45-20,q*45+20)/holz);
+    return {kante:frRing(z,46,58,15,75)/holz, sek}; });
+  const frMed=a=>{ const v=[...a].sort((x,y)=>x-y); return v[Math.floor(v.length/2)]; };
+  const frKanten=frM.map(m=>m.kante), frRef=frM[0].sek.map((_,i)=>frMed(frM.map(m=>m.sek[i])));
+  const frAb=frM.map(m=>Math.sqrt(m.sek.reduce((a,v,i)=>a+(v-frRef[i])**2,0)/frRef.length)).sort((x,y)=>x-y);
+  console.log('INFO Fraesung: Kante unten rechts Median '+frMed(frKanten).toFixed(3)+', max '+Math.max(...frKanten).toFixed(3)
+    +' | Abweichung Median '+frMed(frAb).toFixed(3)+', 90 % '+frAb[Math.floor(frAb.length*0.9)].toFixed(3)+', max '+frAb[frAb.length-1].toFixed(3));
+  /* Mittelloch gegen die anderen - auf das eigene Holz bezogen. Bis v1.82
+     wurde die ABSOLUTE Helligkeit verglichen; seit die Fraesungen an ihr
+     Holz angeglichen sind, liegt das Mittelloch auf einer 9 % helleren
+     Planke auch absolut 9 % heller (6,7 gegen 3,7), bei einer Form, die
+     WENIGER abweicht als das mittlere Loch (0,028 gegen 0,037). Die alte
+     Pruefung mass also die Plankenfarbe mit. */
+  const frMitte=Math.sqrt(frM[mitteIdx].sek.reduce((a,v,i)=>a+(v-frRef[i])**2,0)/frRef.length);
+  console.log('INFO Mittelloch, Form auf eigenes Holz bezogen: '+frMitte.toFixed(3)+', Median aller '+frMed(frAb).toFixed(3));
+  /* Der relative Vergleich allein ist schwach: in Lutz' unbearbeitetem Bild
+     streuten ALLE Loecher so sehr, dass die abweichende Mitte darin
+     unterging (0,079 gegen Median 0,093 - gruen). Deshalb zusaetzlich ein
+     fester Wert: v1.83 0,028, unbearbeitet 0,079. */
+  ok('Das Mittelloch sieht aus wie ein typisches Loch (Form <= 1,25 x Median aller und <= 0,06)',
+     frMitte<=frMed(frAb)*1.25&&frMitte<=0.06, frMitte.toFixed(3)+' gegen '+frMed(frAb).toFixed(3));
+  ok('Die helle Kante unten rechts am gefraesten Rand ist zurueckgenommen (Median <= 1,05, kein Loch ueber 1,10)',
+     frMed(frKanten)<=1.05&&Math.max(...frKanten)<=1.10, frMed(frKanten).toFixed(3)+' / '+Math.max(...frKanten).toFixed(3));
+  ok('Die Fraesungen aller Loecher gleichen sich (90 % Abweichung <= 0,12, keine ueber 0,15)',
+     frAb[Math.floor(frAb.length*0.9)]<=0.12&&frAb[frAb.length-1]<=0.15, frAb[Math.floor(frAb.length*0.9)].toFixed(3)+' / '+frAb[frAb.length-1].toFixed(3));
   await page.evaluate(()=>newGame('english'));
   await page.setViewport({width:390,height:844,deviceScaleFactor:1});
   await new Promise(r=>setTimeout(r,300));
