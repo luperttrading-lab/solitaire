@@ -11,7 +11,7 @@
    und wieder zusammenfließt. Das Brett liegt darüber, die Löcher sind
    Gucklöcher. */
 :root{--ink:#f1e7d4;--muted:#d8c9b0;--brass:#d8a24a}
-html{min-height:100lvh;background:radial-gradient(ellipse 130% 70% at 50% 35%,rgba(0,0,0,0) 0%,rgba(0,0,0,.45) 100%),url('3-holz.jpg') top center/auto 120% no-repeat,#27211c}
+html{min-height:100lvh;background:radial-gradient(ellipse 130% 70% at 50% 35%,rgba(0,0,0,0) 0%,rgba(0,0,0,.45) 100%),url('../3-holz.jpg') top center/auto 120% no-repeat,#27211c}
 html,body{margin:0;height:100%;overflow:hidden}
 body{background:transparent;color:var(--ink);font:15px/1.35 -apple-system,system-ui,sans-serif;-webkit-user-select:none;user-select:none}
 #app{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;padding:calc(env(safe-area-inset-top,0px) + 8px) 10px calc(env(safe-area-inset-bottom,0px) + 8px);gap:8px;box-sizing:border-box}
@@ -90,7 +90,7 @@ const WX0=72, WX1=768, R_LOCH=31;
       <mask id="guck"><rect x="${rx+2}" y="${ry+2}" width="${rw-4}" height="${rh-4}" rx="${re}" fill="#fff"/>${loecher}</mask>
       <radialGradient id="tiefe" cx="44%" cy="42%" r="62%"><stop offset=".62" stop-color="#000" stop-opacity="0"/><stop offset=".86" stop-color="#000" stop-opacity=".45"/><stop offset="1" stop-color="#000" stop-opacity=".8"/></radialGradient>
     </defs>
-    <g id="brettBild" mask="url(#guck)"><image href="3-brett.jpg" x="${x}" y="${y}" width="${B.bild[0]*sx}" height="${B.bild[1]*sy}" preserveAspectRatio="none"/></g>
+    <g id="brettBild" mask="url(#guck)"><image href="../3-brett.jpg" x="${x}" y="${y}" width="${B.bild[0]*sx}" height="${B.bild[1]*sy}" preserveAspectRatio="none"/></g>
     <g id="lochRand">${rand}</g><g id="umriss">${umriss}</g>`;
   const farben=['#c62828','#1e5bd8','#1f8a4c','#e0a320','#7b3fc4','#16a3a0','#e8702a','#e14f9a'];
   let peg='', n=0;
