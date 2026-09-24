@@ -2369,7 +2369,12 @@ function kurzfassungGleich(proben,voll,erwartet){
        Rot, 40 bis 107 Punkte je nach Stellung. Gemeint ist die Farbe der
        probierten Zuege (#ff4436): sattes Rot, Gruen und Blau niedrig. */
     const satt=(r,g,b)=>r>180&&g<130&&b<130;
-    if(satt(jR,jG,jB)&&!satt(gR,gG,gB)) mzRotPunkte++;
+    /* Fuenfte Fassung (v1.82): 33 von 35 gemeldeten Punkten aenderten sich
+       um 3-6 Stufen - ein oranger Rand bei R = 177 rutschte ueber die Schwelle
+       180. Aufgemaltes Rot ist eine KRAEFTIGE Aenderung; verlangt wird deshalb
+       zusaetzlich, dass sich der Punkt wirklich veraendert hat. */
+    const dSum=Math.abs(jR-gR)+Math.abs(jG-gG)+Math.abs(jB-gB);
+    if(satt(jR,jG,jB)&&!satt(gR,gG,gB)&&dSum>30) mzRotPunkte++;
   }
   console.log('INFO Weisse Dreiecke sichtbar: '+mzN+' Dreiecke, '+mzHell
     +' hellere Bildpunkte, davon '+mzKraeftig+' kraeftig, staerkster '+mzMax
@@ -3685,6 +3690,98 @@ function kurzfassungGleich(proben,voll,erwartet){
   ok('"Ton pruefen" zeigt Zustand, Neubauten und die neuesten Eintraege oben',
      /Kontext: running/.test(tMenue.zustand)&&/Neubauten \d+/.test(tMenue.zustand)&&/Testton/.test(tMenue.erste), JSON.stringify(tMenue));
   ok('Der Testton-Knopf ist mindestens 40 px hoch', tMenue.knopfHoehe>=40, tMenue.knopfHoehe+' px');
+
+  /* ===================================================================
+     v1.82: Foto-Brett - Mittelloch, hoehere Aufloesung, Maske am Rahmen
+     Lutz am 23.09.2026: "da ist das Loch ganz in der Mitte kleiner".
+     Gemessen wird am GERENDERTEN Brett (Steine ausgeblendet), nicht an der
+     Datei: gefragt ist, was man sieht.
+     =================================================================== */
+  abschnitt='Foto-Brett (v1.82)';
+  await page.evaluate(()=>{ closeSheet(); closeDetail(); settings.theme='altholz'; applyLook(); newGame('english');
+    for(let i=0;i<game.board.n;i++) game.pegAt[i]=-1; render(); });
+  await page.setViewport({width:390,height:844,deviceScaleFactor:3});
+  await page.waitForFunction(()=>{ const sp=document.getElementById('splash');
+    return !sp||sp.hidden||getComputedStyle(sp).opacity==='0'||getComputedStyle(sp).display==='none'; },{timeout:6000}).catch(()=>{});
+  await page.evaluate(()=>{ for(let i=0;i<game.board.n;i++) game.pegAt[i]=-1; render(); });
+  await new Promise(r=>setTimeout(r,500));
+  /* Eine Pixelmessung, die ihren Ausschnitt nicht prueft, misst irgendetwas:
+     im Einzellauf lag hier das Startbild obenauf, und "ausserhalb des
+     Rahmens aendert sich nichts" war trivial wahr. */
+  const fbOben=await page.evaluate(()=>{ const q=boardSvg.getBoundingClientRect();
+    return [[.5,.5],[.04,.04],[.96,.96]].map(([a,b])=>{ const e=document.elementFromPoint(q.x+a*q.width,q.y+b*q.height);
+      return !!e&&(e===boardSvg||boardSvg.contains(e)); }); });
+  const fbLeer=await page.evaluate(()=>boardSvg.querySelectorAll('[data-peg]').length);
+  ok('Die Messstelle zeigt das Brett, nicht Startbild oder Blatt - und ohne Steine', fbOben.every(Boolean)&&fbLeer===0, JSON.stringify(fbOben)+', Steine '+fbLeer);
+  const fb=await page.evaluate(async()=>{
+    const im=new Image(); im.src=FOTO_BRETT.datei; await im.decode();
+    const m=boardSvg.querySelector('mask rect'), fl=boardSvg.querySelector('filter[id$=weich] feGaussianBlur');
+    const r=fotoBrettMasse().rahmen, n=k=>parseFloat(m.getAttribute(k));
+    const q=boardSvg.getBoundingClientRect();
+    return {nat:[im.naturalWidth,im.naturalHeight], soll:FOTO_BRETT.bild, rahmen:r,
+      maske:{x:n('x'),y:n('y'),w:n('width'),h:n('height')}, sigma:parseFloat(fl.getAttribute('stdDeviation')),
+      box:{x:q.x,y:q.y,width:q.width,height:q.height}, vb:boardSvg.viewBox.baseVal.width}; });
+  await new Promise(r=>setTimeout(r,300));
+  console.log('INFO Foto-Brett: '+JSON.stringify({nat:fb.nat,soll:fb.soll,sigma:fb.sigma}));
+  ok('Die Masse in FOTO_BRETT gehoeren zur ausgelieferten Datei',
+     fb.nat[0]===fb.soll[0]&&fb.nat[1]===fb.soll[1], JSON.stringify(fb.nat)+' gegen '+JSON.stringify(fb.soll));
+  /* Ausserhalb des Eisenrahmens liegt eingebranntes Schachbrett. Die Maske
+     muss es VOLL verdecken: ihre Kante plus Reichweite des Weichzeichners
+     (3 sigma) darf nicht ueber den Rahmen hinaus. */
+  const reich=3*fb.sigma, M=fb.maske, R=fb.rahmen;
+  ok('Die weiche Maske reicht an keiner Seite ueber den Eisenrahmen hinaus',
+     M.x-reich>=R.x-0.01&&M.y-reich>=R.y-0.01&&M.x+M.w+reich<=R.x+R.w+0.01&&M.y+M.h+reich<=R.y+R.h+0.01,
+     JSON.stringify({M,R,reich}));
+  const fbBild=PNG.sync.read(await page.screenshot({clip:fb.box}));
+  const fbW=fbBild.width, fbE=fbW/fb.vb;
+  const fbL=(x,y)=>{ x=Math.max(0,Math.min(fbW-1,Math.round(x))); y=Math.max(0,Math.min(fbBild.height-1,Math.round(y)));
+    const i=(y*fbW+x)*4, d=fbBild.data; return d[i]*.299+d[i+1]*.587+d[i+2]*.114; };
+  /* Schachbrett-Rest: AUSSERHALB des Rahmens darf das Foto keinen einzigen
+     Bildpunkt aendern - verglichen wird das Brett mit und ohne Bild. Die
+     erste Fassung zaehlte "helle, farblose Bildpunkte" und fand 1023 - alle
+     auf dem blanken Eisen oben links. Glanz auf Metall IST hell und
+     farblos; die Kennzahl beschrieb das Schachbrett nicht, sondern Eisen. */
+  const fbOhne=PNG.sync.read(await page.evaluate(()=>{ boardSvg.querySelector('image').style.display='none'; })
+    .then(()=>new Promise(r=>setTimeout(r,200))).then(()=>page.screenshot({clip:fb.box})));
+  await page.evaluate(()=>{ boardSvg.querySelector('image').style.display=''; });
+  const ausserhalb=(u,v)=>{ const rx=R.rx+1, x0=R.x-1, y0=R.y-1, x1=R.x+R.w+1, y1=R.y+R.h+1;
+    if(u<x0||u>x1||v<y0||v>y1) return true;
+    const ddx=Math.max(x0+rx-u,0,u-(x1-rx)), ddy=Math.max(y0+rx-v,0,v-(y1-rx)); return ddx*ddx+ddy*ddy>rx*rx; };
+  let fbAussen=0, fbAussenAnders=0;
+  for(let y=0;y<fbBild.height;y++) for(let x=0;x<fbW;x++){ if(!ausserhalb(x/fbE,y/fbE)) continue; fbAussen++;
+    const i=(y*fbW+x)*4; const d=Math.abs(fbBild.data[i]-fbOhne.data[i])+Math.abs(fbBild.data[i+1]-fbOhne.data[i+1])+Math.abs(fbBild.data[i+2]-fbOhne.data[i+2]);
+    if(d>6) fbAussenAnders++; }
+  console.log('INFO Foto-Brett ausserhalb des Rahmens: '+fbAussenAnders+' von '+fbAussen+' Bildpunkten veraendert');
+  ok('Ausserhalb des Eisenrahmens aendert das Foto nichts (kein Schachbrett-Rest)', fbAussen>1000&&fbAussenAnders<fbAussen*0.002,
+     fbAussenAnders+' von '+fbAussen);
+  // Lochmitten: dunkelster Kreis nahe jeder Feldmitte
+  const felder=await page.evaluate(()=>game.lay.pos.map((p,i)=>({i,x:p.x,y:p.y})));
+  const loch=f=>{ const bx=f.x*fbE, by=f.y*fbE, rs=22*fbE, su=Math.round(14*fbE); let best=1e9,cx=bx,cy=by;
+    for(let yy=-su;yy<=su;yy+=1)for(let xx=-su;xx<=su;xx+=1){ let s=0,n=0;
+      for(let y=-rs;y<=rs;y+=2)for(let x=-rs;x<=rs;x+=2){ if(x*x+y*y>rs*rs) continue; s+=fbL(bx+xx+x,by+yy+y); n++; }
+      if(s/n<best){best=s/n;cx=bx+xx;cy=by+yy;} }
+    return {i:f.i, dx:(cx-bx)/fbE, dy:(cy-by)/fbE, cx, cy}; };
+  const lo=felder.map(loch);
+  const vers=lo.map(q=>Math.hypot(q.dx,q.dy)), mdx=lo.reduce((a,q)=>a+q.dx,0)/lo.length, mdy=lo.reduce((a,q)=>a+q.dy,0)/lo.length;
+  console.log('INFO Foto-Brett, Versatz Loch gegen Feldmitte (Einheiten, Feld = 100): max '+Math.max(...vers).toFixed(1)+', Mittel x '+mdx.toFixed(1)+' y '+mdy.toFixed(1));
+  // Lage selbst prueft der Block "Foto-Brett" (v1.76); hier nur die Mitten fuer die Profile.
+  /* Die eigentliche Frage: sieht das Mittelloch aus wie die anderen?
+     Radiales Helligkeitsprofil (Kern, Fase, Holz) gegen den Median aller
+     anderen Loecher. Gemessen am Ausgangsbild von Lutz: Mitte 7,2 gegen
+     typisch 4,4; beim alten Brett 21 gegen 6,4. */
+  const prof=q=>{ const P=[]; for(let r=0;r<=46;r++){ let s=0; for(let a=0;a<48;a++){ const t=a/48*2*Math.PI;
+    s+=fbL(q.cx+r*fbE*Math.cos(t),q.cy+r*fbE*Math.sin(t)); } P.push(s/48); } return P; };
+  const mitteIdx=await page.evaluate(()=>game.board.index['3,3']);
+  const Pr=lo.map(prof), andere=Pr.filter((_,i)=>i!==mitteIdx);
+  const med=Pr[0].map((_,k)=>{ const v=andere.map(q=>q[k]).sort((a,b)=>a-b); return v[Math.floor(v.length/2)]; });
+  const rms=q=>Math.sqrt(q.reduce((a,v,k)=>a+(v-med[k])**2,0)/q.length);
+  const dA=andere.map(rms).sort((a,b)=>a-b), dM=rms(Pr[mitteIdx]), dTyp=dA[Math.floor(dA.length/2)];
+  console.log('INFO Foto-Brett, Profilabstand zum typischen Loch: Mitte '+dM.toFixed(1)+', andere Median '+dTyp.toFixed(1)+', schlechtestes '+dA[dA.length-1].toFixed(1));
+  ok('Das Mittelloch sieht aus wie ein typisches Loch (Profilabstand <= 1,25 x Median der anderen)',
+     dM<=dTyp*1.25, dM.toFixed(1)+' gegen '+dTyp.toFixed(1));
+  await page.evaluate(()=>newGame('english'));
+  await page.setViewport({width:390,height:844,deviceScaleFactor:1});
+  await new Promise(r=>setTimeout(r,300));
 
   ok('keine Seitenfehler insgesamt', errors.length===0, errors.join(' | '));
   await browser.close();

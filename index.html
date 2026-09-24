@@ -748,7 +748,7 @@ header, .hud, #status{ text-shadow:0 1px 3px rgba(0,0,0,.75) }
 
 <script>
 'use strict';
-const APP_VERSION='1.81';
+const APP_VERSION='1.82';
 /* =========================================================================
    Kern: Bretter, Züge, Symmetrien, Paritäts-Schranke, Solver
    (als Fabrik, damit derselbe Code im Web Worker läuft)
@@ -1309,11 +1309,18 @@ const SCHIMMER_SOLL=70, BG_HEX='#685c51';
    Streckung nicht; proportional eingepasst haette die unterste Reihe um ein
    Drittel Feld danebengelegen. Gilt nur fuer das ENGLISCHE Brett - fuer die
    anderen fuenf Formen gibt es kein Foto, die bleiben gezeichnet. */
-const FOTO_BRETT={datei:'3-brett.jpg', bild:[692,654], x0:96.7, y0:80.0, dx:82.43, dy:79.43};
+/* v1.82: hoehere Aufloesung (1179 x 1128 statt 692 x 654), Mittelloch aus dem
+   Nachbarn (3,4) derselben Planke ersetzt - im Original war es kleiner bzw.
+   anders gefast. rahmen/ecke: Aussenkante des Eisenrahmens in Bildpunkten;
+   ausserhalb liegt eingebranntes Schachbrett (freigestellt, aber als JPEG),
+   die Maske muss es daher VOLL verdecken. */
+const FOTO_BRETT={datei:'3-brett.jpg', bild:[1179,1128], x0:153.3, y0:145.8, dx:138.85, dy:133.59,
+                  rahmen:[27,30,1149,1090], ecke:82};
 function fotoBrettMasse(){
   const sx=P/FOTO_BRETT.dx, sy=P/FOTO_BRETT.dy, mitte=MARG+P/2;
-  return {x:mitte-FOTO_BRETT.x0*sx, y:mitte-FOTO_BRETT.y0*sy,
-          w:FOTO_BRETT.bild[0]*sx, h:FOTO_BRETT.bild[1]*sy};
+  const x=mitte-FOTO_BRETT.x0*sx, y=mitte-FOTO_BRETT.y0*sy, R=FOTO_BRETT.rahmen;
+  return {x, y, w:FOTO_BRETT.bild[0]*sx, h:FOTO_BRETT.bild[1]*sy,
+          rahmen:{x:x+R[0]*sx, y:y+R[1]*sy, w:(R[2]-R[0])*sx, h:(R[3]-R[1])*sy, rx:FOTO_BRETT.ecke*Math.min(sx,sy)}};
 }
 let fotoBrettAn=false;
 function schimmerStaerke(base){
@@ -1373,9 +1380,12 @@ function trayMarkup(board,lay,look,idPrefix){
        Die weiche Maske laesst den geraden Schnitt des Fotos auslaufen; weil
        Brett und Hintergrund dasselbe Holz sind, verschwindet die Kante ganz.
        Kostet keine Datei, nur ein <mask>. */
-    const f=fotoBrettMasse();
-    defs+=`<filter id="${idPrefix}weich" x="-15%" y="-15%" width="130%" height="130%"><feGaussianBlur stdDeviation="7"/></filter>`
-       + `<mask id="${idPrefix}brettmaske"><rect x="${(f.x+11).toFixed(2)}" y="${(f.y+11).toFixed(2)}" width="${(f.w-22).toFixed(2)}" height="${(f.h-22).toFixed(2)}" rx="42" fill="#fff" filter="url(#${idPrefix}weich)"/></mask>`;
+    const f=fotoBrettMasse(), r=f.rahmen;
+    /* Weiche Kante nur NACH INNEN: Reichweite des Weichzeichners 3 sigma = 4,5
+       bei einem Einzug von 5 - aussen am Rahmen ist die Maske damit praktisch
+       null, das Schachbrett ausserhalb bleibt unsichtbar. */
+    defs+=`<filter id="${idPrefix}weich" x="-15%" y="-15%" width="130%" height="130%"><feGaussianBlur stdDeviation="1.5"/></filter>`
+       + `<mask id="${idPrefix}brettmaske"><rect x="${(r.x+5).toFixed(2)}" y="${(r.y+5).toFixed(2)}" width="${(r.w-10).toFixed(2)}" height="${(r.h-10).toFixed(2)}" rx="${(r.rx-5).toFixed(2)}" fill="#fff" filter="url(#${idPrefix}weich)"/></mask>`;
     let sh='';
     if(sch>0.02) sh=`<rect x="${m}" y="${m+6}" width="${lay.W-2*m}" height="${lay.H-2*m}" rx="34" fill="#000" opacity="${(sch*0.55).toFixed(3)}" filter="url(#${idPrefix}schimmer)"/>`;
     return {defs, shape: sh+`<image href="${FOTO_BRETT.datei}" x="${f.x.toFixed(2)}" y="${f.y.toFixed(2)}" width="${f.w.toFixed(2)}" height="${f.h.toFixed(2)}" preserveAspectRatio="none" mask="url(#${idPrefix}brettmaske)"/>`, foto:true};
