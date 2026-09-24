@@ -3827,6 +3827,64 @@ function kurzfassungGleich(proben,voll,erwartet){
   await page.setViewport({width:390,height:844,deviceScaleFactor:1});
   await new Promise(r=>setTimeout(r,300));
 
+  /* ===================================================================
+     v1.84: Querformat - Hinweis statt Drehsperre
+     Lutz am 24.09.2026: "Kannst du die Dreh Funktion ausschalten wenn man
+     das Handy quer haelt". Safari erlaubt keiner Webseite, die Drehung zu
+     sperren; quer war die App unbrauchbar (Brett 100 px, Fussleiste unter
+     dem Bildschirm). Variante A, von Lutz gewaehlt: ein Hinweis ueber allem,
+     und solange er steht, steht die Uhr.
+     =================================================================== */
+  abschnitt='Querformat (v1.84)';
+  /* Puppeteer LAEDT DIE SEITE NEU, wenn setViewport isMobile/hasTouch
+     umschaltet - der Block davor lief ohne Touch. Danach laege das Startbild
+     (z-index 50) 2 s ueber dem Hinweis; im Gesamtlauf zweimal genau so rot,
+     im Einzellauf nie (dort war Touch von Anfang an). Also erst das Geraet
+     umstellen, DANN das Startbild abwarten, und zwar mit harter Bedingung. */
+  await page.setViewport({width:390,height:844,deviceScaleFactor:1,isMobile:true,hasTouch:true});
+  await page.waitForFunction(()=>{ const sp=document.getElementById('splash'); return !sp||sp.classList.contains('out'); },{timeout:8000});
+  await sleep(800);
+  await page.evaluate(()=>{ closeSheet(); closeDetail(); pauseSetzen(false); newGame('english'); });
+  await sleep(300);
+  const qHoch=await page.evaluate(()=>({disp:getComputedStyle(document.getElementById('quer')).display, querAn:game.querAn}));
+  ok('Hochkant ist der Querformat-Hinweis unsichtbar', qHoch.disp==='none'&&qHoch.querAn===false, JSON.stringify(qHoch));
+  await page.evaluate(()=>{ const a=game.pegAt; const m=game.board.moves.filter(x=>a[x.from]>=0&&a[x.over]>=0&&a[x.to]<0); playMove(m[0]); });
+  await sleep(700);
+  const qVor=await page.evaluate(()=>({laeuft:game.startedAt>0, ms:elapsedMs()}));
+  await page.setViewport({width:844,height:340,deviceScaleFactor:1,isMobile:true,hasTouch:true,isLandscape:true});
+  await sleep(500);
+  const qQuer1=await page.evaluate(()=>{ const q=document.getElementById('quer'), r=q.getBoundingClientRect();
+    const k=[...q.children].map(x=>x.getBoundingClientRect());
+    return {disp:getComputedStyle(q).display, querAn:game.querAn, laeuft:game.startedAt>0, ms:elapsedMs(),
+      deckt:r.left<=0&&r.top<=0&&r.right>=innerWidth&&r.bottom>=innerHeight, oben:Math.min(...k.map(x=>x.top)), unten:Math.max(...k.map(x=>x.bottom)), h:innerHeight,
+      obenauf:[[.5,.5],[.5,.97],[.03,.03],[.97,.97]].every(([fx,fy])=>{ const e=document.elementFromPoint(innerWidth*fx,innerHeight*fy); return !!e&&!!e.closest('#quer'); }),
+      oben_liegt:[[.5,.5],[.5,.97],[.03,.03],[.97,.97]].map(([fx,fy])=>{ const e=document.elementFromPoint(innerWidth*fx,innerHeight*fy); return e?(e.id||e.tagName)+(e.className&&typeof e.className==='string'?'.'+e.className:''):'null'; })}; });
+  await sleep(900);
+  const qQuer2=await page.evaluate(()=>({ms:elapsedMs()}));
+  console.log('INFO Querformat: vorher '+JSON.stringify(qVor)+' quer '+JSON.stringify(qQuer1)+' 0,9 s spaeter '+JSON.stringify(qQuer2));
+  ok('Quer deckt der Hinweis den ganzen Bildschirm und liegt obenauf', qQuer1.disp==='flex'&&qQuer1.deckt&&qQuer1.obenauf, JSON.stringify(qQuer1));
+  ok('Der ganze Hinweistext passt quer in die Hoehe (844 x 340)', qQuer1.oben>=0&&qQuer1.unten<=qQuer1.h, qQuer1.oben+'..'+qQuer1.unten+' von '+qQuer1.h);
+  ok('Quer steht die Uhr', qVor.laeuft&&qQuer1.querAn===true&&!qQuer1.laeuft&&qQuer2.ms===qQuer1.ms, qQuer1.ms+' -> '+qQuer2.ms);
+  await page.setViewport({width:390,height:844,deviceScaleFactor:1,isMobile:true,hasTouch:true});
+  await sleep(500);
+  const qZurueck=await page.evaluate(()=>({disp:getComputedStyle(document.getElementById('quer')).display, querAn:game.querAn, laeuft:game.startedAt>0}));
+  ok('Wieder hochkant: Hinweis weg, die Uhr laeuft weiter', qZurueck.disp==='none'&&qZurueck.querAn===false&&qZurueck.laeuft, JSON.stringify(qZurueck));
+  /* Eine Pause von Hand darf die Querlage nicht aufheben - und umgekehrt. */
+  await page.evaluate(()=>pauseSetzen(true));
+  await page.setViewport({width:844,height:340,deviceScaleFactor:1,isMobile:true,hasTouch:true,isLandscape:true}); await sleep(400);
+  await page.setViewport({width:390,height:844,deviceScaleFactor:1,isMobile:true,hasTouch:true}); await sleep(400);
+  const qPause=await page.evaluate(()=>({pauseAn:game.pauseAn, laeuft:game.startedAt>0}));
+  ok('Eine Pause von Hand ueberlebt das Drehen', qPause.pauseAn===true&&!qPause.laeuft, JSON.stringify(qPause));
+  await page.evaluate(()=>pauseSetzen(false));
+  /* Gegenprobe: ein quer stehendes Desktop-Fenster ist kein gedrehtes Handy. */
+  const dPage=await browser.newPage();
+  await dPage.setViewport({width:844,height:340,deviceScaleFactor:1});
+  await dPage.goto('file://'+path.resolve(__dirname,'..','index.html'),{waitUntil:'load'}); await sleep(600);
+  const qDesk=await dPage.evaluate(()=>({disp:getComputedStyle(document.getElementById('quer')).display, querAn:game.querAn}));
+  await dPage.close();
+  ok('Auf einem breiten Desktop-Fenster erscheint kein Hinweis', qDesk.disp==='none'&&qDesk.querAn===false, JSON.stringify(qDesk));
+  await page.setViewport({width:390,height:844,deviceScaleFactor:1}); await sleep(300);
+
   ok('keine Seitenfehler insgesamt', errors.length===0, errors.join(' | '));
   await browser.close();
   console.log(fails?`\n${fails} FEHLER`:'\nALLE BROWSER-TESTS OK'); process.exitCode=fails?1:0;

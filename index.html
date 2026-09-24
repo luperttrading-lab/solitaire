@@ -478,6 +478,19 @@ header .boardname:active{background:var(--panel2)}
 #warnblitz.an{animation:warnblitz .62s ease-out 1}
 @keyframes warnblitz{0%{opacity:0}18%{opacity:1}55%{opacity:.22}100%{opacity:0}}
 @media (prefers-reduced-motion:reduce){#warnblitz.an{animation-duration:1.1s}}
+/* Querformat (v1.84). Safari laesst eine Webseite die Drehung NICHT sperren
+   (screen.orientation.lock liefert dort "nicht unterstuetzt"), und quer ist
+   die App unbrauchbar: gemessen 844 x 340 - Brett 100 px, Fussleiste unter
+   dem Bildschirm. Also ein Hinweis ueber allem. Nur auf Touch-Geraeten mit
+   wenig Hoehe: ein quer stehendes Desktop-Fenster ist kein gedrehtes Handy. */
+#quer{position:fixed;inset:0;z-index:48;display:none;flex-direction:column;align-items:center;justify-content:center;
+  gap:8px;padding:16px calc(env(safe-area-inset-right,0px) + 28px) 16px calc(env(safe-area-inset-left,0px) + 28px);
+  background:rgba(22,17,13,.98);color:var(--ink);text-align:center}
+#quer svg{width:64px;height:64px;color:var(--brass)}
+#quer .qt{font-family:Georgia,'Times New Roman',serif;font-size:24px;color:var(--brass)}
+#quer .qs{font-size:15px;color:#e6d9c2;max-width:34em;line-height:1.35}
+#quer .qtipp{font-size:14px;color:var(--muted);max-width:34em;line-height:1.35;margin-top:4px}
+@media (orientation:landscape) and (max-height:500px) and (pointer:coarse){#quer{display:flex}}
 /* Hinweis auf eine neuere Version. Schwebt ueber dem Inhalt (position:fixed),
    damit er das Brett nicht verkleinert - eine Leiste im Fluss wuerde ueber
    fitStage/ensureStatusFits Platz kosten. */
@@ -729,6 +742,10 @@ header, .hud, #status{ text-shadow:0 1px 3px rgba(0,0,0,.75) }
 <div id="update" role="status"><span class="txt"></span><button class="zu" type="button" aria-label="Hinweis schließen">×</button></div>
 <div id="ampelhof"></div>
 <div id="warnblitz"></div>
+<div id="quer" role="alert" aria-live="assertive"><svg viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="22" y="8" width="20" height="36" rx="4"/><path d="M29 38h6"/><path d="M12 50a22 22 0 0 0 30 6"/><path d="M42 50l0 6-6 0"/></svg>
+  <div class="qt">Bitte hochkant halten</div>
+  <div class="qs">Solitaire ist fürs Hochformat gebaut. Die Zeit steht, bis du das Handy wieder drehst.</div>
+  <div class="qtipp">Drehen ganz abschalten: Kontrollzentrum öffnen (oben rechts nach unten wischen) und das Schloss mit dem Pfeil antippen.</div></div>
 <div id="ampelBlatt" role="dialog" aria-label="Ampel">
   <div class="handle"></div>
   <div class="scroll">
@@ -748,7 +765,7 @@ header, .hud, #status{ text-shadow:0 1px 3px rgba(0,0,0,.75) }
 
 <script>
 'use strict';
-const APP_VERSION='1.83';
+const APP_VERSION='1.84';
 /* =========================================================================
    Kern: Bretter, Züge, Symmetrien, Paritäts-Schranke, Solver
    (als Fabrik, damit derselbe Code im Web Worker läuft)
@@ -1614,7 +1631,7 @@ const pegDefsCache=new Map();
    ========================================================================= */
 const boards={}; CORE.BOARD_DEFS.forEach(d=>boards[d.id]=CORE.buildBoard(d));
 const game={board:null,lay:null,pegAt:[],initial:[],history:[],future:[],selected:-1,phase:'play',startedAt:0,elapsedBefore:0,finished:false,
-  line:null,bookLine:null,hintOn:false,searching:false,animating:false,autoplay:false,startCount:0,evalRes:null,prevEval:null,prevPos:null,evaluating:false,pauseAn:false,lastMove:null,lesson:null,demo:false,markAus:false,
+  line:null,bookLine:null,hintOn:false,searching:false,animating:false,autoplay:false,startCount:0,evalRes:null,prevEval:null,prevPos:null,evaluating:false,pauseAn:false,querAn:false,lastMove:null,lesson:null,demo:false,markAus:false,
   /* Je Stellung die Zuege, die von dort schon probiert und wieder
      zurueckgenommen wurden - Schluessel ist die Stellung, nicht die
      Zugnummer: wer weitergeht und spaeter zurueckkommt, findet seine
@@ -1699,7 +1716,7 @@ function applyMove(m,record){
   const vorherArr=occ(), vorherKey=stateKey(), vorherLb=CORE.parityLowerBound(game.board,vorherArr);
   const jumped=a[m.over]; a[m.to]=a[m.from]; a[m.from]=-1; a[m.over]=-1;
   if(record!==false){ game.history.push({mi:game.board.moves.indexOf(m),jumped}); game.future=[]; }
-  if(!game.startedAt){ game.startedAt=Date.now(); }
+  if(!game.startedAt&&!game.querAn){ game.startedAt=Date.now(); }
   const mi=game.board.moves.indexOf(m); const ln=game.line; game.hintOn=false;
   const known=(ln&&ln.path.length&&ln.complete)?ln:((game.bookLine&&game.bookLine.path.length)?game.bookLine:null);
   const zwi=evalCache.get(vorherKey);
@@ -1802,7 +1819,7 @@ function pauseSetzen(an){
     if(game.animating) finishAnimation();
     game.elapsedBefore=elapsedMs(); game.startedAt=0; game.pauseAn=true; }
   else { if(!game.pauseAn) return; game.pauseAn=false;
-    if(game.history.length&&!game.finished&&!game.paused) game.startedAt=Date.now(); }
+    if(game.history.length&&!game.finished&&!game.paused&&!game.querAn) game.startedAt=Date.now(); }
   const e=$('pause'); if(e){ e.classList.toggle('an',!!game.pauseAn); e.setAttribute('aria-hidden',game.pauseAn?'false':'true'); }
   const z=$('hudZeit'); if(z) z.setAttribute('aria-label',game.pauseAn?'Zeit weiterlaufen lassen':'Zeit anhalten');
   const l=$('hudZeitLabel'); if(l) l.textContent=game.pauseAn?'Angehalten':'Zeit';
@@ -3371,7 +3388,21 @@ document.addEventListener('pointerdown',()=>{ Sound.ensure(true); },{capture:tru
 document.addEventListener('visibilitychange',()=>{
   if(document.hidden){ Sound.pruef=null; if(settings.sound) Sound.log('App verborgen'); }
   else { if(settings.sound) Sound.log('App sichtbar, Kontext '+(Sound.ctx?Sound.ctx.state:'keiner')); Sound.ensure(); } });
-document.addEventListener('visibilitychange',()=>{ if(document.hidden&&game.startedAt&&!game.finished){ game.elapsedBefore=elapsedMs(); game.startedAt=0; game.paused=true; } else if(!document.hidden&&game.paused){ game.paused=false; if(game.history.length&&!game.finished&&!game.pauseAn) game.startedAt=Date.now(); } });
+document.addEventListener('visibilitychange',()=>{ if(document.hidden&&game.startedAt&&!game.finished){ game.elapsedBefore=elapsedMs(); game.startedAt=0; game.paused=true; } else if(!document.hidden&&game.paused){ game.paused=false; if(game.history.length&&!game.finished&&!game.pauseAn&&!game.querAn) game.startedAt=Date.now(); } });
+/* Quer liegt der Hinweis ueber allem - niemand kann spielen, also steht die
+   Uhr. Eigene Merkzelle wie game.pauseAn: Wegschalten, Pause von Hand und
+   Querlage duerfen sich gegenseitig nicht wieder anlaufen lassen. Dieselbe
+   Bedingung wie im CSS, damit Hinweis und Uhr nicht auseinanderlaufen. */
+const QUER_MQ=window.matchMedia?window.matchMedia('(orientation:landscape) and (max-height:500px) and (pointer:coarse)'):null;
+function querPruefen(){
+  const quer=!!(QUER_MQ&&QUER_MQ.matches);
+  if(quer&&!game.querAn){ game.querAn=true;
+    if(game.startedAt&&!game.finished){ game.elapsedBefore=elapsedMs(); game.startedAt=0; } }
+  else if(!quer&&game.querAn){ game.querAn=false;
+    if(game.history.length&&!game.finished&&!game.pauseAn&&!game.paused) game.startedAt=Date.now(); }
+}
+if(QUER_MQ){ if(QUER_MQ.addEventListener) QUER_MQ.addEventListener('change',querPruefen); else if(QUER_MQ.addListener) QUER_MQ.addListener(querPruefen); }
+querPruefen();
 
 /* ---------- Startbild ---------- */
 function buildSplash(){
