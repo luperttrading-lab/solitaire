@@ -5,165 +5,197 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Prototyp Flüssigkeit</title>
 <style>
-/* Prototyp – nicht Teil der App. Unter dem Brett liegt ein verborgener
-   Hohlraum in Form des Kreuzes; darin eine zähe Flüssigkeit, die man nur
-   durch die leeren Löcher sieht. Sie fließt in die Richtung, in die man das
-   Handy kippt – links, rechts, oben, unten. */
+/* Prototyp – nicht Teil der App. Unter dem Brett liegt eine flache Wanne
+   über die ganze quadratische Spielfläche; darin eine zähe grüne Masse aus
+   Teilchen, die zusammenhält, bei starkem Richtungswechsel auseinanderreißt
+   und wieder zusammenfließt. Das Brett liegt darüber, die Löcher sind
+   Gucklöcher. */
 :root{--ink:#f1e7d4;--muted:#d8c9b0;--brass:#d8a24a}
 html{min-height:100lvh;background:radial-gradient(ellipse 130% 70% at 50% 35%,rgba(0,0,0,0) 0%,rgba(0,0,0,.45) 100%),url('3-holz.jpg') top center/auto 120% no-repeat,#27211c}
 html,body{margin:0;height:100%;overflow:hidden}
 body{background:transparent;color:var(--ink);font:15px/1.35 -apple-system,system-ui,sans-serif;-webkit-user-select:none;user-select:none}
-#app{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;padding:calc(env(safe-area-inset-top,0px) + 10px) 12px calc(env(safe-area-inset-bottom,0px) + 10px);gap:9px;box-sizing:border-box}
-h1{font:400 24px Georgia,serif;color:var(--brass);margin:0;text-shadow:0 1px 3px rgba(0,0,0,.9)}
-.sub{font-size:13px;color:var(--muted);margin-top:-6px;text-shadow:0 1px 2px rgba(0,0,0,.9)}
-#stapel{position:relative}
+#app{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;padding:calc(env(safe-area-inset-top,0px) + 8px) 10px calc(env(safe-area-inset-bottom,0px) + 8px);gap:8px;box-sizing:border-box}
+h1{font:400 22px Georgia,serif;color:var(--brass);margin:0;text-shadow:0 1px 3px rgba(0,0,0,.9)}
+#stapel{position:relative;flex:0 0 auto}
 #stapel>*{position:absolute;inset:0;width:100%;height:100%;display:block}
-.reihe{display:flex;flex-wrap:wrap;gap:7px;justify-content:center;max-width:420px}
-.chip{border:1px solid rgba(216,162,74,.55);background:rgba(22,16,11,.72);color:var(--ink);border-radius:999px;padding:7px 12px;font-size:14px}
+.reihe{display:flex;flex-wrap:wrap;gap:6px;justify-content:center;max-width:430px}
+.chip{border:1px solid rgba(216,162,74,.55);background:rgba(22,16,11,.72);color:var(--ink);border-radius:999px;padding:6px 11px;font-size:14px}
 .chip.an{background:var(--brass);color:#1d1409;border-color:var(--brass)}
-#los{font-size:16px;padding:10px 18px}
-.regler{width:100%;max-width:420px;display:grid;grid-template-columns:auto 1fr;gap:4px 10px;align-items:center;font-size:13px;color:var(--muted);
-  background:rgba(22,16,11,.62);border-radius:12px;padding:8px 12px;box-sizing:border-box}
+#los{font-size:15px;padding:8px 16px}
+.regler{width:100%;max-width:430px;display:grid;grid-template-columns:auto 1fr;gap:3px 10px;align-items:center;font-size:13px;color:var(--muted);
+  background:rgba(22,16,11,.62);border-radius:12px;padding:6px 12px;box-sizing:border-box}
 .regler input{width:100%}
 #info{font-size:12px;color:var(--muted);text-shadow:0 1px 2px #000;min-height:1em;text-align:center}
 </style>
 </head>
 <body>
 <div id="app">
-  <h1>Solitaire</h1>
-  <div class="sub">Prototyp: Flüssigkeit im Brett</div>
+  <h1>Flüssigkeit im Brett</h1>
   <div id="stapel">
-    <svg id="brett" viewBox="0 0 840 840" aria-hidden="true"></svg>
     <canvas id="fluss"></canvas>
+    <svg id="brett" viewBox="0 0 840 840" aria-hidden="true"></svg>
     <svg id="kugeln" viewBox="0 0 840 840" aria-hidden="true"></svg>
   </div>
   <div class="reihe">
     <button class="chip" id="los">Neigung einschalten</button>
     <button class="chip" id="null">Neu ausrichten</button>
   </div>
-  <div class="reihe" id="bezugWahl">
-    <button class="chip an" data-bezug="haltung">Ab deiner Haltung</button>
-    <button class="chip" data-bezug="echt">Echte Schwerkraft</button>
+  <div class="reihe" id="sichtWahl">
+    <button class="chip" data-sicht="ohne">Ohne Brett</button>
+    <button class="chip an" data-sicht="halb">Halb durchsichtig</button>
+    <button class="chip" data-sicht="mit">Mit Brett</button>
   </div>
   <div class="reihe" id="empfWahl">
-    <button class="chip an" data-empf="0.12">Sanft</button>
-    <button class="chip" data-empf="0.3">Stark</button>
+    <button class="chip an" data-empf="0.3">Sanft</button>
+    <button class="chip" data-empf="0.7">Stark</button>
+    <button class="chip" id="bezugKnopf">Ab deiner Haltung</button>
+  </div>
+  <div class="reihe" id="zaehWahl">
+    <button class="chip" data-zaeh="zaeh">Zäh</button>
+    <button class="chip an" data-zaeh="mittel">Mittel</button>
+    <button class="chip" data-zaeh="weich">Weich</button>
   </div>
   <div class="reihe" id="farbWahl">
-    <button class="chip an" data-farbe="honig">Honig</button>
+    <button class="chip an" data-farbe="gruen">Grün</button>
+    <button class="chip" data-farbe="honig">Honig</button>
     <button class="chip" data-farbe="silber">Quecksilber</button>
-    <button class="chip" data-farbe="wein">Rotwein</button>
     <button class="chip" id="kugelKnopf">Kugeln zeigen</button>
   </div>
   <div class="regler" id="regler">
     <label for="nx">links/rechts</label><input id="nx" type="range" min="-30" max="30" value="0" step="0.5">
     <label for="ny">vor/zurück</label><input id="ny" type="range" min="-30" max="30" value="0" step="0.5">
   </div>
-  <div id="info">Ohne Sensor: die Regler kippen das Brett.</div>
+  <div id="info">Ohne Sensor: die Regler kippen die Wanne.</div>
 </div>
 <script>
 'use strict';
 const $=id=>document.getElementById(id);
-
-/* ---------- Brett: dasselbe Foto und dieselbe Geometrie wie in der App ---------- */
 const KREUZ=[]; for(let r=0;r<7;r++) for(let c=0;c<7;c++){ if((r<2||r>4)&&(c<2||c>4)) continue; KREUZ.push([c,r]); }
+/* Wanne = quadratische Spielfläche unter dem Brett (Einheiten der viewBox 840) */
+const WX0=72, WX1=768, R_LOCH=31;
+
+/* ---------- Brett darüber, Löcher als Gucklöcher ----------
+   Gemessen am Foto (Kantenanpassung je Loch): die Öffnungen liegen im Mittel
+   8/9 Einheiten rechts unterhalb der Stelle, die die App seit v1.82 für die
+   Lochmitte hält – die dunkle Mitte liegt wegen des Wandschattens oben links.
+   Hier ist das Foto so verschoben, dass die Öffnungen auf den Feldmitten sitzen. */
 (function brett(){
-  const B={bild:[1179,1128],x0:153.3,y0:145.8,dx:138.85,dy:133.59,rahmen:[27,30,1149,1090],ecke:82};
+  const B={bild:[1179,1128],x0:164.4,y0:157.8,dx:138.85,dy:133.59,rahmen:[27,30,1149,1090],ecke:82};
   const sx=100/B.dx, sy=100/B.dy, x=120-B.x0*sx, y=120-B.y0*sy, R=B.rahmen;
   const rx=x+R[0]*sx, ry=y+R[1]*sy, rw=(R[2]-R[0])*sx, rh=(R[3]-R[1])*sy, re=B.ecke*Math.min(sx,sy);
-  $('brett').innerHTML=`<defs><clipPath id="rahmen"><rect x="${rx+2}" y="${ry+2}" width="${rw-4}" height="${rh-4}" rx="${re}"/></clipPath></defs>`
-    + `<image href="3-brett.jpg" x="${x}" y="${y}" width="${B.bild[0]*sx}" height="${B.bild[1]*sy}" preserveAspectRatio="none" clip-path="url(#rahmen)"/>`;
+  const loecher=KREUZ.map(([c,r])=>`<circle cx="${120+c*100}" cy="${120+r*100}" r="${R_LOCH}" fill="#000"/>`).join('');
+  const rand=KREUZ.map(([c,r])=>`<circle cx="${120+c*100}" cy="${120+r*100}" r="${R_LOCH}" fill="url(#tiefe)"/>`).join('');
+  const umriss=KREUZ.map(([c,r])=>`<circle cx="${120+c*100}" cy="${120+r*100}" r="${R_LOCH}" fill="none" stroke="rgba(255,240,210,.35)" stroke-width="1.5" stroke-dasharray="5 5"/>`).join('');
+  $('brett').innerHTML=`<defs>
+      <mask id="guck"><rect x="${rx+2}" y="${ry+2}" width="${rw-4}" height="${rh-4}" rx="${re}" fill="#fff"/>${loecher}</mask>
+      <radialGradient id="tiefe" cx="44%" cy="42%" r="62%"><stop offset=".62" stop-color="#000" stop-opacity="0"/><stop offset=".86" stop-color="#000" stop-opacity=".45"/><stop offset="1" stop-color="#000" stop-opacity=".8"/></radialGradient>
+    </defs>
+    <g id="brettBild" mask="url(#guck)"><image href="3-brett.jpg" x="${x}" y="${y}" width="${B.bild[0]*sx}" height="${B.bild[1]*sy}" preserveAspectRatio="none"/></g>
+    <g id="lochRand">${rand}</g><g id="umriss">${umriss}</g>`;
   const farben=['#c62828','#1e5bd8','#1f8a4c','#e0a320','#7b3fc4','#16a3a0','#e8702a','#e14f9a'];
   let peg='', n=0;
   KREUZ.forEach(([c,r])=>{ if(r===3&&c===3) return; const f=farben[n++%farben.length], X=120+c*100, Y=120+r*100;
-    peg+=`<circle cx="${X+3}" cy="${Y+5}" r="34" fill="rgba(0,0,0,.35)"/><circle cx="${X}" cy="${Y}" r="34" fill="url(#m${f.slice(1)})"/>`
-       + `<ellipse cx="${X-11}" cy="${Y-13}" rx="12" ry="8" fill="rgba(255,255,255,.55)"/>`; });
+    peg+=`<circle cx="${X+3}" cy="${Y+5}" r="34" fill="rgba(0,0,0,.35)"/><circle cx="${X}" cy="${Y}" r="34" fill="url(#m${f.slice(1)})"/><ellipse cx="${X-11}" cy="${Y-13}" rx="12" ry="8" fill="rgba(255,255,255,.55)"/>`; });
   const defs=farben.map(f=>`<radialGradient id="m${f.slice(1)}" cx="38%" cy="32%" r="75%"><stop offset="0" stop-color="#fff" stop-opacity=".55"/><stop offset=".25" stop-color="${f}"/><stop offset="1" stop-color="#000" stop-opacity=".9"/></radialGradient>`).join('');
-  $('kugeln').innerHTML=`<defs>${defs}</defs>`+peg;
-  $('kugeln').style.display='none';
+  $('kugeln').innerHTML=`<defs>${defs}</defs>`+peg; $('kugeln').style.display='none';
 })();
+let sicht='halb';
+function sichtSetzen(s){ sicht=s;
+  $('brettBild').style.opacity=s==='ohne'?0:s==='halb'?0.45:1;
+  $('lochRand').style.opacity=s==='mit'?1:s==='halb'?0.6:0;
+  $('umriss').style.display=s==='ohne'?'block':'none'; }
 $('kugelKnopf').addEventListener('click',e=>{ const an=$('kugeln').style.display==='none'; $('kugeln').style.display=an?'block':'none'; e.target.classList.toggle('an',an); e.target.textContent=an?'Kugeln verbergen':'Kugeln zeigen'; });
 
-/* ---------- Farben ---------- */
-const FARBEN={
-  honig: {r:214,g:140,b:30, hell:[255,226,150], tief:[110,58,8]},
-  silber:{r:190,g:198,b:206,hell:[255,255,255], tief:[60,66,74]},
-  wein:  {r:150,g:22, b:46, hell:[255,150,170], tief:[50,4,12]}
-};
-let farbe=FARBEN.honig;
-
-/* ---------- Physik: 2-D-Flachwasser im Hohlraum unter dem Kreuz ----------
-   Gitter 56 x 56 über die viewBox 70..770 (Zelle 12,5 Einheiten). Nur Zellen
-   unter dem Kreuz gehören zum Hohlraum; an seinen Wänden fließt nichts.
-   h = Tiefe (Einheiten), u/v = Geschwindigkeit an den Zellgrenzen.
-   Rückstellend wirkt die Tiefe (Druck), treibend die Neigung – im
-   Gleichgewicht steht die Oberfläche um S·Neigung schief. Die starke
-   lineare Reibung K macht die Flüssigkeit zäh. */
-const NX=56, DX=12.5, X0=70, G=190000, K=8;
-let S=0.12, D0=10;
-const drin=new Uint8Array(NX*NX);
-for(let j=0;j<NX;j++) for(let i=0;i<NX;i++){ const x=X0+(i+.5)*DX, y=X0+(j+.5)*DX;
-  drin[j*NX+i]=KREUZ.some(([c,r])=>Math.abs(x-(120+c*100))<=50&&Math.abs(y-(120+r*100))<=50)?1:0; }
-let h=new Float32Array(NX*NX), u=new Float32Array((NX+1)*NX), v=new Float32Array(NX*(NX+1));
-const fu=new Float32Array((NX+1)*NX), fv=new Float32Array(NX*(NX+1));
-function fuellen(){ for(let k=0;k<NX*NX;k++) h[k]=drin[k]?D0:0; u.fill(0); v.fill(0); }
-let ax=0, ay=0;           // Neigung in Bildschirm-Richtung (rechts, unten), Einheit g
-function schritt(dt){
-  const kf=1/(1+K*dt);
-  for(let j=0;j<NX;j++) for(let i=1;i<NX;i++){ const a=j*NX+i-1, b=a+1, f=j*(NX+1)+i;
-    if(!drin[a]||!drin[b]){ u[f]=0; continue; }
-    let w=u[f]+dt*(-G*(h[b]-h[a])/DX + G*S*ax); w*=kf;
-    if((w>0&&h[a]<=0.01)||(w<0&&h[b]<=0.01)) w=0; u[f]=w; }
-  for(let j=1;j<NX;j++) for(let i=0;i<NX;i++){ const a=(j-1)*NX+i, b=a+NX, f=j*NX+i;
-    if(!drin[a]||!drin[b]){ v[f]=0; continue; }
-    let w=v[f]+dt*(-G*(h[b]-h[a])/DX + G*S*ay); w*=kf;
-    if((w>0&&h[a]<=0.01)||(w<0&&h[b]<=0.01)) w=0; v[f]=w; }
-  // Fluesse (stromaufwaerts) und Begrenzung, damit keine Zelle negativ wird
-  for(let j=0;j<NX;j++) for(let i=0;i<=NX;i++){ const f=j*(NX+1)+i; const w=u[f]; fu[f]=w===0?0:w*(w>0?h[j*NX+i-1]:h[j*NX+i]); }
-  for(let j=0;j<=NX;j++) for(let i=0;i<NX;i++){ const f=j*NX+i; const w=v[f]; fv[f]=w===0?0:w*(w>0?h[(j-1)*NX+i]:h[j*NX+i]); }
-  for(let j=0;j<NX;j++) for(let i=0;i<NX;i++){ const k=j*NX+i; if(!drin[k]) continue;
-    const l=j*(NX+1)+i, r=l+1, o=j*NX+i, un=o+NX;
-    const aus=Math.max(0,fu[r])+Math.max(0,-fu[l])+Math.max(0,fv[un])+Math.max(0,-fv[o]); const hat=h[k]*DX/dt;
-    if(aus>hat){ const s=hat/aus; if(fu[r]>0) fu[r]*=s; if(fu[l]<0) fu[l]*=s; if(fv[un]>0) fv[un]*=s; if(fv[o]<0) fv[o]*=s; } }
-  for(let j=0;j<NX;j++) for(let i=0;i<NX;i++){ const k=j*NX+i; if(!drin[k]) continue;
-    const l=j*(NX+1)+i, o=j*NX+i;
-    h[k]=Math.max(0,h[k]-dt*(fu[l+1]-fu[l]+fv[o+NX]-fv[o])/DX); }
+/* ---------- Teilchen-Flüssigkeit ----------
+   Nach Clavet u. a. (2005): Doppel-Dichte-Relaxation (Druck + Nahdruck – das
+   hält die Masse zusammen wie Oberflächenspannung) und Viskositätsimpulse
+   (zäh). Gemessen ohne Browser: ein Klumpen in Ruhe, beim Richtungswechsel
+   zerfällt er in 2–4 Teile und fließt danach wieder zu einem zusammen. */
+const P={N:1300, h:34, rho0:5.5, k:0.02, kn:0.12, sig:0.1, beta:0.02, damp:0.006};
+/* Zaehigkeit, gemessen ohne Browser bei schnellem Wechsel der Neigung:
+   zaeh teilt sich nie; mittel bei kraeftigem Kippen in 2-3 Teile; weich
+   schon bei sanftem in bis zu 5 – alle fliessen danach wieder zusammen. */
+const ZAEH={zaeh:{sig:0.3,beta:0.05,damp:0.014,kn:0.12}, mittel:{sig:0.1,beta:0.02,damp:0.006,kn:0.12}, weich:{sig:0.05,beta:0.01,damp:0.003,kn:0.08}};
+const N=P.N, x=new Float32Array(N), y=new Float32Array(N), vx=new Float32Array(N), vy=new Float32Array(N), px=new Float32Array(N), py=new Float32Array(N);
+const C=P.h, GW=Math.ceil(840/C)+1, kopf=new Int32Array(GW*GW), next=new Int32Array(N);
+const MAXN=48, nb=new Int32Array(N*MAXN), nbn=new Int32Array(N), nq=new Float32Array(N*MAXN), rho=new Float32Array(N), rhon=new Float32Array(N);
+function fuellen(){ // runder Tropfen (Sonnenblumen-Anordnung, gleichmaessig dicht)
+  const R0=P.h*0.42*Math.sqrt(N/Math.PI);
+  for(let i=0;i<N;i++){ const r=R0*Math.sqrt((i+.5)/N), t=i*2.39996323; x[i]=420+r*Math.cos(t); y[i]=420+r*Math.sin(t); vx[i]=vy[i]=0; } }
+function nachbarn(){
+  kopf.fill(-1);
+  for(let i=0;i<N;i++){ const c=Math.max(0,Math.min(GW-1,Math.floor(x[i]/C)))+GW*Math.max(0,Math.min(GW-1,Math.floor(y[i]/C))); next[i]=kopf[c]; kopf[c]=i; }
+  const h2=P.h*P.h;
+  for(let i=0;i<N;i++){ nbn[i]=0; const cx=Math.floor(x[i]/C), cy=Math.floor(y[i]/C);
+    for(let dy=-1;dy<=1;dy++) for(let dx=-1;dx<=1;dx++){ const gx=cx+dx, gy=cy+dy; if(gx<0||gy<0||gx>=GW||gy>=GW) continue;
+      for(let j=kopf[gx+GW*gy];j>=0;j=next[j]){ if(j<=i) continue; const rx=x[j]-x[i], ry=y[j]-y[i], r2=rx*rx+ry*ry; if(r2>=h2||r2<1e-6) continue;
+        if(nbn[i]<MAXN){ nb[i*MAXN+nbn[i]]=j; nq[i*MAXN+nbn[i]]=Math.sqrt(r2)/P.h; nbn[i]++; } } } }
 }
+function schritt(gx,gy,dt){
+  for(let i=0;i<N;i++){ vx[i]+=gx*dt; vy[i]+=gy*dt; }
+  nachbarn();
+  for(let i=0;i<N;i++) for(let k=0;k<nbn[i];k++){ const j=nb[i*MAXN+k], q=nq[i*MAXN+k], r=q*P.h, nx=(x[j]-x[i])/r, ny=(y[j]-y[i])/r;
+    const u=(vx[i]-vx[j])*nx+(vy[i]-vy[j])*ny; if(u>0){ const I=dt*(1-q)*(P.sig*u+P.beta*u*u)*0.5; vx[i]-=I*nx; vy[i]-=I*ny; vx[j]+=I*nx; vy[j]+=I*ny; } }
+  for(let i=0;i<N;i++){ vx[i]*=1-P.damp*dt; vy[i]*=1-P.damp*dt; px[i]=x[i]; py[i]=y[i]; x[i]+=vx[i]*dt; y[i]+=vy[i]*dt; }
+  nachbarn();
+  rho.fill(0); rhon.fill(0);
+  for(let i=0;i<N;i++) for(let k=0;k<nbn[i];k++){ const j=nb[i*MAXN+k], a=1-nq[i*MAXN+k], a2=a*a, a3=a2*a; rho[i]+=a2; rho[j]+=a2; rhon[i]+=a3; rhon[j]+=a3; }
+  for(let i=0;i<N;i++) for(let k=0;k<nbn[i];k++){ const j=nb[i*MAXN+k], q=nq[i*MAXN+k], a=1-q, r=q*P.h, nx=(x[j]-x[i])/r, ny=(y[j]-y[i])/r;
+    const Pi=P.k*(rho[i]+rho[j]-2*P.rho0)*0.5, Pn=P.kn*(rhon[i]+rhon[j])*0.5, D=dt*dt*(Pi*a+Pn*a*a)*0.5;
+    x[i]-=D*nx; y[i]-=D*ny; x[j]+=D*nx; y[j]+=D*ny; }
+  for(let i=0;i<N;i++){
+    if(x[i]<WX0) x[i]=WX0+(WX0-x[i])*0.1; else if(x[i]>WX1) x[i]=WX1-(x[i]-WX1)*0.1;
+    if(y[i]<WX0) y[i]=WX0+(WX0-y[i])*0.1; else if(y[i]>WX1) y[i]=WX1-(y[i]-WX1)*0.1;
+    vx[i]=(x[i]-px[i])/dt; vy[i]=(y[i]-py[i])/dt;
+    const v2=vx[i]*vx[i]+vy[i]*vy[i]; if(v2>VMAX*VMAX){ const f=VMAX/Math.sqrt(v2); vx[i]*=f; vy[i]*=f; }
+    if(!(x[i]===x[i])||!(y[i]===y[i])){ x[i]=420+Math.random()*20; y[i]=420+Math.random()*20; vx[i]=vy[i]=0; } }
+}
+const VMAX=14;
 
-/* ---------- Zeichnen: nur durch die Loecher sichtbar ----------
-   Eine kleine Leinwand in Einheiten/4 (210 x 210) wird je Bild neu gefuellt
-   und weich auf die Brettgroesse gezogen. Jeder Bildpunkt in einem Loch
-   bekommt die Tiefe an seiner Stelle: duenner Film = durchscheinend, tief =
-   satt; dazu Licht von oben links aus der Neigung der Oberflaeche. */
-const RES=4, CW=210, R_SICHT=23;
+/* ---------- Zeichnen: Metaball-Feld mit Licht (plastisch) ----------
+   Feld auf 210 x 210 (4 Einheiten je Punkt); jedes Teilchen trägt
+   (1 − r²/R²)² bei. Die Oberfläche liegt bei der Schwelle, das Licht kommt
+   aus der Neigung des Feldes: Grundton, Glanzpunkt oben links, dunkler Rand. */
+const FARBEN={
+  gruen: {grund:[46,160,58], tief:[10,70,24], glanz:[220,255,200]},
+  honig: {grund:[214,140,30], tief:[110,58,8], glanz:[255,240,190]},
+  silber:{grund:[170,178,188], tief:[52,58,66], glanz:[255,255,255]}
+};
+let farbe=FARBEN.gruen;
+const RES=4, CW=210, RK=30, RK2=RK*RK, SCHWELLE=1.1;
+const feld=new Float32Array(CW*CW), hoehe=new Float32Array(CW*CW);
 const klein=document.createElement('canvas'); klein.width=CW; klein.height=CW;
 const kctx=klein.getContext('2d'), kimg=kctx.createImageData(CW,CW);
-const punkte=[]; // [index, x, y, rand 0..1, wand -1..1 (oben links = +1)]
-/* Die Oeffnung eines gefraesten Lochs liegt etwas rechts unter seiner dunklen
-   Mitte (der beleuchtete Wandrand gehoert dazu) – gemessen rund 4 Einheiten. */
-const VERSATZ=4;
-KREUZ.forEach(([c,r])=>{ const cx=120+c*100+VERSATZ, cy=120+r*100+VERSATZ;
-  for(let py=Math.floor((cy-R_SICHT)/RES);py<=Math.ceil((cy+R_SICHT)/RES);py++) for(let px=Math.floor((cx-R_SICHT)/RES);px<=Math.ceil((cx+R_SICHT)/RES);px++){
-    const x=(px+.5)*RES, y=(py+.5)*RES, d=Math.hypot(x-cx,y-cy); if(d>R_SICHT) continue;
-    punkte.push([py*CW+px, x, y, d/R_SICHT, -((x-cx)+(y-cy))/(Math.SQRT2*R_SICHT)]); } });
-function tiefe(x,y){ // bilinear im Gitter
-  const gx=(x-X0)/DX-.5, gy=(y-X0)/DX-.5; const i=Math.max(0,Math.min(NX-2,Math.floor(gx))), j=Math.max(0,Math.min(NX-2,Math.floor(gy)));
-  const fx=Math.min(1,Math.max(0,gx-i)), fy=Math.min(1,Math.max(0,gy-j)), k=j*NX+i;
-  return h[k]*(1-fx)*(1-fy)+h[k+1]*fx*(1-fy)+h[k+NX]*(1-fx)*fy+h[k+NX+1]*fx*fy; }
+const L=[-0.45,-0.55,0.7], LN=Math.hypot(...L); L[0]/=LN; L[1]/=LN; L[2]/=LN;
+const Hh=[L[0],L[1],L[2]+1], HN=Math.hypot(...Hh); Hh[0]/=HN; Hh[1]/=HN; Hh[2]/=HN;
 function zeichne(){
-  const d=kimg.data; d.fill(0);
-  const F=farbe;
-  for(const [k,x,y,rand,wand] of punkte){
-    const t=tiefe(x,y); if(t<1.5) continue;
-    let a=Math.min(1,(t-1.5)/(D0*0.8)); a=a*a*(3-2*a);
-    const nx=tiefe(x+4,y)-tiefe(x-4,y), ny=tiefe(x,y+4)-tiefe(x,y-4);
-    let licht=Math.max(-1,Math.min(1,(-nx-ny)*0.35));      // Licht von oben links
-    const tief=Math.min(1,t/(D0*2.2));                       // tiefer = dunkler, satter
-    let r=F.r+(F.tief[0]-F.r)*tief*0.6, g=F.g+(F.tief[1]-F.g)*tief*0.6, b=F.b+(F.tief[2]-F.b)*tief*0.6;
-    if(licht>0){ r+=(F.hell[0]-r)*licht; g+=(F.hell[1]-g)*licht; b+=(F.hell[2]-b)*licht; } else { r*=1+licht*.5; g*=1+licht*.5; b*=1+licht*.5; }
-    let kante=rand>0.78?1-(rand-0.78)/0.22*0.55:1;           // Innenwand: zum Rand hin dunkler
-    if(wand>0.15) kante*=1-0.45*Math.min(1,(wand-0.15)/0.7); // Schatten der Wand oben links
-    const i=k*4; d[i]=r*kante; d[i+1]=g*kante; d[i+2]=b*kante; d[i+3]=255*a*(rand>0.9?(1-rand)/0.1:1)*0.9;
+  feld.fill(0);
+  const rp=RK/RES;
+  for(let i=0;i<N;i++){ const cx=x[i]/RES, cy=y[i]/RES;
+    const x0=Math.max(0,Math.floor(cx-rp)), x1=Math.min(CW-1,Math.ceil(cx+rp)), y0=Math.max(0,Math.floor(cy-rp)), y1=Math.min(CW-1,Math.ceil(cy+rp));
+    for(let gy=y0;gy<=y1;gy++){ const dy=(gy+.5)*RES-y[i]; for(let gx=x0;gx<=x1;gx++){ const dx=(gx+.5)*RES-x[i], r2=dx*dx+dy*dy; if(r2<RK2){ const t=1-r2/RK2; feld[gy*CW+gx]+=t*t; } } } }
+  const d=kimg.data, F=farbe, w0=Math.floor(WX0/RES), w1=Math.ceil(WX1/RES);
+  /* Hoehe: am Rand steigt sie an, innen ist sie flach (gedeckelt) – so zeigt
+     die Oberflaeche kein Teilchenraster, und der Rand wirkt gewoelbt. */
+  for(let k=0;k<CW*CW;k++){ let t=(feld[k]-(SCHWELLE-0.35))/5; t=t<0?0:t>1?1:t; hoehe[k]=Math.sqrt(t*(2-t)); } // Viertelkreis: runde Kante wie ein Tropfen
+  for(let gy=0;gy<CW;gy++) for(let gx=0;gx<CW;gx++){
+    const k=gy*CW+gx, o=k*4;
+    // Boden der Wanne: dunkles, warmes Holz
+    if(gx<w0||gx>w1||gy<w0||gy>w1){ d[o+3]=0; continue; }
+    let r=30,g=22,b=15, a=255;
+    const f=feld[k];
+    if(f>SCHWELLE-0.35){
+      const fx=(hoehe[k+1]-hoehe[k-1]), fy=(hoehe[k+CW]-hoehe[k-CW]);
+      let nx=-fx*3.2, ny=-fy*3.2, nz=1; const nn=Math.hypot(nx,ny,nz); nx/=nn; ny/=nn; nz/=nn;
+      const dif=Math.max(0,nx*L[0]+ny*L[1]+nz*L[2]);
+      const spe=Math.pow(Math.max(0,nx*Hh[0]+ny*Hh[1]+nz*Hh[2]),24);
+      const tief=Math.min(1,Math.max(0,(f-SCHWELLE)/4));
+      let cr=F.grund[0]+(F.tief[0]-F.grund[0])*tief*0.5, cg=F.grund[1]+(F.tief[1]-F.grund[1])*tief*0.5, cb=F.grund[2]+(F.tief[2]-F.grund[2])*tief*0.5;
+      const lf=0.3+0.9*dif; cr=cr*lf+F.glanz[0]*spe*0.85; cg=cg*lf+F.glanz[1]*spe*0.85; cb=cb*lf+F.glanz[2]*spe*0.85;
+      let al=(f-(SCHWELLE-0.35))/0.7; al=al<0?0:al>1?1:al; al=al*al*(3-2*al);
+      r=r+(cr-r)*al; g=g+(cg-g)*al; b=b+(cb-b)*al;
+    }
+    d[o]=r>255?255:r; d[o+1]=g>255?255:g; d[o+2]=b>255?255:b; d[o+3]=a;
   }
   kctx.putImageData(kimg,0,0);
   const cv=$('fluss'), c=cv.getContext('2d');
@@ -172,62 +204,63 @@ function zeichne(){
   c.drawImage(klein,0,0,cv.width,cv.height);
 }
 
-/* ---------- Groesse ---------- */
+/* ---------- Größe ---------- */
 function mass(){
-  const app=$('app'); const bw=Math.min(app.clientWidth-24,420,Math.max(200,app.clientHeight*0.5));
+  const app=$('app'); const bw=Math.min(app.clientWidth-20,430,Math.max(220,app.clientHeight*0.52));
   const st=$('stapel'); st.style.width=bw+'px'; st.style.height=bw+'px';
-  const dpr=Math.min(3,window.devicePixelRatio||1); const cv=$('fluss'); cv.width=Math.round(bw*dpr); cv.height=Math.round(bw*dpr);
+  const dpr=Math.min(3,window.devicePixelRatio||1), cv=$('fluss'); cv.width=Math.round(bw*dpr); cv.height=Math.round(bw*dpr);
 }
 window.addEventListener('resize',mass);
 
 /* ---------- Neigung ----------
-   Schwerkraft im Geraet (x rechts, y oben): (sin g cos b, -sin b, -cos g cos b).
-   Auf den Bildschirm projiziert: rechts = x, unten = -y.
-   "Ab deiner Haltung": die Lage beim Einschalten gilt als waagerecht –
-   sonst liefe in der normalen Handhaltung (rund 40° geneigt) alles nach unten. */
-let sensor=false, bezug='haltung', null0=null, roh={x:0,y:0};
-function neigungSetzen(x,y){ // Bildschirm-Komponenten der Schwerkraft
-  roh={x,y};
-  if(bezug==='haltung'){ if(!null0) null0={x,y}; ax=x-null0.x; ay=y-null0.y; }
-  else { ax=x; ay=y; }
-}
+   Schwerkraft auf den Schirm projiziert: rechts sin γ·cos β, unten sin β.
+   "Ab deiner Haltung" (Standard): die Lage beim Einschalten gilt als
+   waagerecht – in normaler Handhaltung liefe sonst alles nach unten. */
+let S=0.3, sensor=false, echt=false, null0=null, roh={x:0,y:0}, ax=0, ay=0;
+const G=0.6; // Beschleunigung je Schritt bei voller Neigung und S = 1 (0,12 war fünfmal zu träge)
+function neigungSetzen(nx,ny){ roh={x:nx,y:ny};
+  if(!echt){ if(!null0) null0={x:nx,y:ny}; ax=nx-null0.x; ay=ny-null0.y; } else { ax=nx; ay=ny; } }
 window.addEventListener('deviceorientation',e=>{
   if(e.beta==null||e.gamma==null) return;
   const b=e.beta*Math.PI/180, g=e.gamma*Math.PI/180;
   if(!sensor){ sensor=true; $('regler').style.display='none'; }
   neigungSetzen(Math.sin(g)*Math.cos(b), Math.sin(b));
-  $('info').textContent='vor/zurück '+e.beta.toFixed(0)+'° · links/rechts '+e.gamma.toFixed(0)+'°';
+  $('info').textContent='vor/zurück '+e.beta.toFixed(0)+'° · links/rechts '+e.gamma.toFixed(0)+'°'+(echt?'':' · Bezug: deine Haltung');
 });
 $('los').addEventListener('click',async()=>{
   null0=null;
   try{
     if(typeof DeviceOrientationEvent!=='undefined'&&typeof DeviceOrientationEvent.requestPermission==='function'){
       const r=await DeviceOrientationEvent.requestPermission();
-      $('info').textContent=r==='granted'?'Neigung erlaubt – so, wie du das Handy jetzt hältst, ist waagerecht.':'Neigung nicht erlaubt ('+r+'). Die Regler gehen trotzdem.';
+      $('info').textContent=r==='granted'?'Erlaubt – so, wie du das Handy jetzt hältst, ist waagerecht.':'Nicht erlaubt ('+r+'). Die Regler gehen trotzdem.';
     } else $('info').textContent='Kein Erlauben nötig – kipp das Handy (oder nimm die Regler).';
   }catch(err){ $('info').textContent='Neigung nicht verfügbar: '+err.message; }
   $('los').classList.add('an');
 });
 $('null').addEventListener('click',()=>{ null0={x:roh.x,y:roh.y}; neigungSetzen(roh.x,roh.y); });
-function regler(){ if(sensor) return; const a=+$('nx').value*Math.PI/180, b=+$('ny').value*Math.PI/180; ax=Math.sin(a); ay=Math.sin(b); }
+$('bezugKnopf').addEventListener('click',e=>{ echt=!echt; null0=null; neigungSetzen(roh.x,roh.y);
+  e.target.textContent=echt?'Echte Schwerkraft':'Ab deiner Haltung'; e.target.classList.toggle('an',echt); });
+function regler(){ if(sensor) return; ax=Math.sin(+$('nx').value*Math.PI/180); ay=Math.sin(+$('ny').value*Math.PI/180); }
 $('nx').addEventListener('input',regler); $('ny').addEventListener('input',regler);
 
 /* ---------- Wahl ---------- */
 function wahl(gruppe,attr,fn){ const alle=document.querySelectorAll('#'+gruppe+' .chip[data-'+attr+']');
-  alle.forEach(b=>b.addEventListener('click',()=>{ alle.forEach(x=>x.classList.toggle('an',x===b)); fn(b); })); }
-wahl('bezugWahl','bezug',b=>{ bezug=b.dataset.bezug; null0=null; neigungSetzen(roh.x,roh.y); });
+  alle.forEach(b=>b.addEventListener('click',()=>{ alle.forEach(z=>z.classList.toggle('an',z===b)); fn(b); })); }
+wahl('sichtWahl','sicht',b=>sichtSetzen(b.dataset.sicht));
 wahl('empfWahl','empf',b=>{ S=+b.dataset.empf; });
 wahl('farbWahl','farbe',b=>{ farbe=FARBEN[b.dataset.farbe]; });
+wahl('zaehWahl','zaeh',b=>{ Object.assign(P,ZAEH[b.dataset.zaeh]); });
 
 /* ---------- Schleife ---------- */
 let letzte=0;
 function bild(t){
-  const dt=Math.min(0.05,(t-(letzte||t))/1000); letzte=t;
-  const n=Math.max(1,Math.ceil(dt/(1/700)));
-  for(let k=0;k<n;k++) schritt(dt/n);
+  const dt=Math.min(2,Math.max(0.5,(t-(letzte||t-16.7))/16.7)); letzte=t;
+  /* Nie mehr als ein Bild je Schritt: mit dt = 2 (Browser hinkt) explodierte
+     die weiche Einstellung (gemessen: NaN nach 0,8 s bei kraeftigem Kippen). */
+  const n=Math.ceil(dt); for(let k=0;k<n;k++) schritt(G*S*ax,G*S*ay,dt/n);
   zeichne(); requestAnimationFrame(bild);
 }
-fuellen(); mass(); requestAnimationFrame(bild);
+fuellen(); mass(); sichtSetzen('halb'); requestAnimationFrame(bild);
 // fuer den Test: Neigung in Grad von aussen setzen (rechts, unten)
 window.neigung=(gx,gy)=>{ ax=Math.sin(gx*Math.PI/180); ay=Math.sin(gy*Math.PI/180); };
 </script>
