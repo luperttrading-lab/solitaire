@@ -765,7 +765,7 @@ header, .hud, #status{ text-shadow:0 1px 3px rgba(0,0,0,.75) }
 
 <script>
 'use strict';
-const APP_VERSION='1.84';
+const APP_VERSION='1.85';
 /* =========================================================================
    Kern: Bretter, Züge, Symmetrien, Paritäts-Schranke, Solver
    (als Fabrik, damit derselbe Code im Web Worker läuft)
@@ -1330,8 +1330,13 @@ const SCHIMMER_SOLL=70, BG_HEX='#685c51';
    Nachbarn (3,4) derselben Planke ersetzt - im Original war es kleiner bzw.
    anders gefast. rahmen/ecke: Aussenkante des Eisenrahmens in Bildpunkten;
    ausserhalb liegt eingebranntes Schachbrett (freigestellt, aber als JPEG),
-   die Maske muss es daher VOLL verdecken. */
-const FOTO_BRETT={datei:'3-brett.jpg', bild:[1179,1128], x0:153.3, y0:145.8, dx:138.85, dy:133.59,
+   die Maske muss es daher VOLL verdecken.
+   v1.85: x0/y0 an der LOCHKANTE gemessen statt an der dunkelsten Scheibe
+   (153,3/145,8 -> 164,4/157,1). Der Wandschatten liegt oben links im Loch
+   und zog die alte Messung mit: die Loecher sassen 8/8 Einheiten rechts
+   unterhalb der Felder, Murmeln und Dreiecke oben links darin (Lutz'
+   Screenshot 25.09.2026). */
+const FOTO_BRETT={datei:'3-brett.jpg', bild:[1179,1128], x0:164.4, y0:157.1, dx:138.85, dy:133.59,
                   rahmen:[27,30,1149,1090], ecke:82};
 function fotoBrettMasse(){
   const sx=P/FOTO_BRETT.dx, sy=P/FOTO_BRETT.dy, mitte=MARG+P/2;
@@ -2923,14 +2928,20 @@ let evalSeq=0, evalCurrentId=null;
    Verglichen wird deshalb gegen die Bewertung UND die Schranke der
    Vorgaengerstellung; beides steht in prevEval. */
 /* Haelt fest, ob die Partie gerade verloren steht, und zaehlt die Rettung,
-   sobald Zuruecknehmen sie wieder loesbar gemacht hat. Je GERETTETER STELLUNG
-   einmal (rettKeys): wer denselben Fehler wiederholt und nochmal zurueckgeht,
-   zaehlt nicht doppelt - dieselbe Regel wie bei den Tipps. */
+   sobald Zuruecknehmen sie wieder loesbar gemacht hat. Gezaehlt wird je
+   STELLUNG UND FEHLZUG (rettKeys, v1.85): Lutz am 25.09.2026 - "wenn ich bei
+   einem Zug scheitere, kann ich mehrmals scheitern ... sollte Rettung zaehlen
+   fuer jeden gescheiterten Zug." Bis v1.84 zaehlte nur die Stellung; drei
+   verschiedene Fehlzuege aus derselben Stellung gaben 1. Der Fehlzug ist der
+   zuletzt zurueckgenommene (oben auf future): von der geretteten Stellung aus
+   fuehrte genau er in den Verlust. Derselbe Zug hin und her zaehlt weiter
+   nur einmal (v1.59, auch Lutz' Wunsch). */
 function rettungPruefen(){
   const ev=game.evalRes; if(!ev||!ev.complete) return;
   const verloren=ev.best>ev.lb;
   if(game.rettungOffen&&!verloren){
-    const k=stateKey();
+    const f=game.future.length?game.future[game.future.length-1]:null;
+    const k=stateKey()+'|'+(f?f.mi:'');
     if(game.rettKeys&&!game.rettKeys.has(k)){ game.rettKeys.add(k); game.rueckAlarm++; renderHud(); }
     game.rettungOffen=false;
   }

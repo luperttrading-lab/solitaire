@@ -985,6 +985,24 @@ function kurzfassungGleich(proben,voll,erwartet){
     undo(); await warte(2800); erg.hin1=game.rueckAlarm;
     redo(); await warte(2800); undo(); await warte(2800); erg.hin2=game.rueckAlarm;
     redo(); await warte(2800); undo(); await warte(2800); erg.hin3=game.rueckAlarm;
+    /* v1.85 - Lutz am 25.09.2026: "wenn ich bei einem Zug scheitere, kann
+       ich mehrmals scheitern ... sollte Rettung zaehlen fuer jeden
+       gescheiterten Zug." Zwei VERSCHIEDENE Fehlzuege aus derselben
+       Stellung sind zwei Rettungen; derselbe noch einmal bleibt bei zwei. */
+    /* Die Stellung wird GESUCHT, nicht angenommen: nach 12 Zuegen gab es
+       nur einen Fehlzug (einmal erlebt). Entlang der Loesungslinie weiter,
+       bis mindestens zwei da sind. */
+    const fehlHier=()=>frei().filter(m=>{ const c=occ(); c[m.from]=0;c[m.over]=0;c[m.to]=1; const [lo,hi]=CORE.fromArray(c);
+      return CORE.solveSmart(game.board,lo,hi,pegCount()-1,{maxNodes:0,timeMs:8000,target:1}).best>1; });
+    auf12(); let alleFehl=fehlHier();
+    for(let k=12;k<26&&alleFehl.length<2;k++){ const l=currentLine(); if(!l) break; applyMove(game.board.moves[l.path[0]],true); alleFehl=fehlHier(); }
+    render(); afterMove(true); await warte(2600); erg.zugNr=game.history.length;
+    erg.fehlzuege=alleFehl.length; const w0=game.rueckAlarm;
+    if(alleFehl.length>=2){
+      playMove(alleFehl[0]); await warte(2600); undo(); await warte(2800); erg.zwei1=game.rueckAlarm-w0;
+      playMove(alleFehl[1]); await warte(2600); undo(); await warte(2800); erg.zwei2=game.rueckAlarm-w0;
+      playMove(alleFehl[0]); await warte(2600); undo(); await warte(2800); erg.zwei3=game.rueckAlarm-w0;
+    }
     /* Teilrueckzug: zurueck ohne zu retten, wieder vor - die Merkzelle geht. */
     auf12(); playMove(fehlzug()); await warte(2600);
     playMove(frei()[0]); await warte(2600); playMove(frei()[0]); await warte(2600);
@@ -1000,6 +1018,9 @@ function kurzfassungGleich(proben,voll,erwartet){
      rett2.konstruiert===0, String(rett2.konstruiert));
   ok('Denselben Zug hin und her zaehlt nur eine Rettung',
      rett2.hin1===1&&rett2.hin2===1&&rett2.hin3===1, [rett2.hin1,rett2.hin2,rett2.hin3].join('/'));
+  ok('Zwei verschiedene Fehlzuege aus derselben Stellung sind zwei Rettungen',
+     rett2.fehlzuege>=2&&rett2.zwei1===1&&rett2.zwei2===2, rett2.fehlzuege+' Fehlzuege nach Zug '+rett2.zugNr+', '+rett2.zwei1+'/'+rett2.zwei2);
+  ok('Der erste Fehlzug noch einmal zaehlt nicht ein drittes Mal', rett2.zwei3===2, String(rett2.zwei3));
   ok('Ein Zurueck, das noch nicht rettet, bleibt offen', rett2.offenNachZurueck===true);
   ok('Wieder vorwaerts loescht die offene Rettung', rett2.offenNachVor===false);
   ok('Zurueck und wieder vor ist kein Rettungsversuch',
@@ -3764,7 +3785,22 @@ function kurzfassungGleich(proben,voll,erwartet){
   const lo=felder.map(loch);
   const vers=lo.map(q=>Math.hypot(q.dx,q.dy)), mdx=lo.reduce((a,q)=>a+q.dx,0)/lo.length, mdy=lo.reduce((a,q)=>a+q.dy,0)/lo.length;
   console.log('INFO Foto-Brett, Versatz Loch gegen Feldmitte (Einheiten, Feld = 100): max '+Math.max(...vers).toFixed(1)+', Mittel x '+mdx.toFixed(1)+' y '+mdy.toFixed(1));
-  // Lage selbst prueft der Block "Foto-Brett" (v1.76); hier nur die Mitten fuer die Profile.
+  /* Lage der Loecher, gemessen an der KANTE (v1.85). Der dunkelste Kreis
+     oben taugt dafuer nicht: der Wandschatten liegt oben links im Loch und
+     zieht ihn mit - so blieb seit v1.82 ein Versatz von 8/8 Einheiten
+     unbemerkt, Murmeln und Dreiecke sassen oben links, unten rechts schaute
+     der Lochrand hervor (Lutz' Screenshot 25.09.2026). Gesucht wird der
+     Kreis mit dem staerksten Sprung dunkel innen -> hell aussen. */
+  const kante=f=>{ let best=-1e9,o={dx:0,dy:0,r:0};
+    for(let dy=-16;dy<=16;dy++)for(let dx=-16;dx<=16;dx++)for(let r=26;r<=40;r++){ let s=0;
+      for(let a=0;a<36;a++){ const t=a/36*2*Math.PI,c=Math.cos(t),si=Math.sin(t),X=(f.x+dx)*fbE,Y=(f.y+dy)*fbE;
+        s+=fbL(X+(r+2.5)*fbE*c,Y+(r+2.5)*fbE*si)-fbL(X+(r-2.5)*fbE*c,Y+(r-2.5)*fbE*si); }
+      if(s>best){best=s;o={dx,dy,r};} } return o; };
+  const ka=felder.map(kante), kmed=a=>{ a=[...a].sort((x,y)=>x-y); return a[a.length>>1]; };
+  const kdx=kmed(ka.map(q=>q.dx)), kdy=kmed(ka.map(q=>q.dy)), kmax=Math.max(...ka.map(q=>Math.hypot(q.dx,q.dy)));
+  console.log('INFO Foto-Brett, Lochkante gegen Feldmitte (Einheiten): Median x '+kdx+' y '+kdy+', groesster '+kmax.toFixed(1)+', Radius '+kmed(ka.map(q=>q.r)));
+  ok('Die Lochkanten sitzen mittig unter den Feldern (Kantenanpassung)',
+     Math.abs(kdx)<=1&&Math.abs(kdy)<=1&&kmax<=7, 'Median '+kdx+'/'+kdy+', groesster '+kmax.toFixed(1));
   /* Die eigentliche Frage: sieht das Mittelloch aus wie die anderen?
      Radiales Helligkeitsprofil (Kern, Fase, Holz) gegen den Median aller
      anderen Loecher. Gemessen am Ausgangsbild von Lutz: Mitte 7,2 gegen
