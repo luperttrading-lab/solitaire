@@ -275,8 +275,12 @@ header .boardname:active{background:var(--panel2)}
   display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 #lessonBar .lb{display:flex;gap:8px}
 #lessonBar .btn{padding:9px;font-size:13px}
-.pkg-ring{fill:none;stroke:#e2a95c;stroke-width:4;stroke-dasharray:5 6}
+/* v1.86: Punkte rund und kraeftig mit dunklem Hof - auf dem Holz waren die
+   duennen Striche (4 breit, 5/6) kaum zu sehen (Lutz, 03.10.2026). */
+.pkg-ring{fill:none;stroke:#ffc46b;stroke-width:7;stroke-linecap:round;stroke-dasharray:.1 12.5}
+.pkg-hof{fill:none;stroke:rgba(0,0,0,.6);stroke-width:11;stroke-linecap:round;stroke-dasharray:.1 12.5}
 .cat-ring{fill:none;stroke:#8fc48a;stroke-width:5}
+.cat-hof{fill:none;stroke:rgba(0,0,0,.55);stroke-width:9}
 .end-ring{fill:none;stroke:#fff;stroke-width:4;opacity:.7;stroke-dasharray:3 5}
 #status .link,#statusProbe .link{color:var(--brass2);text-decoration:underline;text-underline-offset:3px;padding:4px 6px}
 #status .note,#statusProbe .note{flex-basis:100%;color:var(--muted);font-size:12px;margin-top:1px}
@@ -765,7 +769,7 @@ header, .hud, #status{ text-shadow:0 1px 3px rgba(0,0,0,.75) }
 
 <script>
 'use strict';
-const APP_VERSION='1.85';
+const APP_VERSION='1.86';
 /* =========================================================================
    Kern: Bretter, Züge, Symmetrien, Paritäts-Schranke, Solver
    (als Fabrik, damit derselbe Code im Web Worker läuft)
@@ -1009,9 +1013,9 @@ const LESSONS=[
   phases:[{free:true,text:'Bringe die Stellung auf einen Stein. Beobachte, wo er landet.'}],
   done:'Der letzte Stein steht auf einem der markierten Felder – ein anderes war nie möglich. Merke dir: Halte im Endspiel Steine bereit, die dorthin führen.'},
  {id:'partie',title:'5 · Die Partie als Purge-Folge',pegs:null,
-  intro:'Die Standardpartie, in sechs Abschnitte zerlegt: zwei Dreier-Purges öffnen das Brett, drei Sechser-Purges räumen drei Arme, ein kurzes Endspiel beendet es. Jeder Abschnitt wird angezeigt: Paket gepunktet, Hilfsstein grün.',
+  intro:'Die Standardpartie, in sieben Abschnitte zerlegt: zwei Dreier-Purges öffnen das Brett, drei Sechser-Purges räumen drei Arme, ein Haken-Purge räumt das Endspiel, ein Schlusssprung führt in die Mitte. Jeder Abschnitt wird angezeigt: Paket gepunktet und hinterlegt, Hilfsstein grün.',
   steps:'Spiele Abschnitt für Abschnitt. „Vormachen" spielt den aktuellen Abschnitt für dich.',
-  phases:[{pkg:["2,3", "2,4", "2,5"],cat:"1,3",moves:[["1,3", "3,3"], ["2,5", "2,3"], ["3,3", "1,3"]],text:"Abschnitt 1 – Dreier-Purge: Reihe gepunktet, Hilfsstein grün. Drei Züge, der Hilfsstein kehrt zurück."},{pkg:["2,2", "3,2", "4,2"],cat:"2,1",moves:[["2,1", "2,3"], ["4,2", "2,2"], ["2,3", "2,1"]],text:"Abschnitt 2 – Dreier-Purge: Reihe gepunktet, Hilfsstein grün. Drei Züge, der Hilfsstein kehrt zurück."},{pkg:["0,4", "0,3", "0,2", "1,4", "1,3", "1,2"],cat:"3,4",moves:[["0,4", "2,4"], ["0,3", "2,3"], ["0,2", "2,2"], ["3,4", "1,4"], ["2,2", "2,4"], ["1,4", "3,4"]],text:"Abschnitt 3 – Sechser-Purge: der markierte Arm verschwindet in sechs Zügen, der grüne Hilfsstein kehrt zurück."},{pkg:["4,0", "3,0", "2,0", "4,1", "3,1", "2,1"],cat:"4,3",moves:[["4,0", "4,2"], ["3,0", "3,2"], ["2,0", "2,2"], ["4,3", "4,1"], ["2,2", "4,2"], ["4,1", "4,3"]],text:"Abschnitt 4 – Sechser-Purge: der markierte Arm verschwindet in sechs Zügen, der grüne Hilfsstein kehrt zurück."},{pkg:["6,2", "6,3", "6,4", "5,2", "5,3", "5,4"],cat:"4,3",moves:[["6,2", "4,2"], ["6,4", "6,2"], ["5,4", "5,2"], ["4,3", "4,1"], ["6,2", "4,2"], ["4,1", "4,3"]],text:"Abschnitt 5 – Sechser-Purge: der markierte Arm verschwindet in sechs Zügen, der grüne Hilfsstein kehrt zurück."},{free:true,moves:[["3,4", "5,4"], ["4,6", "4,4"], ["2,6", "4,6"], ["4,3", "4,5"], ["4,6", "4,4"], ["5,4", "3,4"], ["3,4", "3,6"]],text:"Abschnitt 6 – Endspiel: sieben Züge bis zum letzten Stein. Die Vormach-Funktion zeigt einen Weg; jeder eigene Weg zu 1 Stein zählt."}],done:'Ein Stein. Das war die ganze Partie: 2 × Dreier, 3 × Sechser, Endspiel. Beim nächsten Spiel: erst Reihen und Arme als Blöcke sehen, dann ziehen.'}
+  phases:[{pkg:["2,3", "2,4", "2,5"],cat:"1,3",moves:[["1,3", "3,3"], ["2,5", "2,3"], ["3,3", "1,3"]],text:"Abschnitt 1 – Dreier-Purge: Reihe gepunktet, Hilfsstein grün. Drei Züge, der Hilfsstein kehrt zurück."},{pkg:["2,2", "3,2", "4,2"],cat:"2,1",moves:[["2,1", "2,3"], ["4,2", "2,2"], ["2,3", "2,1"]],text:"Abschnitt 2 – Dreier-Purge: Reihe gepunktet, Hilfsstein grün. Drei Züge, der Hilfsstein kehrt zurück."},{pkg:["0,4", "0,3", "0,2", "1,4", "1,3", "1,2"],cat:"3,4",moves:[["0,4", "2,4"], ["0,3", "2,3"], ["0,2", "2,2"], ["3,4", "1,4"], ["2,2", "2,4"], ["1,4", "3,4"]],text:"Abschnitt 3 – Sechser-Purge: der markierte Arm verschwindet in sechs Zügen, der grüne Hilfsstein kehrt zurück."},{pkg:["4,0", "3,0", "2,0", "4,1", "3,1", "2,1"],cat:"4,3",moves:[["4,0", "4,2"], ["3,0", "3,2"], ["2,0", "2,2"], ["4,3", "4,1"], ["2,2", "4,2"], ["4,1", "4,3"]],text:"Abschnitt 4 – Sechser-Purge: der markierte Arm verschwindet in sechs Zügen, der grüne Hilfsstein kehrt zurück."},{pkg:["6,2", "6,3", "6,4", "5,2", "5,3", "5,4"],cat:"4,3",moves:[["6,2", "4,2"], ["6,4", "6,2"], ["5,4", "5,2"], ["4,3", "4,1"], ["6,2", "4,2"], ["4,1", "4,3"]],text:"Abschnitt 5 – Sechser-Purge: der markierte Arm verschwindet in sechs Zügen, der grüne Hilfsstein kehrt zurück."},{pkg:["2,6", "3,6", "4,6", "4,5", "4,4", "4,3"],cat:"3,4",moves:[["3,4", "5,4"], ["4,6", "4,4"], ["2,6", "4,6"], ["4,3", "4,5"], ["4,6", "4,4"], ["5,4", "3,4"]],text:"Abschnitt 6 – Haken-Purge: das markierte L aus sechs Steinen verschwindet. Der grüne Hilfsstein springt nach unten hinaus und kehrt in Zug 6 zurück."},{free:true,moves:[["3,5", "3,3"]],text:"Abschnitt 7 – Schlusssprung: der letzte Stein landet in der Mitte."}],done:'Ein Stein in der Mitte. Das war die ganze Partie: 2 × Dreier, 3 × Sechser, ein Haken, ein Schlusssprung. Beim nächsten Spiel: erst Reihen, Arme und Haken als Blöcke sehen, dann ziehen.'}
 ];
 
 const THEMES={
@@ -1658,7 +1662,7 @@ const game={board:null,lay:null,pegAt:[],initial:[],history:[],future:[],selecte
 
 const $=id=>document.getElementById(id);
 const boardSvg=$('board'), statusEl=$('status');
-let defsEl,trayLayer,holesLayer,glowLayer,pegsLayer,overlayLayer;
+let defsEl,trayLayer,holesLayer,paketLayer,glowLayer,pegsLayer,overlayLayer;
 
 function occ(){ return game.pegAt.map(v=>v>=0?1:0); }
 function pegCount(){ let n=0; for(const v of game.pegAt) if(v>=0) n++; return n; }
@@ -1865,6 +1869,9 @@ function buildBoardSvg(){
      (v1.69). Er muss HINTER die Murmel - im Overlay laege er darueber und
      wuerde sie einfaerben statt zu hinterleuchten. renderPegs() fasst diesen
      Layer nicht an, ein laufender Schein ueberlebt also das Neuzeichnen. */
+  /* Flaeche hinter dem Lektions-Paket (v1.86): unter den Steinen, damit sie
+     die Murmeln nicht einfaerbt. renderOverlay() zeichnet sie neu. */
+  paketLayer=el('g'); paketLayer.setAttribute('pointer-events','none'); boardSvg.appendChild(paketLayer);
   glowLayer=el('g'); glowLayer.setAttribute('pointer-events','none'); boardSvg.appendChild(glowLayer);
   pegsLayer=el('g'); boardSvg.appendChild(pegsLayer);
   overlayLayer=el('g'); overlayLayer.setAttribute('pointer-events','none'); boardSvg.appendChild(overlayLayer);
@@ -1878,8 +1885,23 @@ function renderPegs(){
   const pd=defsEl.querySelector('#pegDefs'); let defs=''; pegDefsCache.forEach(v=>defs+=v); pd.innerHTML=defs;
   pegsLayer.innerHTML=html;
 }
+/* Die Flaeche hinter dem Paket (v1.86, Variante C von Lutz): zeigt das Paket
+   als EINE Form - Reihe, Arm, Haken -, denn genau das soll die Lektion lehren
+   ("erst Bloecke sehen, dann ziehen"). Kreise je Stein plus Stege zwischen
+   Nachbarn, alle deckend in einer Gruppe mit gemeinsamer Deckkraft: so
+   addiert sich an den Ueberlappungen nichts. Nur Steine, die noch stehen -
+   die Flaeche schrumpft mit dem Abraeumen. */
+function paketFlaeche(pkg){
+  const B=game.board, lay=game.lay, da=pkg.filter(k=>game.pegAt[B.index[k]]>=0); if(!da.length) return;
+  const g=el('g',{class:'paketFlaeche',opacity:'.42'});
+  da.forEach(k=>{ const q=lay.pos[B.index[k]]; g.appendChild(el('circle',{cx:q.x,cy:q.y,r:44,fill:'#ffb648'})); });
+  da.forEach((k1,a)=>da.forEach((k2,b)=>{ if(b<=a) return; const [r1,c1]=k1.split(',').map(Number),[r2,c2]=k2.split(',').map(Number);
+    if(Math.abs(r1-r2)+Math.abs(c1-c2)!==1) return; const p1=lay.pos[B.index[k1]],p2=lay.pos[B.index[k2]];
+    g.appendChild(el('line',{x1:p1.x,y1:p1.y,x2:p2.x,y2:p2.y,stroke:'#ffb648','stroke-width':88})); }));
+  paketLayer.appendChild(g);
+}
 function renderOverlay(){
-  overlayLayer.innerHTML=''; const lay=game.lay;
+  overlayLayer.innerHTML=''; if(paketLayer) paketLayer.innerHTML=''; const lay=game.lay;
   /* Vor dem fruehen Ausstieg, sonst bliebe der Stand der Gruen-Analyse in
      der Startstein-Wahl stehen. */
   renderZuegeStand();
@@ -1899,8 +1921,13 @@ function renderOverlay(){
     if(gab&&!Store.get('markeErklaert',false)){ Store.set('markeErklaert',true);
       toast('Das Zeichen heißt: hier bleibt ein Stein stehen. Ein Tipp darauf sagt mehr.',4200); } }
   if(game.lesson&&!game.lesson.solved){ const {L,ph}=lessonPhase();
-    if(ph&&ph.pkg){ ph.pkg.forEach(k=>{ const i=game.board.index[k]; if(game.pegAt[i]>=0){ const p=lay.pos[i]; overlayLayer.appendChild(el('circle',{class:'pkg-ring',cx:p.x,cy:p.y,r:R_PEG+6})); } });
-      const ci=game.board.index[ph.cat]; if(ci!==undefined){ const p=lay.pos[ci]; overlayLayer.appendChild(el('circle',{class:'cat-ring',cx:p.x,cy:p.y,r:R_PEG+7})); } }
+    if(ph&&ph.pkg){ ph.pkg.forEach(k=>{ const i=game.board.index[k]; if(game.pegAt[i]>=0){ const p=lay.pos[i];
+        overlayLayer.appendChild(el('circle',{class:'pkg-hof',cx:p.x,cy:p.y,r:R_PEG+6}));
+        overlayLayer.appendChild(el('circle',{class:'pkg-ring',cx:p.x,cy:p.y,r:R_PEG+6})); } });
+      paketFlaeche(ph.pkg);
+      const ci=game.board.index[ph.cat]; if(ci!==undefined){ const p=lay.pos[ci];
+        overlayLayer.appendChild(el('circle',{class:'cat-hof',cx:p.x,cy:p.y,r:R_PEG+7}));
+        overlayLayer.appendChild(el('circle',{class:'cat-ring',cx:p.x,cy:p.y,r:R_PEG+7})); } }
     if(L.id==='endfelder'){ allowedEndCells(game.board,occ()).forEach(i=>{ const p=lay.pos[i]; overlayLayer.appendChild(el('circle',{class:'end-ring',cx:p.x,cy:p.y,r:R_HOLE+6})); }); } }
   /* Schon probierte Zuege dieser Stellung: nur der Strich, dezent, damit er
      neben der vollen Markierung nicht mit ihr konkurriert. Vor ihr gezeichnet,

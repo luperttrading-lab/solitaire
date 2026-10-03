@@ -668,7 +668,7 @@ const FAELLE=[
      const t=document.getElementById('detailText').textContent;
      const z=document.getElementById('detailZusatz').textContent; closeDetail(); return {t,z}; });
    ok('Die Einleitung steht im Blatt hinter dem Pfeil ('+g[2]+')',
-      /sechs Abschnitte/.test(blatt.t)&&/Vormachen/.test(blatt.z), blatt.t.slice(0,60));
+      /sieben Abschnitte/.test(blatt.t)&&/Vormachen/.test(blatt.z), blatt.t.slice(0,60));
    await p.close();
  }
 

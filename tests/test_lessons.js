@@ -22,6 +22,45 @@ let fails=0; const ok=(n,c,x)=>{ console.log((c?'OK  ':'FAIL')+' '+n+(x!==undefi
     console.log('INFO '+id+' Ende: '+JSON.stringify(fin));
     ok(id+': Lektion per Vormachen geschafft', fin.solved);
   }
+  /* v1.86: Das Endspiel der Partie ist selbst ein Purge - ein Haken (L aus
+     sechs Steinen), Hilfsstein (3,4) springt nach unten hinaus und kehrt
+     zurueck. Alle vier Loesungen des Endspiels haben genau diese Form
+     (durchgezaehlt); zwei davon enden in der Mitte, die Lektion zeigt jetzt
+     eine davon statt des Endes auf (3,6). */
+  await page.evaluate(()=>startLesson('partie')); await sleep(300);
+  const pa=await page.evaluate(()=>{ const L=LESSONS.find(x=>x.id==='partie'), B=game.board;
+    const flaeche=document.querySelector('#board .paketFlaeche');
+    const lagen=[...boardSvg.children]; const iFl=flaeche?lagen.indexOf(flaeche.parentNode):-1, iSt=lagen.indexOf(pegsLayer);
+    return {n:L.phases.length, ph6:L.phases[5], ph7:L.phases[6],
+      flKreise:flaeche?flaeche.querySelectorAll('circle').length:0, flUnter:iFl>=0&&iFl<iSt,
+      hof:document.querySelectorAll('#board .pkg-hof').length, catHof:document.querySelectorAll('#board .cat-hof').length,
+      ringe:document.querySelectorAll('#board .pkg-ring').length}; });
+  console.log('INFO Partie v1.86: '+JSON.stringify({n:pa.n,flKreise:pa.flKreise,flUnter:pa.flUnter,hof:pa.hof,catHof:pa.catHof,ringe:pa.ringe}));
+  ok('Partie: sieben Abschnitte', pa.n===7, String(pa.n));
+  ok('Abschnitt 6 ist der Haken-Purge mit Hilfsstein (3,4)',
+     pa.ph6.cat==='3,4'&&pa.ph6.pkg.length===6&&pa.ph6.moves.length===6&&!pa.ph6.free, JSON.stringify(pa.ph6.pkg));
+  ok('Abschnitt 7 springt in die Mitte', pa.ph7.moves.length===1&&pa.ph7.moves[0][1]==='3,3', JSON.stringify(pa.ph7.moves));
+  ok('Paket: Flaeche hinter jedem Stein, unter den Steinen', pa.flKreise===3&&pa.flUnter===true, pa.flKreise+' / '+pa.flUnter);
+  ok('Paket und Hilfsstein haben einen dunklen Hof', pa.hof===pa.ringe&&pa.ringe===3&&pa.catHof===1, pa.hof+'/'+pa.ringe+'/'+pa.catHof);
+  /* Sieht man es? Brett mit gegen ohne Markierung, gezaehlt im Kasten um
+     das Paket - nicht die Zahl der Elemente (Fehlertyp v1.39). */
+  const box=await page.evaluate(()=>{ const r=boardSvg.getBoundingClientRect(); return {x:r.x,y:r.y,width:r.width,height:r.height}; });
+  const {PNG}=require('pngjs');
+  const mit=PNG.sync.read(await page.screenshot({clip:box}));
+  await page.evaluate(()=>document.querySelectorAll('#board .paketFlaeche,#board .pkg-ring,#board .pkg-hof').forEach(e=>e.style.display='none'));
+  const ohne=PNG.sync.read(await page.screenshot({clip:box}));
+  let anders=0; for(let i=0;i<mit.data.length;i+=4){ const d=Math.abs(mit.data[i]-ohne.data[i])+Math.abs(mit.data[i+1]-ohne.data[i+1])+Math.abs(mit.data[i+2]-ohne.data[i+2]); if(d>60) anders++; }
+  console.log('INFO Paket-Markierung: '+anders+' deutlich veraenderte Bildpunkte');
+  /* Gemessen: v1.85 (duenne Striche) 1226, v1.86 8745. Schwelle 4000 = mehr
+     als das Dreifache des alten Standes - die alte Fassung faellt sicher
+     durch, die neue hat Abstand nach unten. */
+  ok('Die Paket-Markierung ist deutlich zu sehen', anders>4000, String(anders));
+  // Ganze Partie vormachen: endet mit einem Stein in der Mitte
+  await page.evaluate(()=>startLesson('partie')); await sleep(200);
+  for(let k=0;k<8;k++){ if(await page.evaluate(()=>game.lesson.solved)) break; await page.click('#lsDemo');
+    await sleep(400); await page.waitForFunction(()=>!game.autoplay&&!game.animating,{timeout:60000}); await sleep(200); }
+  const pe=await page.evaluate(()=>({solved:game.lesson.solved,left:pegCount(),mitte:game.pegAt[game.board.index['3,3']]>=0}));
+  ok('Partie vorgemacht: ein Stein, und zwar in der Mitte', pe.solved&&pe.left===1&&pe.mitte, JSON.stringify(pe));
   // Lektion 1 manuell: richtige Züge -> geschafft; falscher Weg -> Hinweis
   await page.evaluate(()=>startLesson('dreier')); await sleep(200);
   const mv=await page.evaluate(()=>resolveMoves(LESSONS[0].phases[0].moves).map(m=>game.board.moves.indexOf(m)));
