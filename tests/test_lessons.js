@@ -55,6 +55,26 @@ let fails=0; const ok=(n,c,x)=>{ console.log((c?'OK  ':'FAIL')+' '+n+(x!==undefi
      als das Dreifache des alten Standes - die alte Fassung faellt sicher
      durch, die neue hat Abstand nach unten. */
   ok('Die Paket-Markierung ist deutlich zu sehen', anders>4000, String(anders));
+  /* v1.87: "Beenden" war ein Geisterknopf ohne eigenen Grund - die Schrift
+     stand direkt auf dem Holz, 4,0 : 1 im schlechtesten Zehntel (Lutz,
+     03.10.2026: "kann man kaum lesen"). Gemessen wird die Schrift gegen die
+     Bildpunkte, die wirklich hinter ihr liegen (Schrift unsichtbar, 90.
+     Perzentil der Helligkeit), fuer alle drei Knoepfe der Leiste. */
+  await page.evaluate(()=>{ closeSheet&&closeSheet(); startLesson('partie'); }); await sleep(400);
+  const linK=c=>{c/=255;return c<=.03928?c/12.92:((c+.055)/1.055)**2.4}, Lum=(R,G,B)=>.2126*linK(R)+.7152*linK(G)+.0722*linK(B);
+  for(const id of ['lsDemo','lsRestart','lsQuit']){
+    const q=await page.evaluate(id=>{ const e=document.getElementById(id), r=e.getBoundingClientRect();
+      const oben=document.elementFromPoint(r.x+r.width/2,r.y+r.height/2);
+      return {x:r.x,y:r.y,width:r.width,height:r.height,farbe:getComputedStyle(e).color,oben:oben===e||e.contains(oben)}; },id);
+    await page.evaluate(id=>document.getElementById(id).style.color='transparent',id);
+    const bild=PNG.sync.read(await page.screenshot({clip:{x:q.x,y:q.y,width:q.width,height:q.height}}));
+    await page.evaluate(id=>document.getElementById(id).style.color='',id);
+    const ls=[]; for(let i=0;i<bild.data.length;i+=4) ls.push(Lum(bild.data[i],bild.data[i+1],bild.data[i+2])); ls.sort((a,b)=>a-b);
+    const [R,G,B]=q.farbe.match(/\d+/g).map(Number), lt=Lum(R,G,B), l90=ls[Math.floor(ls.length*.9)];
+    const k=(Math.max(lt,l90)+.05)/(Math.min(lt,l90)+.05);
+    console.log('INFO Leiste '+id+': Schrift '+q.farbe+', Kontrast schlechtestes Zehntel '+k.toFixed(2)+' : 1, obenauf '+q.oben);
+    ok('Lektionsleiste: „'+id+'" ist lesbar (≥ 4,5 : 1 gegen das, was dahinter liegt)', q.oben&&k>=4.5, k.toFixed(2)+' : 1');
+  }
   // Ganze Partie vormachen: endet mit einem Stein in der Mitte
   await page.evaluate(()=>startLesson('partie')); await sleep(200);
   for(let k=0;k<8;k++){ if(await page.evaluate(()=>game.lesson.solved)) break; await page.click('#lsDemo');

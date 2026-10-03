@@ -369,6 +369,13 @@ header .boardname:active{background:var(--panel2)}
 .btn{flex:1;padding:13px;border-radius:12px;background:var(--panel2);color:var(--ink);font-size:15px;text-align:center}
 .btn.primary{background:linear-gradient(180deg,#d9b25f,#b88f36);color:#1f1608}
 .btn.ghost{background:none;border:1px solid var(--line);color:var(--muted)}
+/* v1.87: Auf dem Holz hat ein Geisterknopf keinen eigenen Grund - die Schrift
+   stand direkt auf der Maserung, gemessen 4,0 : 1 im schlechtesten Zehntel
+   (Lutz, 03.10.2026: "kann man kaum lesen"). In der Lektionsleiste deshalb
+   derselbe dunkle Grund wie Vormachen/Abschnitt neu; der Messingrand haelt
+   ihn als Ausgang unterscheidbar. Die Geisterknoepfe in Blatt und Ergebnis
+   liegen auf dunklem Grund und bleiben, wie sie sind. */
+html.holzgrund #lessonBar .btn.ghost{background:var(--panel2);color:var(--ink);border:1px solid rgba(201,162,77,.6)}
 
 /* ---------- Modals ---------- */
 .modal{position:fixed;inset:0;z-index:30;display:flex;align-items:center;justify-content:center;background:rgba(10,7,5,.7);opacity:0;pointer-events:none;transition:opacity .25s;padding:24px}
@@ -769,7 +776,7 @@ header, .hud, #status{ text-shadow:0 1px 3px rgba(0,0,0,.75) }
 
 <script>
 'use strict';
-const APP_VERSION='1.86';
+const APP_VERSION='1.87';
 /* =========================================================================
    Kern: Bretter, Züge, Symmetrien, Paritäts-Schranke, Solver
    (als Fabrik, damit derselbe Code im Web Worker läuft)
