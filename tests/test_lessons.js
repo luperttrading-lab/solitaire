@@ -12,7 +12,7 @@ let fails=0; const ok=(n,c,x)=>{ console.log((c?'OK  ':'FAIL')+' '+n+(x!==undefi
     const st=await page.evaluate(()=>({bar:!document.getElementById('lessonBar').hidden,left:pegCount(),title:document.getElementById('lessonTitle').textContent,hint:document.getElementById('btnHint').disabled,endRings:document.querySelectorAll('#board .end-ring').length,pkg:document.querySelectorAll('#board .pkg-ring').length,cat:document.querySelectorAll('#board .cat-ring').length}));
     console.log('INFO '+id+': '+JSON.stringify(st));
     ok(id+': Lektion gestartet, Leiste sichtbar, Tipp aus', st.bar&&st.hint);
-    // Vormachen bis gelöst (max 8 Abschnitte); Lektion 4 (free) über den Solver lösen
+    // Vormachen bis gelöst (max 8 Abschnitte); freie Abschnitte ohne Zugfolge über den Solver lösen
     for(let k=0;k<8;k++){ const solved=await page.evaluate(()=>game.lesson.solved); if(solved) break;
       const free=await page.evaluate(()=>{ const {ph}=lessonPhase(); return !!(ph&&ph.free&&!ph.moves); });
       if(free){ await page.evaluate(()=>{ const [lo,hi]=CORE.fromArray(occ()); const r=CORE.solveSmart(game.board,lo,hi,pegCount(),{maxNodes:1e6,timeMs:5000,target:1}); game.line={key:stateKey(),path:r.path,best:1,complete:true,nodes:0,lb:1}; game.autoplay=true; playMove(game.board.moves[r.path[0]]); }); }
@@ -81,6 +81,19 @@ let fails=0; const ok=(n,c,x)=>{ console.log((c?'OK  ':'FAIL')+' '+n+(x!==undefi
     await sleep(400); await page.waitForFunction(()=>!game.autoplay&&!game.animating,{timeout:60000}); await sleep(200); }
   const pe=await page.evaluate(()=>({solved:game.lesson.solved,left:pegCount(),mitte:game.pegAt[game.board.index['3,3']]>=0}));
   ok('Partie vorgemacht: ein Stein, und zwar in der Mitte', pe.solved&&pe.left===1&&pe.mitte, JSON.stringify(pe));
+  /* v1.88: Der Haken-Purge als eigene Lektion (Lutz, 04.10.2026: "als eigenen
+     Purge einbauen, neben den anderen"). Steht bei den Purges, vor den
+     Endfeldern und der Partie; von Hand gespielt bleibt genau der
+     Hilfsstein auf seinem Feld (3,4) stehen. */
+  const hk=await page.evaluate(()=>{ const i=LESSONS.findIndex(l=>l.id==='haken'); return {i,titel:i>=0?LESSONS[i].title:'',reihe:LESSONS.map(l=>l.id).join(',')}; });
+  ok('Haken-Purge ist Lektion 4, direkt nach dem Neuner', hk.i===3&&/^4 · Haken-Purge$/.test(hk.titel), hk.reihe+' / '+hk.titel);
+  await page.evaluate(()=>{ closeSheet&&closeSheet(); startLesson('haken'); }); await sleep(300);
+  const hkStart=await page.evaluate(()=>({steine:pegCount(),ringe:document.querySelectorAll('#board .pkg-ring').length,kat:document.querySelectorAll('#board .cat-ring').length}));
+  ok('Haken: sieben Steine, sechs im Paket, ein Hilfsstein', hkStart.steine===7&&hkStart.ringe===6&&hkStart.kat===1, JSON.stringify(hkStart));
+  const hkMv=await page.evaluate(()=>resolveMoves(LESSONS.find(l=>l.id==='haken').phases[0].moves).map(m=>game.board.moves.indexOf(m)));
+  for(const mi of hkMv){ await page.evaluate(i=>playMove(game.board.moves[i]),mi); await sleep(400); }
+  const hkEnde=await page.evaluate(()=>({solved:game.lesson.solved,steine:pegCount(),aufFeld:game.pegAt[game.board.index['3,4']]>=0}));
+  ok('Haken von Hand: geschafft, nur der Hilfsstein bleibt auf (3,4)', hkEnde.solved&&hkEnde.steine===1&&hkEnde.aufFeld, JSON.stringify(hkEnde));
   // Lektion 1 manuell: richtige Züge -> geschafft; falscher Weg -> Hinweis
   await page.evaluate(()=>startLesson('dreier')); await sleep(200);
   const mv=await page.evaluate(()=>resolveMoves(LESSONS[0].phases[0].moves).map(m=>game.board.moves.indexOf(m)));
@@ -104,7 +117,7 @@ let fails=0; const ok=(n,c,x)=>{ console.log((c?'OK  ':'FAIL')+' '+n+(x!==undefi
   await page.evaluate(()=>startLesson('dreier')); await sleep(200);
   await page.click('#lsRestart'); await sleep(200); ok('Abschnitt neu: Ausgangsstellung', await page.evaluate(()=>pegCount()===4&&game.history.length===0));
   await page.click('#lsQuit'); await sleep(200); ok('Beenden: normales Spiel', await page.evaluate(()=>!game.lesson&&document.getElementById('lessonBar').hidden&&pegCount()===32));
-  await page.click('#btnMenu'); await sleep(400); ok('Lektionen im Menü', (await page.$$('#lessonList .chip')).length===5); await page.screenshot({path:'shot_menu_lessons.png'});
+  await page.click('#btnMenu'); await sleep(400); ok('Lektionen im Menü', (await page.$$('#lessonList .chip')).length===6); await page.screenshot({path:'shot_menu_lessons.png'});
   ok('keine Seitenfehler', errors.length===0, errors.join(' | '));
   await page.evaluate(()=>{ closeSheet(); startLesson('partie'); }); await sleep(300); await page.screenshot({path:'shot_lesson5.png'});
   await browser.close(); console.log(fails?`\n${fails} FEHLER`:'\nLEKTIONS-TESTS OK'); process.exitCode=fails?1:0;
