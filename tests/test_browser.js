@@ -3939,6 +3939,93 @@ function kurzfassungGleich(proben,voll,erwartet){
   await new Promise(r=>setTimeout(r,300));
 
   /* ===================================================================
+     v1.90: Kupfer & Karte - zweites Foto-Brett, zweiter Hintergrund.
+     Gefragt wird, was zu SEHEN ist: liegen die Loecher unter den Feldern,
+     ist der ganze Rahmen im Bild, bleibt kein Magenta stehen, ist die Schrift
+     auf der hellen Karte lesbar, deckt die Karte den Schirm.
+     =================================================================== */
+  abschnitt='Kupfer & Karte (v1.90)';
+  await page.setViewport({width:390,height:844,deviceScaleFactor:3});
+  await new Promise(r=>setTimeout(r,300));
+  const ku=await page.evaluate(async()=>{ closeSheet(); closeDetail();
+    settings.theme='kupfer'; settings.computer=false; saveSettings(); newGame('english'); applyLook();
+    const im=new Image(); im.src=FOTO_KUPFER.datei; await im.decode();
+    const k=new Image(); k.src='5-karte.jpg'; await k.decode();
+    const vb=boardSvg.viewBox.baseVal, r=fotoBrettMasse(FOTO_KUPFER).rahmen;
+    const html=document.documentElement;
+    const r1={thema:THEMES.kupfer&&THEMES.kupfer.name, klasse:html.classList.contains('kartengrund'),
+      bg:getComputedStyle(html).backgroundImage.includes('5-karte.jpg'), bgHex:bgHex(),
+      nat:[im.naturalWidth,im.naturalHeight], soll:FOTO_KUPFER.bild, karte:[k.naturalWidth,k.naturalHeight],
+      vb:[vb.x,vb.y,vb.width,vb.height], rahmen:r, aschein:parseFloat(getComputedStyle(html).getPropertyValue('--aschein'))};
+    settings.theme='altholz'; saveSettings(); applyLook();
+    const vb2=boardSvg.viewBox.baseVal;
+    const r2={klasse:html.classList.contains('kartengrund'), vb:[vb2.x,vb2.y,vb2.width,vb2.height], bgHex:bgHex(),
+      aschein:parseFloat(getComputedStyle(html).getPropertyValue('--aschein'))};
+    settings.theme='kupfer'; saveSettings(); applyLook();
+    for(let i=0;i<game.board.n;i++) game.pegAt[i]=-1; render();
+    return {r1,r2}; });
+  console.log('INFO Kupfer & Karte: '+JSON.stringify(ku));
+  ok('Thema "Kupfer & Karte" legt die Karte unter das Kupferbrett', ku.r1.thema==='Kupfer & Karte'&&ku.r1.klasse&&ku.r1.bg&&ku.r1.bgHex==='#d0ab70', JSON.stringify(ku.r1));
+  ok('Zurueck zum alten Brett: Holz, viewBox und Ampel wie vorher', !ku.r2.klasse&&ku.r2.vb.join()==='0,0,840,840'&&ku.r2.bgHex==='#685c51'&&ku.r2.aschein<ku.r1.aschein, JSON.stringify(ku.r2));
+  ok('Die Masse in FOTO_KUPFER gehoeren zur ausgelieferten Datei, die Karte ist hochkant und scharf',
+     ku.r1.nat[0]===ku.r1.soll[0]&&ku.r1.nat[1]===ku.r1.soll[1]&&ku.r1.karte[0]>=1100&&ku.r1.karte[1]>=2500, JSON.stringify([ku.r1.nat,ku.r1.karte]));
+  const kuvb=ku.r1.vb, kur=ku.r1.rahmen;
+  ok('Der ganze Kupferrahmen liegt in der viewBox', kur.x>=kuvb[0]&&kur.y>=kuvb[1]&&kur.x+kur.w<=kuvb[0]+kuvb[2]&&kur.y+kur.h<=kuvb[1]+kuvb[3], JSON.stringify({kuvb,kur}));
+  await new Promise(r=>setTimeout(r,500));
+  const kuBox=await page.evaluate(()=>{ const q=boardSvg.getBoundingClientRect(); return {x:q.x,y:q.y,width:q.width,height:q.height}; });
+  const kuBild=PNG.sync.read(await page.screenshot({clip:kuBox}));
+  let kuMag=0; for(let i=0;i<kuBild.data.length;i+=4){ const d=kuBild.data; if(d[i]>200&&d[i+2]>200&&d[i+1]<120) kuMag++; }
+  ok('Kein Magenta vom Freistellen um das Kupferbrett', kuMag===0, String(kuMag));
+  /* Lage der Loecher an der KANTE gemessen, wie seit v1.85 beim Holz -
+     die viewBox beginnt hier bei -44, das muss in die Umrechnung. */
+  const kuE=kuBild.width/kuvb[2];
+  const kuL=(x,y)=>{ x=Math.max(0,Math.min(kuBild.width-1,Math.round(x))); y=Math.max(0,Math.min(kuBild.height-1,Math.round(y)));
+    const i=(y*kuBild.width+x)*4, d=kuBild.data; return d[i]*.299+d[i+1]*.587+d[i+2]*.114; };
+  const kuFelder=await page.evaluate(()=>game.lay.pos.map(p=>({x:p.x,y:p.y})));
+  const kuKante=f=>{ let best=-1e9,o={dx:0,dy:0,r:0};
+    for(let dy=-12;dy<=12;dy++)for(let dx=-12;dx<=12;dx++)for(let r=28;r<=42;r++){ let s=0;
+      for(let a=0;a<36;a++){ const t=a/36*2*Math.PI,c=Math.cos(t),si=Math.sin(t),X=(f.x+dx-kuvb[0])*kuE,Y=(f.y+dy-kuvb[1])*kuE;
+        s+=kuL(X+(r+2.5)*kuE*c,Y+(r+2.5)*kuE*si)-kuL(X+(r-2.5)*kuE*c,Y+(r-2.5)*kuE*si); }
+      if(s>best){best=s;o={dx,dy,r};} } return o; };
+  const kuKa=kuFelder.map(kuKante), kuMed=a=>{ a=[...a].sort((x,y)=>x-y); return a[a.length>>1]; };
+  const kuDx=kuMed(kuKa.map(q=>q.dx)), kuDy=kuMed(kuKa.map(q=>q.dy)), kuMax=Math.max(...kuKa.map(q=>Math.hypot(q.dx,q.dy)));
+  console.log('INFO Kupferbrett, Lochkante gegen Feldmitte (Einheiten): Median x '+kuDx+' y '+kuDy+', groesster '+kuMax.toFixed(1)+', Radius '+kuMed(kuKa.map(q=>q.r)));
+  ok('Die Loecher des Kupferbretts sitzen mittig unter den Feldern (Kantenanpassung)',
+     Math.abs(kuDx)<=1&&Math.abs(kuDy)<=1&&kuMax<=5, 'Median '+kuDx+'/'+kuDy+', groesster '+kuMax.toFixed(1));
+  /* Lesbarkeit auf der hellen Karte: ohne Tafel 1,3-1,6 : 1 (Vorschau). */
+  const kuLum=(r,g,b)=>{const f=c=>{c/=255;return c<=0.03928?c/12.92:Math.pow((c+0.055)/1.055,2.4);};return 0.2126*f(r)+0.7152*f(g)+0.0722*f(b);};
+  const kuStellen=['header .wordmark','#hudLeft','#hudLeftLabel','.hud .neben dt'];
+  const kuInfo=await page.evaluate(sel=>{ newGame('english'); render();
+    return sel.map(s=>{ const e=document.querySelector(s), r=e.getBoundingClientRect();
+      return {s,box:{x:Math.floor(r.x),y:Math.floor(r.y),width:Math.ceil(r.width),height:Math.ceil(r.height)},c:getComputedStyle(e).color.match(/\d+/g).map(Number)}; }); },kuStellen);
+  await page.addStyleTag({content:'.kontrastweg header .wordmark,.kontrastweg .hud b,.kontrastweg .hud span,.kontrastweg .hud dt,.kontrastweg .hud dd{color:transparent!important;text-shadow:none!important}'});
+  await page.evaluate(()=>document.documentElement.classList.add('kontrastweg'));
+  await new Promise(r=>setTimeout(r,250));
+  const kuErg=[];
+  for(const k of kuInfo){ const b=PNG.sync.read(await page.screenshot({clip:k.box})); const L=[];
+    for(let i=0;i<b.data.length;i+=4) L.push(kuLum(b.data[i],b.data[i+1],b.data[i+2])); L.sort((a,z)=>a-z);
+    const p90=L[Math.floor(L.length*0.9)], lt=kuLum(...k.c.slice(0,3)); kuErg.push({s:k.s,k:+((Math.max(lt,p90)+0.05)/(Math.min(lt,p90)+0.05)).toFixed(2)}); }
+  await page.evaluate(()=>document.documentElement.classList.remove('kontrastweg'));
+  console.log('INFO Schrift auf der Karte (schlechtestes Zehntel): '+JSON.stringify(kuErg));
+  ok('Kopfzeile und Zaehler sind auf der Karte lesbar (>= 4,5 : 1 dank Tafel)', kuErg.every(e=>e.k>=4.5), JSON.stringify(kuErg));
+  /* Die Karte deckt den Schirm in der Breite: mit "auto 100%" blieben links
+     und rechts Streifen der dunklen Rueckfallfarbe (erste Probe). */
+  const kuRand=await page.evaluate(()=>{ const H=window.innerHeight; return {w:window.innerWidth,h:H}; });
+  const kuVoll=PNG.sync.read(await page.screenshot());
+  const kuSpalte=x=>{ let a=0,n=0; for(let y=Math.round(kuVoll.height*.3);y<kuVoll.height*.7;y+=6){ const i=(y*kuVoll.width+x)*4; a+=kuVoll.data[i]*.299+kuVoll.data[i+1]*.587+kuVoll.data[i+2]*.114; n++; } return a/n; };
+  const kuLinks=kuSpalte(2), kuRechts=kuSpalte(kuVoll.width-3);
+  console.log('INFO Karte am Bildschirmrand: links '+kuLinks.toFixed(0)+', rechts '+kuRechts.toFixed(0)+' (Rueckfallfarbe #3a2a1a = 44)');
+  ok('Die Karte reicht bis an den linken und rechten Rand', kuLinks>80&&kuRechts>80, kuLinks.toFixed(0)+' / '+kuRechts.toFixed(0));
+  /* Lektionsleiste: helle Schrift, auf der Karte nur mit Tafel lesbar. */
+  const kuLek=await page.evaluate(()=>{ startLesson('sechser'); const b=document.getElementById('lessonBar');
+    return getComputedStyle(b,'::before').content!=='none'&&getComputedStyle(b,'::before').backgroundColor; });
+  await page.evaluate(()=>quitLesson());
+  ok('Die Lektionsleiste hat auf der Karte ihre Tafel', !!kuLek&&kuLek!=='rgba(0, 0, 0, 0)', String(kuLek));
+  await page.evaluate(()=>{ settings.theme='altholz'; settings.computer=true; saveSettings(); newGame('english'); applyLook(); });
+  await page.setViewport({width:390,height:844,deviceScaleFactor:1});
+  await new Promise(r=>setTimeout(r,300));
+
+  /* ===================================================================
      v1.84: Querformat - Hinweis statt Drehsperre
      Lutz am 24.09.2026: "Kannst du die Dreh Funktion ausschalten wenn man
      das Handy quer haelt". Safari erlaubt keiner Webseite, die Drehung zu

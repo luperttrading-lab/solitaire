@@ -586,6 +586,32 @@ html.holzgrund{background:
       v1.43), leuchtende Lichter (.an) sind ausgenommen - sonst verloere
       ".aprobe b.an" die Spezifitaet und die Probe bliebe gedimmt.
    4. Der Pfeil-Knopf: dunkle Fuellung statt eines Rings auf Holz. */
+/* SEEKARTE (v1.90) - zweiter Hintergrund, nur zum Kupferbrett. Die Klasse
+   kartengrund setzt buildBoardSvg() nach dem Brett; holzgrund bleibt stehen,
+   denn Statuszeile, Ampel und ausgegraute Knoepfe brauchen auf der hellen
+   Karte dieselben Hilfen wie auf dem Holz. Nur das Bild wird ersetzt - mit
+   hoeherer Spezifitaet. Das Bild ist hochkant (1152 x 2688, Seitenverhaeltnis
+   0,429 gegen 0,461 beim iPhone); die Box von html reicht seit v1.79 ueber den
+   ganzen Schirm (100lvh). Die Groesse haengt an der BREITE, nicht an der
+   Hoehe: mit "auto 100%" war das Bild auf dem 14 Pro nur 1095 von 1179
+   Geraetepunkten breit, links und rechts blieb je ein Streifen Rueckfallfarbe
+   (erste Probe, gesehen). 106 % Breite schneidet zugleich den gerissenen
+   Papierrand weg; die Hoehe reicht, solange Breite/Hoehe >= 0,405 ist -
+   jedes iPhone hochkant liegt darueber (SE 0,56, 14 Pro 0,46).
+   Rueckfallfarbe: der dunkle Rand des Pergaments.
+   Geladen wird das Bild nur, wenn die Regel greift. */
+html.holzgrund.kartengrund{background:
+  radial-gradient(ellipse 130% 85% at 50% 42%, rgba(0,0,0,0) 0%, rgba(40,20,0,.10) 60%, rgba(30,15,0,.42) 100%) top center/100% 100% no-repeat,
+  url('5-karte.jpg') top center/106% auto no-repeat, #3a2a1a}
+/* Auf der hellen Karte ist die helle Schrift unlesbar: gemessen 1,3 bis
+   1,6 : 1 gegen das, was hinter ihr liegt. Dunkle Schrift (Variante 3)
+   kam nur auf 3,5 bis 3,9 : 1 - die Linien der Zeichnungen laufen durch die
+   Ziffern. Lutz waehlte die Tafel (Variante 2): dieselbe Glasflaeche wie
+   unter der Statuszeile, jetzt auch hinter Kopfzeile, Zaehlern und der
+   Lektionsleiste. 5,9 bis 6,6 : 1. Kostet kein Layout (absolut, z-index -1). */
+html.kartengrund header,html.kartengrund .hud,html.kartengrund #lessonBar{position:relative;isolation:isolate}
+html.kartengrund header::before,html.kartengrund .hud::before,html.kartengrund #lessonBar::before{content:'';position:absolute;left:-6px;right:-6px;top:0;bottom:0;border-radius:14px;
+  background:rgba(20,15,10,.62);-webkit-backdrop-filter:blur(5px);backdrop-filter:blur(5px);z-index:-1;pointer-events:none}
 html.holzgrund #status{position:relative;isolation:isolate}
 html.holzgrund #status::before{content:'';position:absolute;left:-2px;right:-2px;top:2px;bottom:4px;border-radius:16px;
   background:rgba(20,15,10,.56);-webkit-backdrop-filter:blur(5px);backdrop-filter:blur(5px);z-index:-1;pointer-events:none}
@@ -776,7 +802,7 @@ header, .hud, #status{ text-shadow:0 1px 3px rgba(0,0,0,.75) }
 
 <script>
 'use strict';
-const APP_VERSION='1.89';
+const APP_VERSION='1.90';
 /* =========================================================================
    Kern: Bretter, Züge, Symmetrien, Paritäts-Schranke, Solver
    (als Fabrik, damit derselbe Code im Web Worker läuft)
@@ -1003,6 +1029,9 @@ const BOARD_LOOKS={
   /* Die Grundfarbe gilt fuer die fuenf Bretter OHNE Foto - sie fallen auf
      gezeichnetes Nussbaum zurueck, nicht auf eine flache Platte. */
   altholz:{name:'Altes Holz mit Eisenrahmen',base:'#5a3a22',hole:'#231409',text:'#f1e7d4'},
+  /* Wie beim Holz: ein Foto nur fuer das englische Brett, die anderen Formen
+     werden gezeichnet - hier in Kupferbraun. */
+  kupfer:{name:'Kupfer mit Seekarte',base:'#7a4a33',hole:'#2b1a10',text:'#f1e7d4'},
   holz:{name:'Holz',base:'#8d5a2e',hole:'#3b2210',text:'#f1e7d4'},
   holzdunkel:{name:'Nussbaum',base:'#5a3a22',hole:'#231409',text:'#f1e7d4'},
   filz:{name:'Filz',base:'#2f6b47',hole:'#173622',text:'#f1e7d4'},
@@ -1053,6 +1082,7 @@ const LESSONS=[
 const THEMES={
   altholz:{name:'Altes Brett',board:'altholz',peg:'glas',color:'bunt'},
   steine:{name:'Altes Brett & Steine',board:'altholz',peg:'glas',color:'steine'},
+  kupfer:{name:'Kupfer & Karte',board:'kupfer',peg:'glas',color:'steine'},
   holz:{name:'Holzbrett',board:'holz',peg:'holz',color:'holzhell'},
   /* Die Kombination aus dem Startbild und dem Icon: Nussbaum mit bunten
      Glasmurmeln. Waehlbar, aber nicht Standard - im Spiel gefaellt Blau. */
@@ -1358,6 +1388,14 @@ function layoutBoard(board){
    Die Staerke wird daraus abgeleitet: was an SCHIMMER_SOLL fehlt, wird
    aufgefuellt. Marmor bekommt damit von allein null. */
 const SCHIMMER_SOLL=70, BG_HEX='#685c51';
+/* Zweiter Hintergrund (v1.90): die Seekarte zum Kupferbrett. Die Rechnungen
+   aus v1.75/1.76 (Schatten statt Schimmer, Saum, Ampelstaerke) haengen an der
+   mittleren Farbe des Hintergrunds - bisher eine feste Zahl fuer das Holz.
+   Jetzt liefert bgHex() die Farbe des Grundes, der gerade liegt. BG_HEX
+   bleibt der Wert fuers Holz. Die Karte ist gemessen: Mittel #d0ab70. */
+const KARTE_HEX='#d0ab70';
+function grundFuer(boardLook){ return boardLook==='kupfer'?'karte':'holz'; }
+function bgHex(){ return grundFuer(currentLook().board)==='karte'?KARTE_HEX:BG_HEX; }
 /* Foto-Brett (v1.76): Lutz' Bild eines alten Holzbretts mit Eisenrahmen.
    Die Lochmitten sind AUSGEMESSEN, nicht geschaetzt - 7 Spalten im Abstand
    82,43 px, 7 Zeilen im Abstand 79,43 px, Streuung unter 2 %. Das Bild wird
@@ -1379,15 +1417,31 @@ const SCHIMMER_SOLL=70, BG_HEX='#685c51';
    Screenshot 25.09.2026). */
 const FOTO_BRETT={datei:'3-brett.jpg', bild:[1179,1128], x0:164.4, y0:157.1, dx:138.85, dy:133.59,
                   rahmen:[27,30,1149,1090], ecke:82};
-function fotoBrettMasse(){
-  const sx=P/FOTO_BRETT.dx, sy=P/FOTO_BRETT.dy, mitte=MARG+P/2;
-  const x=mitte-FOTO_BRETT.x0*sx, y=mitte-FOTO_BRETT.y0*sy, R=FOTO_BRETT.rahmen;
-  return {x, y, w:FOTO_BRETT.bild[0]*sx, h:FOTO_BRETT.bild[1]*sy,
-          rahmen:{x:x+R[0]*sx, y:y+R[1]*sy, w:(R[2]-R[0])*sx, h:(R[3]-R[1])*sy, rx:FOTO_BRETT.ecke*Math.min(sx,sy)}};
+/* Kupferbrett mit Seekarte (v1.90, Lutz' Vorlage von einer Bild-KI).
+   Vermessen per Kantenanpassung an allen 33 Loechern: Abstand 415,14 px in x
+   UND y (das Raster ist quadratisch, anders als beim Holz), groesster Versatz
+   3 px = 0,7 % eines Feldes, Lochradius 0,347 Feld - die Murmel (0,34) sitzt
+   knapp darin. Zugeschnitten und auf 1536 px verkleinert (tools/kupfer_bauen.js),
+   Rosastich herausgerechnet (Wahl von Lutz: Variante "korrigiert").
+   Der Rahmen ist BREITER als beim Holz: seine Aussenkante liegt 4,59 Felder
+   von der Mitte, die Zeichenflaeche reicht nur 4,2. rand vergroessert die
+   viewBox deshalb um 44 Einheiten je Seite - Murmeln und Loecher werden
+   dadurch 9,5 % kleiner, der ganze Rahmen bleibt sichtbar (Lutz: "ja").
+   Die Alternative - einen Streifen Pergament herausschneiden - haette
+   Kompassrose und Drachen am Rand angeschnitten. */
+const FOTO_KUPFER={datei:'5-kupfer.jpg', bild:[1536,1536], x0:266.87, y0:267.35, dx:166.751, dy:166.751,
+                  rahmen:[2,2,1534,1534], ecke:2, rand:44};
+const FOTO_BRETTER={altholz:FOTO_BRETT, kupfer:FOTO_KUPFER};
+function fotoBrettMasse(fb){
+  fb=fb||FOTO_BRETT;
+  const sx=P/fb.dx, sy=P/fb.dy, mitte=MARG+P/2;
+  const x=mitte-fb.x0*sx, y=mitte-fb.y0*sy, R=fb.rahmen;
+  return {x, y, w:fb.bild[0]*sx, h:fb.bild[1]*sy,
+          rahmen:{x:x+R[0]*sx, y:y+R[1]*sy, w:(R[2]-R[0])*sx, h:(R[3]-R[1])*sy, rx:fb.ecke*Math.min(sx,sy)}};
 }
 let fotoBrettAn=false;
 function schimmerStaerke(base){
-  const bg=hexToRgb(BG_HEX);
+  const bg=hexToRgb(bgHex());
   /* Die Unterkante: Fuellung abgedunkelt, darueber die schwarze Kante. */
   const f=hexToRgb(darken(base,.3)).map(v=>v*0.65);
   const d=Math.hypot(f[0]-bg[0],f[1]-bg[1],f[2]-bg[2]);
@@ -1427,7 +1481,7 @@ function trayMarkup(board,lay,look,idPrefix){
      Licht kommt von oben. Auf dunklem Grund waere ein Schatten unsichtbar,
      dort bleibt es beim Schimmer. Die Staerke haengt an der Helligkeit des
      Hintergrunds, nicht an einem Schalter. */
-  const bgL=(()=>{const c=hexToRgb(BG_HEX);return c[0]*.299+c[1]*.587+c[2]*.114;})();
+  const bgL=(()=>{const c=hexToRgb(bgHex());return c[0]*.299+c[1]*.587+c[2]*.114;})();
   const sch=Math.max(0,Math.min(1,(bgL-40)/120));
   /* Der Saum muss sich vom HINTERGRUND abheben, nicht vom Brett: auf hellem
      Holz eine dunkle Linie, auf dunklem Grund eine helle. */
@@ -1437,21 +1491,29 @@ function trayMarkup(board,lay,look,idPrefix){
   if(st>0.02||sch>0.02){
     defs+=`<filter id="${idPrefix}schimmer" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="6"/></filter>`;
   }
-  if(look==='altholz'&&board.def.id==='english'){
+  const fb=FOTO_BRETTER[look];
+  if(fb&&board.def.id==='english'){
     /* Der Eisenrahmen IST die Kante - Schimmer und Saum entfallen, der
        Schatten bleibt: das Brett liegt auf dem Holz.
        Die weiche Maske laesst den geraden Schnitt des Fotos auslaufen; weil
        Brett und Hintergrund dasselbe Holz sind, verschwindet die Kante ganz.
        Kostet keine Datei, nur ein <mask>. */
-    const f=fotoBrettMasse(), r=f.rahmen;
+    const f=fotoBrettMasse(fb), r=f.rahmen;
     /* Weiche Kante nur NACH INNEN: Reichweite des Weichzeichners 3 sigma = 4,5
        bei einem Einzug von 5 - aussen am Rahmen ist die Maske damit praktisch
        null, das Schachbrett ausserhalb bleibt unsichtbar. */
     defs+=`<filter id="${idPrefix}weich" x="-15%" y="-15%" width="130%" height="130%"><feGaussianBlur stdDeviation="1.5"/></filter>`
-       + `<mask id="${idPrefix}brettmaske"><rect x="${(r.x+5).toFixed(2)}" y="${(r.y+5).toFixed(2)}" width="${(r.w-10).toFixed(2)}" height="${(r.h-10).toFixed(2)}" rx="${(r.rx-5).toFixed(2)}" fill="#fff" filter="url(#${idPrefix}weich)"/></mask>`;
+       + `<mask id="${idPrefix}brettmaske"><rect x="${(r.x+5).toFixed(2)}" y="${(r.y+5).toFixed(2)}" width="${(r.w-10).toFixed(2)}" height="${(r.h-10).toFixed(2)}" rx="${Math.max(0,r.rx-5).toFixed(2)}" fill="#fff" filter="url(#${idPrefix}weich)"/></mask>`;
     let sh='';
-    if(sch>0.02) sh=`<rect x="${m}" y="${m+6}" width="${lay.W-2*m}" height="${lay.H-2*m}" rx="34" fill="#000" opacity="${(sch*0.55).toFixed(3)}" filter="url(#${idPrefix}schimmer)"/>`;
-    return {defs, shape: sh+`<image href="${FOTO_BRETT.datei}" x="${f.x.toFixed(2)}" y="${f.y.toFixed(2)}" width="${f.w.toFixed(2)}" height="${f.h.toFixed(2)}" preserveAspectRatio="none" mask="url(#${idPrefix}brettmaske)"/>`, foto:true};
+    /* Das Kupferbrett reicht fast bis an den Rand der viewBox - ein Schatten
+       mit sigma 6 wuerde dort abgeschnitten. Er bekommt einen eigenen, knappen
+       (sigma 2, 2 Einheiten nach unten) und folgt dem Rahmen, nicht der
+       Zeichenflaeche. */
+    if(fb.rand){
+      defs+=`<filter id="${idPrefix}kschatten" x="-5%" y="-5%" width="110%" height="110%"><feGaussianBlur stdDeviation="2"/></filter>`;
+      sh=`<rect x="${r.x.toFixed(2)}" y="${(r.y+2).toFixed(2)}" width="${r.w.toFixed(2)}" height="${r.h.toFixed(2)}" fill="#000" opacity=".5" filter="url(#${idPrefix}kschatten)"/>`;
+    } else if(sch>0.02) sh=`<rect x="${m}" y="${m+6}" width="${lay.W-2*m}" height="${lay.H-2*m}" rx="34" fill="#000" opacity="${(sch*0.55).toFixed(3)}" filter="url(#${idPrefix}schimmer)"/>`;
+    return {defs, shape: sh+`<image href="${fb.datei}" x="${f.x.toFixed(2)}" y="${f.y.toFixed(2)}" width="${f.w.toFixed(2)}" height="${f.h.toFixed(2)}" preserveAspectRatio="none" mask="url(#${idPrefix}brettmaske)"/>`, foto:true, rand:fb.rand||0};
   }
   if(board.def.type==='grid'){
     if(sch>0.02){
@@ -1904,9 +1966,19 @@ function fmtTime(ms){ const s=Math.floor(ms/1000); return Math.floor(s/60)+':'+S
 /* ---------- Rendering ---------- */
 function buildBoardSvg(){
   const b=game.board, lay=game.lay, look=currentLook();
-  boardSvg.setAttribute('viewBox',`0 0 ${lay.W} ${lay.H}`);
   boardSvg.innerHTML='';
   const t=trayMarkup(b,lay,look.board,'m_'); fotoBrettAn=!!t.foto;
+  const e=t.rand||0; boardSvg.setAttribute('viewBox',`${-e} ${-e} ${lay.W+2*e} ${lay.H+2*e}`);
+  /* Der Hintergrund folgt dem Brett (v1.90): Kupfer liegt auf der Seekarte,
+     alles andere auf dem Holz. Die Ampel-Staerke haengt an seiner
+     Helligkeit und wird mit umgestellt. */
+  const karte=grundFuer(look.board)==='karte';
+  if(document.documentElement.classList.contains('kartengrund')!==karte){
+    document.documentElement.classList.toggle('kartengrund',karte);
+    /* Beim allerersten Bau steht AMPEL_MAX womoeglich noch in der
+       temporalen Totzone (die Falle aus v1.46) - dann setzt der Start die
+       Ampel ohnehin danach, mit demselben bgHex(). */
+    try{ ampelKraftSetzen(ampelStufe(),false); }catch(err){} }
   defsEl=el('defs'); defsEl.innerHTML=t.defs+`<marker id="arrowHead" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="4" markerHeight="4" orient="auto"><path d="M0 0L10 5 0 10z" fill="#7fd3ff"/></marker><marker id="arrowHeadWhite" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="4" markerHeight="4" orient="auto"><path d="M0 0L10 5 0 10z" fill="rgba(255,255,255,.55)"/></marker><marker id="arrowHeadRed" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="4" markerHeight="4" orient="auto"><path d="M0 0L10 5 0 10z" fill="#e0574a"/></marker>`;
   const pegDefs=el('g'); pegDefs.setAttribute('id','pegDefs'); defsEl.appendChild(pegDefs);
   boardSvg.appendChild(defsEl);
@@ -3300,8 +3372,8 @@ const AMPEL_HOF_AB=3;
    VERAENDERLICHE Haelfte mit der Hintergrundhelligkeit. Stufe 0 bleibt exakt
    der alte Zustand, und ampelWerte() selbst bleibt unangetastet: die Zahlen
    im Menue sollen die Stufe beschreiben, nicht den Hintergrund. */
-const AMPEL_BG=(()=>{ const c=hexToRgb(BG_HEX), L=c[0]*.299+c[1]*.587+c[2]*.114;
-  return 1+Math.max(0,Math.min(1,(L-20)/90))*1.2; })();
+function ampelBg(){ const c=hexToRgb(bgHex()), L=c[0]*.299+c[1]*.587+c[2]*.114;
+  return 1+Math.max(0,Math.min(1,(L-20)/90))*1.2; }
 function ampelWerte(n){
   n=Math.max(0,Math.min(AMPEL_MAX,n|0));
   const t=n/AMPEL_MAX;
@@ -3321,9 +3393,9 @@ function ampelKraftSetzen(n,speichern){
   const w=ampelWerte(n);
   settings.ampelKraft=w.n; if(speichern) saveSettings();
   const st=document.documentElement.style;
-  st.setProperty('--aschein',(8+(w.schein-8)*AMPEL_BG).toFixed(1)+'px');
-  st.setProperty('--adicht',(w.dicht*AMPEL_BG).toFixed(1)+'px');
-  st.setProperty('--ahof',(w.hof*AMPEL_BG).toFixed(1)+'px');
+  st.setProperty('--aschein',(8+(w.schein-8)*ampelBg()).toFixed(1)+'px');
+  st.setProperty('--adicht',(w.dicht*ampelBg()).toFixed(1)+'px');
+  st.setProperty('--ahof',(w.hof*ampelBg()).toFixed(1)+'px');
   const e=$('ampelStufe'); if(e) e.textContent=ampelName(w.n);
   const r=$('ampelRegler'); if(r&&+r.value!==w.n) r.value=String(w.n);
 }
@@ -3355,7 +3427,7 @@ function ampelHof(cls){
      (gefunden, weil die Pruefung ampelHof direkt rief - v1.46). */
   if(cls==='bad'&&warnblitzGleich()) return;
   const e=$('ampelhof'); if(!e) return;
-  ampelHofSetzen(e,cls,Math.min(1,w.bild*AMPEL_BG));
+  ampelHofSetzen(e,cls,Math.min(1,w.bild*ampelBg()));
   e.classList.remove('halten');
   e.classList.remove('an'); void e.offsetWidth; e.classList.add('an');
   clearTimeout(ampelHofTimer); ampelHofTimer=setTimeout(()=>e.classList.remove('an'),900);
@@ -3368,7 +3440,7 @@ function ampelHofHalten(cls){
   clearTimeout(ampelHofTimer);
   e.classList.remove('an');
   if(!(w.bild>0)){ e.classList.remove('halten'); return; }
-  ampelHofSetzen(e,cls,Math.min(1,w.bild*AMPEL_BG));
+  ampelHofSetzen(e,cls,Math.min(1,w.bild*ampelBg()));
   e.classList.add('halten');
   ampelHofTimer=setTimeout(()=>e.classList.remove('halten'),1100);
 }
