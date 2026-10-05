@@ -802,7 +802,7 @@ header, .hud, #status{ text-shadow:0 1px 3px rgba(0,0,0,.75) }
 
 <script>
 'use strict';
-const APP_VERSION='1.91';
+const APP_VERSION='1.92';
 /* =========================================================================
    Kern: Bretter, Züge, Symmetrien, Paritäts-Schranke, Solver
    (als Fabrik, damit derselbe Code im Web Worker läuft)
@@ -1430,7 +1430,12 @@ const FOTO_BRETT={datei:'3-brett.jpg', bild:[1179,1128], x0:164.4, y0:157.1, dx:
    Fassung brauchte dafuer 44 Einheiten Rand und kostete 9,5 % Murmelgroesse.
    schatten:'rahmen' - knapper Schatten (sigma 2) am Rahmen statt der
    Zeichenflaeche, sonst laege er unter dem Brett verborgen. */
-const FOTO_KUPFER={datei:'5-kupfer.jpg', bild:[1024,1024], x0:135.8, y0:135.5, dx:124.85, dy:126.08,
+/* v1.92: Die Adresse traegt die Fassung. In v1.91 bekam 5-kupfer.jpg neuen
+   Inhalt unter altem Namen - Lutz' iPhone lud die neue index.html, nahm das
+   Bild aber aus dem Zwischenspeicher: altes Brett (breiter Rahmen) mit den
+   Massen des neuen, Murmeln oben links neben den Loechern (Screenshot
+   05.10.2026, 20:41). Ein neuer Inhalt braucht eine neue Adresse. */
+const FOTO_KUPFER={datei:'5-kupfer.jpg?v=1.91', bild:[1024,1024], x0:135.8, y0:135.5, dx:124.85, dy:126.08,
                   rahmen:[3,4,1020,1021], ecke:2, rand:0, schatten:'rahmen'};
 const FOTO_BRETTER={altholz:FOTO_BRETT, kupfer:FOTO_KUPFER};
 function fotoBrettMasse(fb){
