@@ -3004,6 +3004,81 @@ function kurzfassungGleich(proben,voll,erwartet){
      mixMenue.bunt.da===true&&mixMenue.bunt.chips.join('/')==='Sortiert/Durcheinander'
      &&mixMenue.bunt.an.length===1&&mixMenue.einfarbig===false, JSON.stringify(mixMenue));
 
+  abschnitt='Steinsatz aus echten Murmeln (v1.89)';
+  /* Lutz' Steinblatt: 40 fotografierte Steinmurmeln als eigener Farbsatz.
+     Gefragt wird, was man SIEHT: das Bild laedt, jeder Stein zeigt einen
+     Ausschnitt davon, kein Magenta vom Freistellen bleibt stehen, und der
+     Farbname im Zugtext gehoert zu dem Stein, der zu sehen ist. */
+  const stDaten=await page.evaluate(async()=>{
+    settings.theme='steine'; settings.mischung='sortiert'; saveSettings(); newGame('english'); applyLook();
+    await new Promise(r=>{ if(steineBild.complete) r(); else { steineBild.addEventListener('load',r); steineBild.addEventListener('error',r); } });
+    const pegs=[...pegsLayer.querySelectorAll('[data-peg]')];
+    const href=g=>{ const u=g.querySelector('use'); return u?u.getAttribute('href'):null; };
+    const idx=pegs.map(g=>href(g)).filter(Boolean).map(h=>+h.slice(3));
+    const falsch=pegs.filter(g=>{ const id=+g.dataset.peg, k=farbId(id)%STEINE.length;
+      return href(g)!=='#st'+k||pegName(id)!==STEINE[k].name; }).length;
+    const sym=defsEl.querySelector('#st0'); sym.dataset.merk='1';
+    const ms=[]; for(let i=0;i<game.board.n;i++) ms.push(...legalMovesFrom(i)); applyMove(ms[0],true); render();
+    const symBleibt=defsEl.querySelector('#st0')&&defsEl.querySelector('#st0').dataset.merk==='1';
+    return {theme:THEMES.steine&&THEMES.steine.name, n:STEINE.length, namen:STEINE.every(s=>s.name&&/^#[0-9a-f]{6}$/.test(s.hex)),
+      bild:[steineBild.naturalWidth,steineBild.naturalHeight], fehlt:steineFehlen, pegs:pegs.length, mitUse:idx.length,
+      verschieden:new Set(idx).size, symbole:defsEl.querySelectorAll('symbol[id^="st"]').length, symBleibt, falsch,
+      glasKreise:pegs.filter(g=>g.querySelector('circle[fill^="url(#mpg_"]')).length};
+  });
+  console.log('INFO Steinsatz: '+JSON.stringify(stDaten));
+  ok('Thema "Altes Brett & Steine" mit 40 benannten Steinen',
+     stDaten.theme==='Altes Brett & Steine'&&stDaten.n===40&&stDaten.namen===true, JSON.stringify(stDaten));
+  ok('Das Steinbild laedt (1536 x 960) und faellt nicht zurueck',
+     stDaten.bild[0]===1536&&stDaten.bild[1]===960&&stDaten.fehlt===false, JSON.stringify(stDaten.bild));
+  ok('Jeder Stein zeigt einen Ausschnitt des Bildes, keine gezeichnete Murmel',
+     stDaten.pegs===32&&stDaten.mitUse===32&&stDaten.glasKreise===0, stDaten.mitUse+' von '+stDaten.pegs);
+  ok('Sortiert: 32 verschiedene Steine auf dem englischen Brett', stDaten.verschieden===32, String(stDaten.verschieden));
+  ok('Zugtext und Bild nennen denselben Stein (Farbname gehoert zum sichtbaren Ausschnitt)', stDaten.falsch===0, String(stDaten.falsch));
+  ok('Die 40 Symbole liegen einmal in den Defs und ueberleben einen Zug', stDaten.symbole===40&&stDaten.symBleibt===true, JSON.stringify(stDaten));
+  /* Durcheinander soll aus allen 40 waehlen - sonst kaemen die letzten
+     Steine des Blattes auf dem englischen Brett (33 Felder) nie vor. */
+  const stMix=await page.evaluate(()=>{ settings.mischung='zufall'; saveSettings();
+    let hinten=false, immerVerschieden=true, laenge=0;
+    for(let r=0;r<6;r++){ newGame('english'); laenge=game.farbMix.length;
+      const ids=[]; for(let i=0;i<game.board.n;i++){ const id=game.pegAt[i]; if(id>=0) ids.push(farbId(id)%STEINE.length); }
+      if(new Set(ids).size!==ids.length) immerVerschieden=false; if(ids.some(k=>k>=33)) hinten=true; }
+    settings.mischung='sortiert'; saveSettings(); newGame('english'); applyLook();
+    return {laenge,hinten,immerVerschieden}; });
+  ok('Durcheinander waehlt aus allen 40 Steinen, ohne einen doppelt zu legen',
+     stMix.laenge===40&&stMix.hinten===true&&stMix.immerVerschieden===true, JSON.stringify(stMix));
+  /* Sichtbar und sauber freigestellt: Feld mit gegen ohne Stein, dazu
+     das ganze Brett auf Magenta-Reste abgesucht. */
+  await page.evaluate(()=>{ settings.computer=false; settings.zuege=false; newGame('english'); render(); });
+  await sleep(300);
+  const stBox=await page.evaluate(()=>{ const r=boardSvg.getBoundingClientRect(); return {x:Math.round(r.left),y:Math.round(r.top),width:Math.round(r.width),height:Math.round(r.height)}; });
+  const stBild=PNG.sync.read(await page.screenshot({clip:stBox}));
+  let stMag=0; for(let i=0;i<stBild.data.length;i+=4){ const R=stBild.data[i],G=stBild.data[i+1],B=stBild.data[i+2]; if(R>200&&B>200&&G<90) stMag++; }
+  const stZelle=await page.evaluate(()=>{ const m=boardSvg.getScreenCTM(), q=game.lay.pos[game.board.index['3,1']];
+    const x=m.a*q.x+m.e, y=m.d*q.y+m.f, R=30*m.a; return {x:Math.round(x-R),y:Math.round(y-R),width:Math.round(2*R),height:Math.round(2*R)}; });
+  const stMit=PNG.sync.read(await page.screenshot({clip:stZelle}));
+  await page.evaluate(()=>{ const g=pegsLayer.querySelector(`[data-idx="${game.board.index['3,1']}"]`); if(g) g.remove(); });
+  await sleep(100);
+  const stOhne=PNG.sync.read(await page.screenshot({clip:stZelle}));
+  let stDiff=0; for(let i=0;i<stMit.data.length;i+=4){ if(Math.abs(stMit.data[i]-stOhne.data[i])+Math.abs(stMit.data[i+1]-stOhne.data[i+1])+Math.abs(stMit.data[i+2]-stOhne.data[i+2])>60) stDiff++; }
+  console.log('INFO Steinsatz Bildpunkte: Magenta auf dem Brett '+stMag+', Stein gegen leeres Loch '+stDiff+' von '+(stMit.data.length/4));
+  ok('Kein Magenta vom Freistellen auf dem Brett', stMag===0, String(stMag));
+  ok('Der Stein ist zu sehen (mindestens die Haelfte seines Feldes anders als das leere Loch)', stDiff>stMit.data.length/4*0.5, stDiff+' von '+(stMit.data.length/4));
+  /* Laedt das Bild nicht (offline, data:-Kontext), werden Glasmurmeln in
+     den gemessenen Steinfarben daraus - nie leere Loecher. */
+  const stRueck=await page.evaluate(()=>{ steineFehlen=true; render();
+    const pegs=[...pegsLayer.querySelectorAll('[data-peg]')];
+    const r={pegs:pegs.length, glas:pegs.filter(g=>g.querySelector('circle[fill^="url(#mpg_glas_"]')).length, use:pegs.filter(g=>g.querySelector('use')).length};
+    steineFehlen=false; render(); return r; });
+  ok('Ohne Bild faellt der Satz auf Glasmurmeln in den Steinfarben zurueck',
+     stRueck.pegs===32&&stRueck.glas===32&&stRueck.use===0, JSON.stringify(stRueck));
+  const stMenue=await page.evaluate(()=>{ buildSheet();
+    const themen=[...$('themeList').children].map(c=>c.textContent);
+    const punkt=[...$('colorList').children].find(d=>d.getAttribute('aria-label')==='Steine');
+    const misch=!$('mischList').hidden;
+    settings.theme='altholz'; settings.computer=true; saveSettings(); newGame('english'); applyLook(); buildSheet();
+    return {thema:themen.includes('Altes Brett & Steine'), punkt:!!punkt&&/4-steine\.webp/.test(punkt.style.background), misch}; });
+  ok('Menue: Thema, Farbpunkt mit Steinbild und Sortiert/Durcheinander', stMenue.thema&&stMenue.punkt&&stMenue.misch, JSON.stringify(stMenue));
+
   abschnitt='Gruener Schein beim Sprung';
   /* Wunsch von Lutz (20.09.2026): "dass der Stein der springt auch im
      Hintergrund kurz gruen aufleuchtet. Standard eingeschaltet."

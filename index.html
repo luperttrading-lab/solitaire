@@ -776,7 +776,7 @@ header, .hud, #status{ text-shadow:0 1px 3px rgba(0,0,0,.75) }
 
 <script>
 'use strict';
-const APP_VERSION='1.88';
+const APP_VERSION='1.89';
 /* =========================================================================
    Kern: Bretter, Züge, Symmetrien, Paritäts-Schranke, Solver
    (als Fabrik, damit derselbe Code im Web Worker läuft)
@@ -971,12 +971,32 @@ const CORE=coreFactory();
    ========================================================================= */
 const COLORS={
   rot:'#c62828',orange:'#e8711c',gold:'#d4a02a',gruen:'#2e8b57',tuerkis:'#1fa8a0',blau:'#2f5fd1',violett:'#7b3fbf',rosa:'#e0559a',
-  weiss:'#ece8e1',schwarz:'#33333a',silber:'#b9bec7',holzhell:'#d8a56a',holzdunkel:'#7a4a25',bunt:'multi',juwel:'multi2',regenbogen:'hue'
+  weiss:'#ece8e1',schwarz:'#33333a',silber:'#b9bec7',holzhell:'#d8a56a',holzdunkel:'#7a4a25',bunt:'multi',juwel:'multi2',regenbogen:'hue',steine:'foto'
 };
-const COLOR_NAMES={rot:'Rot',orange:'Orange',gold:'Gold',gruen:'Grün',tuerkis:'Türkis',blau:'Blau',violett:'Violett',rosa:'Rosa',weiss:'Weiß',schwarz:'Schwarz',silber:'Silber',holzhell:'Helles Holz',holzdunkel:'Dunkles Holz',bunt:'Bunt',juwel:'Juwelen',regenbogen:'Regenbogen'};
+const COLOR_NAMES={rot:'Rot',orange:'Orange',gold:'Gold',gruen:'Grün',tuerkis:'Türkis',blau:'Blau',violett:'Violett',rosa:'Rosa',weiss:'Weiß',schwarz:'Schwarz',silber:'Silber',holzhell:'Helles Holz',holzdunkel:'Dunkles Holz',bunt:'Bunt',juwel:'Juwelen',regenbogen:'Regenbogen',steine:'Steine'};
 const PALETTE_BUNT=['#c62828','#2f5fd1','#2e8b57','#d4a02a','#7b3fbf','#1fa8a0','#e8711c','#e0559a'];
 const HEX_NAMES={'#c62828':'Rot','#2f5fd1':'Blau','#2e8b57':'Grün','#d4a02a':'Gold','#7b3fbf':'Violett','#1fa8a0':'Türkis','#e8711c':'Orange','#e0559a':'Rosa','#c0223b':'Rubin','#2247b3':'Saphir','#1e9e5a':'Smaragd','#e39b1c':'Bernstein','#7c3fb8':'Amethyst','#23b5c9':'Aquamarin'};
-function pegName(pegId){ const look=currentLook(); const hex=pegColorFor(look.color,farbId(pegId),game.board.n); const v=COLORS[look.color]; if(v==='multi'||v==='multi2') return HEX_NAMES[hex]||null; return null; }
+/* Echte Steinmurmeln (v1.89): Lutz' Steinblatt, 8 x 5 Murmeln, mit
+   tools/steine_bauen.js zu einem Bild mit Alpha geschnitten (Zelle 192 px,
+   je Stein an seiner Magenta-Grenze vermessen und 4 px eingezogen - danach
+   0 Randpunkte mit Magentastich). Reihenfolge = Reihenfolge im Blatt.
+   Benannt wird nach der FARBE, nicht nach dem Stein (Entscheidung von Lutz,
+   05.10.2026): "Blau springt ueber Gruen" ist kuerzer und eindeutiger als
+   "Lapislazuli springt ueber Aventurin". hex = gemessene mittlere Farbe;
+   sie traegt die Farbproben im Menue und den Rueckfall, falls das Bild
+   nicht laedt. */
+const STEINE_DATEI='4-steine.webp', STEIN_ZELLE=192, STEIN_SPALTEN=8;
+const STEINE=[
+  ['#353b78','Blau'],['#85a380','Hellgrün'],['#bc4b2b','Orange'],['#74473c','Braun'],['#775675','Violett'],['#3c4b43','Dunkelgrün'],['#8d5d25','Goldbraun'],['#3c7382','Petrol'],
+  ['#8f797c','Grau'],['#d6a2a8','Rosa'],['#312e30','Schwarz'],['#246b52','Grün'],['#98312c','Rot'],['#8f6139','Bronze'],['#744f44','Rotbraun'],['#a59691','Klar'],
+  ['#947479','Grau'],['#757d70','Weißgrün'],['#40989b','Türkis'],['#604a41','Braun'],['#5c66a0','Blau'],['#d8951c','Bernstein'],['#51765d','Grün'],['#c5cee2','Weiß'],
+  ['#786659','Kupfer'],['#5c191d','Dunkelrot'],['#cb9448','Gelb'],['#a8b2d5','Hellblau'],['#5a7d5f','Grün'],['#6e4a6e','Violett'],['#8c846d','Klar'],['#3a3c39','Dunkelgrün'],
+  ['#9d9296','Weiß'],['#7b9c7f','Hellgrün'],['#686270','Violett'],['#616b70','Blaugrau'],['#756959','Silber'],['#886d55','Ocker'],['#cd601d','Orange'],['#2a3536','Dunkelgrün']
+].map(([hex,name])=>({hex,name}));
+function fotoAktiv(){ return COLORS[currentLook().color]==='foto'; }
+function pegName(pegId){ const look=currentLook(); const v=COLORS[look.color];
+  if(v==='foto') return STEINE[farbId(pegId)%STEINE.length].name;
+  const hex=pegColorFor(look.color,farbId(pegId),game.board.n); if(v==='multi'||v==='multi2') return HEX_NAMES[hex]||null; return null; }
 const PALETTE_JUWEL=['#c0223b','#2247b3','#1e9e5a','#e39b1c','#7c3fb8','#23b5c9'];
 const PEG_STYLES={glas:'Glasmurmel',edel:'Edelstein',holz:'Holz',metall:'Metall',flach:'Flach',neon:'Neon'};
 const BOARD_LOOKS={
@@ -1032,6 +1052,7 @@ const LESSONS=[
 
 const THEMES={
   altholz:{name:'Altes Brett',board:'altholz',peg:'glas',color:'bunt'},
+  steine:{name:'Altes Brett & Steine',board:'altholz',peg:'glas',color:'steine'},
   holz:{name:'Holzbrett',board:'holz',peg:'holz',color:'holzhell'},
   /* Die Kombination aus dem Startbild und dem Icon: Nussbaum mit bunten
      Glasmurmeln. Waehlbar, aber nicht Standard - im Spiel gefaellt Blau. */
@@ -1059,6 +1080,9 @@ function hslHex(h,s,l){ s/=100; l/=100; const k=n=>(n+h/30)%12, a=s*Math.min(l,1
    Einstellungen: dieselbe Partie behaelt ihre Farben ueber Zurueck und Vor,
    ein neues Spiel mischt neu. */
 function farbMischen(n){
+  /* Bei den Steinen aus allen 40 waehlen, nicht nur aus den ersten 33 -
+     sonst kaemen die letzten sieben auf dem englischen Brett nie vor. */
+  if(fotoAktiv()) n=Math.max(n,STEINE.length);
   const a=new Array(n); for(let i=0;i<n;i++) a[i]=i;
   for(let i=n-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); const t=a[i]; a[i]=a[j]; a[j]=t; }
   return a;
@@ -1071,6 +1095,7 @@ function pegColorFor(colorKey,pegId,total){
   if(v==='multi') return PALETTE_BUNT[pegId%PALETTE_BUNT.length];
   if(v==='multi2') return PALETTE_JUWEL[pegId%PALETTE_JUWEL.length];
   if(v==='hue') return hslHex(Math.round(pegId/Math.max(1,total)*360),70,50);
+  if(v==='foto') return STEINE[pegId%STEINE.length].hex;
   return v;
 }
 
@@ -1646,6 +1671,26 @@ function pegMarkup(style,color,x,y,extraClass,prefix){
   return `<g class="peg ${extraClass||''}" transform="translate(${x},${y})"><g class="body">${g}${glanzMarkup()}</g></g>`;
 }
 const pegDefsCache=new Map();
+/* Ein Stein ist ein <use> auf ein Symbol, das einen Ausschnitt des Steinbilds
+   zeigt. Die Symbole liegen EINMAL in den Defs und ueberleben jedes
+   renderPegs() - wuerde jeder Stein sein eigenes <image> mitbringen, entstuenden
+   bei jedem Zug 32 neue Bildelemente, und ob Safari sie aus dem Zwischenspeicher
+   ohne Aufblitzen zeichnet, laesst sich hier nicht pruefen (Testbrowser ist
+   Chromium). Das Symbol schneidet auf seinen Ausschnitt zu; rund ist der Stein
+   durch den Alphakanal des Bildes, also ohne clip-path (der WebKit-Zweifel aus
+   v1.40). Laedt das Bild nicht, faellt der Satz auf Glasmurmeln in den
+   gemessenen Steinfarben zurueck (steineFehlen). */
+let steineFehlen=false, steineBild=null;
+function steineVorladen(){ if(steineBild) return; steineBild=new Image();
+  steineBild.onerror=()=>{ steineFehlen=true; if(game&&game.board) render(); };
+  steineBild.src=STEINE_DATEI; }
+function steinDefs(){ if(defsEl.querySelector('#st0')) return; let s='';
+  const W=STEIN_ZELLE*STEIN_SPALTEN, H=STEIN_ZELLE*Math.ceil(STEINE.length/STEIN_SPALTEN);
+  STEINE.forEach((_,k)=>{ const x=(k%STEIN_SPALTEN)*STEIN_ZELLE, y=Math.floor(k/STEIN_SPALTEN)*STEIN_ZELLE;
+    s+=`<symbol id="st${k}" viewBox="${x} ${y} ${STEIN_ZELLE} ${STEIN_ZELLE}"><image href="${STEINE_DATEI}" width="${W}" height="${H}"/></symbol>`; });
+  const g=document.createElementNS('http://www.w3.org/2000/svg','g'); g.setAttribute('id','steinDefs'); g.innerHTML=s; defsEl.appendChild(g); }
+function steinMarkup(k,x,y){ steineVorladen(); steinDefs();
+  return `<g class="peg stein" transform="translate(${x},${y})"><g class="body"><ellipse cx="4" cy="7" rx="${R_PEG-1}" ry="${R_PEG-3}" fill="#000" opacity=".38"/><use href="#st${k}" x="${-R_PEG}" y="${-R_PEG}" width="${2*R_PEG}" height="${2*R_PEG}"/>${glanzMarkup()}</g></g>`; }
 
 /* =========================================================================
    Spielzustand
@@ -1893,7 +1938,9 @@ function renderPegs(){
   glanzVerlauf();          // muss da sein, bevor eine Murmel ihn referenziert
   const look=currentLook(); const b=game.board, lay=game.lay; let html='';
   for(let i=0;i<b.n;i++){ const id=game.pegAt[i]; if(id<0) continue; const p=lay.pos[i];
-    html+=pegMarkup(look.peg,pegColorFor(look.color,farbId(id),b.n),p.x,p.y).replace('<g class=','<g data-idx="'+i+'" data-peg="'+id+'" class='); }
+    const mk=(look.color&&COLORS[look.color]==='foto'&&!steineFehlen)?steinMarkup(farbId(id)%STEINE.length,p.x,p.y)
+      :pegMarkup(COLORS[look.color]==='foto'?'glas':look.peg,pegColorFor(look.color,farbId(id),b.n),p.x,p.y);
+    html+=mk.replace('<g class=','<g data-idx="'+i+'" data-peg="'+id+'" class='); }
   const pd=defsEl.querySelector('#pegDefs'); let defs=''; pegDefsCache.forEach(v=>defs+=v); pd.innerHTML=defs;
   pegsLayer.innerHTML=html;
 }
@@ -3171,7 +3218,7 @@ function buildSheet(){ tonAnzeige();
     ch.addEventListener('click',()=>{ settings.pegStyle=k; saveSettings(); applyLook(); buildSheet(); }); pl.appendChild(ch); });
   const cl=$('colorList'); cl.innerHTML='';
   Object.keys(COLORS).forEach(k=>{ const d=document.createElement('button'); d.className='dot'+(settings.pegColor===k?' on':''); d.setAttribute('aria-label',COLOR_NAMES[k]); d.title=COLOR_NAMES[k];
-    const v=COLORS[k]; d.style.background= v==='multi'?'conic-gradient(#c62828,#d4a02a,#2e8b57,#2f5fd1,#7b3fbf,#c62828)': v==='multi2'?'conic-gradient(#c0223b,#e39b1c,#1e9e5a,#2247b3,#7c3fb8,#c0223b)': v==='hue'?'conic-gradient(red,yellow,lime,cyan,blue,magenta,red)':v;
+    const v=COLORS[k]; d.style.background= v==='multi'?'conic-gradient(#c62828,#d4a02a,#2e8b57,#2f5fd1,#7b3fbf,#c62828)': v==='multi2'?'conic-gradient(#c0223b,#e39b1c,#1e9e5a,#2247b3,#7c3fb8,#c0223b)': v==='hue'?'conic-gradient(red,yellow,lime,cyan,blue,magenta,red)':v==='foto'?`url(${STEINE_DATEI}) 0 0/800% 500%`:v;
     d.addEventListener('click',()=>{ settings.pegColor=k; saveSettings(); applyLook(); buildSheet(); }); cl.appendChild(d); });
   /* Nur bei den bunten Saetzen hat das Mischen einen Sinn - bei einer
      einzigen Farbe waere es ein Knopf, der nichts tut. */
@@ -3180,7 +3227,7 @@ function buildSheet(){ tonAnzeige();
      entscheidet dessen Farbe, die Punkte wirken nur bei "Eigene
      Kombination". Mit settings.pegColor stuenden die Knoepfe sonst da, ohne
      dass sie etwas aendern - und fehlten dort, wo sie etwas aendern. */
-  const bunt=['multi','multi2','hue'].includes(COLORS[currentLook().color]);
+  const bunt=['multi','multi2','hue','foto'].includes(COLORS[currentLook().color]);
   ml.hidden=!bunt;
   if(bunt) [['sortiert','Sortiert'],['zufall','Durcheinander']].forEach(([k,name])=>{
     const ch=document.createElement('button'); ch.className='chip'+(settings.mischung===k?' on':''); ch.textContent=name;
