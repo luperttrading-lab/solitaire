@@ -802,7 +802,7 @@ header, .hud, #status{ text-shadow:0 1px 3px rgba(0,0,0,.75) }
 
 <script>
 'use strict';
-const APP_VERSION='1.90';
+const APP_VERSION='1.91';
 /* =========================================================================
    Kern: Bretter, Züge, Symmetrien, Paritäts-Schranke, Solver
    (als Fabrik, damit derselbe Code im Web Worker läuft)
@@ -1417,20 +1417,21 @@ function bgHex(){ return grundFuer(currentLook().board)==='karte'?KARTE_HEX:BG_H
    Screenshot 25.09.2026). */
 const FOTO_BRETT={datei:'3-brett.jpg', bild:[1179,1128], x0:164.4, y0:157.1, dx:138.85, dy:133.59,
                   rahmen:[27,30,1149,1090], ecke:82};
-/* Kupferbrett mit Seekarte (v1.90, Lutz' Vorlage von einer Bild-KI).
-   Vermessen per Kantenanpassung an allen 33 Loechern: Abstand 415,14 px in x
-   UND y (das Raster ist quadratisch, anders als beim Holz), groesster Versatz
-   3 px = 0,7 % eines Feldes, Lochradius 0,347 Feld - die Murmel (0,34) sitzt
-   knapp darin. Zugeschnitten und auf 1536 px verkleinert (tools/kupfer_bauen.js),
-   Rosastich herausgerechnet (Wahl von Lutz: Variante "korrigiert").
-   Der Rahmen ist BREITER als beim Holz: seine Aussenkante liegt 4,59 Felder
-   von der Mitte, die Zeichenflaeche reicht nur 4,2. rand vergroessert die
-   viewBox deshalb um 44 Einheiten je Seite - Murmeln und Loecher werden
-   dadurch 9,5 % kleiner, der ganze Rahmen bleibt sichtbar (Lutz: "ja").
-   Die Alternative - einen Streifen Pergament herausschneiden - haette
-   Kompassrose und Drachen am Rand angeschnitten. */
-const FOTO_KUPFER={datei:'5-kupfer.jpg', bild:[1536,1536], x0:266.87, y0:267.35, dx:166.751, dy:166.751,
-                  rahmen:[2,2,1534,1534], ecke:2, rand:44};
+/* Kupferbrett mit Seekarte (v1.90, ersetzt in v1.91). Lutz' Vorlage von
+   einer Bild-KI, unveraendert uebernommen (1024 x 1024, Farbe stimmt -
+   kein Rosastich wie bei der v1.90-Fassung).
+   Vermessen per Kantenanpassung an allen 33 Loechern: Abstand 124,85 px in x
+   und 126,08 px in y (1 % Unterschied, getrennt skaliert wie beim Holz),
+   groesster Versatz 4,3 px = 3,5 % eines Feldes, Lochradius 0,348 Feld - die
+   Murmel (0,34) sitzt knapp darin.
+   Der Rahmen ist SCHMAL: seine Aussenkante liegt 4,03-4,09 Felder von der
+   Mitte, die Zeichenflaeche reicht 4,2. Er passt also ohne Vergroesserung
+   der viewBox - die Murmeln bleiben so gross wie auf dem Holz. Die v1.90-
+   Fassung brauchte dafuer 44 Einheiten Rand und kostete 9,5 % Murmelgroesse.
+   schatten:'rahmen' - knapper Schatten (sigma 2) am Rahmen statt der
+   Zeichenflaeche, sonst laege er unter dem Brett verborgen. */
+const FOTO_KUPFER={datei:'5-kupfer.jpg', bild:[1024,1024], x0:135.8, y0:135.5, dx:124.85, dy:126.08,
+                  rahmen:[3,4,1020,1021], ecke:2, rand:0, schatten:'rahmen'};
 const FOTO_BRETTER={altholz:FOTO_BRETT, kupfer:FOTO_KUPFER};
 function fotoBrettMasse(fb){
   fb=fb||FOTO_BRETT;
@@ -1509,7 +1510,7 @@ function trayMarkup(board,lay,look,idPrefix){
        mit sigma 6 wuerde dort abgeschnitten. Er bekommt einen eigenen, knappen
        (sigma 2, 2 Einheiten nach unten) und folgt dem Rahmen, nicht der
        Zeichenflaeche. */
-    if(fb.rand){
+    if(fb.schatten==='rahmen'){
       defs+=`<filter id="${idPrefix}kschatten" x="-5%" y="-5%" width="110%" height="110%"><feGaussianBlur stdDeviation="2"/></filter>`;
       sh=`<rect x="${r.x.toFixed(2)}" y="${(r.y+2).toFixed(2)}" width="${r.w.toFixed(2)}" height="${r.h.toFixed(2)}" fill="#000" opacity=".5" filter="url(#${idPrefix}kschatten)"/>`;
     } else if(sch>0.02) sh=`<rect x="${m}" y="${m+6}" width="${lay.W-2*m}" height="${lay.H-2*m}" rx="34" fill="#000" opacity="${(sch*0.55).toFixed(3)}" filter="url(#${idPrefix}schimmer)"/>`;
